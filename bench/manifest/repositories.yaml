@@ -1,0 +1,110 @@
+version: 1
+project: TriSeek
+cache_root: /Users/trivedi/Documents/Projects/TriSeek-bench/repos
+policy:
+  clone_once: true
+  reuse_across_runs: true
+  fetch_updates: false
+  pin_at_measurement_time: true
+  keep_raw_artifacts: true
+classification_thresholds:
+  small:
+    searchable_files_lt: 5000
+    searchable_text_bytes_lt: 209715200 # 200 MB
+  medium:
+    searchable_files_range: [5000, 50000]
+    searchable_text_bytes_range: [209715200, 2147483648] # 200 MB to 2 GB
+  large:
+    searchable_files_range: [50000, 500000]
+    searchable_text_bytes_range: [2147483648, 21474836480] # 2 GB to 20 GB
+  very_large:
+    searchable_files_gt: 500000
+    searchable_text_bytes_gt: 21474836480 # 20 GB
+repository_selection:
+  notes:
+    - Measure the clone before assigning the final category.
+    - Keep a repo measured even if it lands outside the expected band.
+    - Prefer stable public repositories with mixed language content.
+repositories:
+  - name: serde-rs/serde
+    slug: serde-rs_serde
+    url: https://github.com/serde-rs/serde.git
+    expected_category: small
+    pinned_commit: fa7da4a
+    local_path: /Users/trivedi/Documents/Projects/TriSeek-bench/repos/serde-rs_serde
+    status: ready
+    exclusions:
+      - target/
+      - .git/
+      - .github/
+  - name: kubernetes/kubernetes
+    slug: kubernetes_kubernetes
+    url: https://github.com/kubernetes/kubernetes.git
+    expected_category: large
+    pinned_commit: c6a95ffd
+    local_path: /Users/trivedi/Documents/Projects/TriSeek-bench/repos/kubernetes_kubernetes
+    status: ready
+    exclusions:
+      - vendor/
+      - .git/
+      - staging/
+  - name: torvalds/linux
+    slug: torvalds_linux
+    url: https://github.com/torvalds/linux.git
+    expected_category: very_large
+    pinned_commit: cbfffcca2bf0622b601b7eaf477aa29035169184
+    local_path: /Users/trivedi/Documents/Projects/TriSeek-bench/repos/torvalds_linux
+    status: ready
+    exclusions:
+      - .git/
+      - tools/
+      - Documentation/
+  - name: rust-lang/rust
+    slug: rust-lang_rust
+    url: https://github.com/rust-lang/rust.git
+    expected_category: very_large
+    pinned_commit: 584d32e3ee7a2051c9ec1338d259ed8ef16380ca
+    local_path: /Users/trivedi/Documents/Projects/TriSeek-bench/repos/rust-lang_rust
+    status: ready
+    exclusions:
+      - .git/
+      - src/llvm-project/
+      - target/
+  - name: BurntSushi/ripgrep
+    slug: BurntSushi_ripgrep
+    url: https://github.com/BurntSushi/ripgrep.git
+    expected_category: medium
+    pinned_commit: 4519153
+    local_path: /Users/trivedi/Documents/Projects/TriSeek-bench/repos/BurntSushi_ripgrep
+    status: ready
+    exclusions:
+      - target/
+      - .git/
+      - tests/benchmarks/
+workloads:
+  file_listing:
+    - tracked files
+    - suffix filters
+    - exact filename lookup
+    - path substring lookup
+  literal_search:
+    - selective literals
+    - moderate-frequency literals
+    - high-match literals
+    - no-match literals
+  regex_search:
+    - strong literal anchors
+    - weak literal selectivity
+    - no-match regex
+  mixed_search:
+    - path plus content narrowing
+    - repeated session sequence
+  baseline_tools:
+    - rg
+    - git grep
+    - fd
+measurement_policy:
+  warm_iterations_min: 10
+  cold_iterations_min: 5
+  preserve_raw_data: true
+  document_cache_state: true

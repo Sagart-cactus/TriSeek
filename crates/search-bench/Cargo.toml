@@ -1,0 +1,21 @@
+[package]
+name = "search-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+csv.workspace = true
+num_cpus.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+search-core = { path = "../search-core" }
+search-index = { path = "../search-index" }
+tempfile.workspace = true
+time.workspace = true
+toml.workspace = true

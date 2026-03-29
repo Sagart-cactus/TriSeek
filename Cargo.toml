@@ -1,0 +1,40 @@
+[workspace]
+members = [
+    "crates/search-core",
+    "crates/search-index",
+    "crates/search-cli",
+    "crates/search-bench",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "MIT"
+authors = ["Codex"]
+
+[workspace.dependencies]
+anyhow = "1.0.100"
+bincode = { version = "2.0.1", features = ["serde"] }
+clap = { version = "4.5.48", features = ["derive"] }
+csv = "1.4.0"
+globset = "0.4.18"
+ignore = "0.4.24"
+libc = "0.2.176"
+memmap2 = "0.9.8"
+num_cpus = "1.17.0"
+regex = "1.11.3"
+regex-syntax = "0.8.8"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+serde_yaml = "0.9.34"
+tempfile = "3.23.0"
+thiserror = "2.0.17"
+time = { version = "0.3.44", features = ["formatting", "macros", "parsing", "serde"] }
+toml = "0.9.7"
+xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = 3
