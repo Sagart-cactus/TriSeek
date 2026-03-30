@@ -1,22 +1,31 @@
 use crate::build::{BuildConfig, build_index, update_index};
 use crate::error::SearchIndexError;
+use crate::fastindex::FastIndex;
 use crate::model::{RuntimeIndex, SearchExecution};
-use crate::storage::{default_index_dir, load_base, load_delta};
+use crate::storage::{default_index_dir, fast_index_exists, fast_index_path, load_base, load_delta};
 use crate::walker::{ScanOptions, scan_repository};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use memmap2::Mmap;
+use rayon::prelude::*;
 use regex::{Regex, RegexBuilder};
 use search_core::{
     CaseMode, QueryRequest, SearchHit, SearchKind, SearchLineMatch, SearchMetrics, SearchSummary,
     plan_query, trigrams_from_text,
 };
-use std::collections::HashSet;
 use std::fs::File;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;
 
+enum IndexBackend {
+    Fast(FastIndex),
+    Legacy(RuntimeIndex),
+}
+
 pub struct SearchEngine {
-    runtime: RuntimeIndex,
+    backend: IndexBackend,
+    repo_root: std::path::PathBuf,
+    metadata: search_core::IndexMetadata,
 }
 
 impl SearchEngine {
@@ -43,37 +52,72 @@ impl SearchEngine {
     }
 
     pub fn open(index_dir: &Path) -> Result<Self, SearchIndexError> {
+        // Prefer fast mmap-based index if available
+        if fast_index_exists(index_dir) {
+            let metadata = crate::storage::read_index_metadata(index_dir)?;
+            let repo_root = std::path::PathBuf::from(&metadata.repo_stats.repo_root);
+            let fast = FastIndex::open(&fast_index_path(index_dir))?;
+            return Ok(Self {
+                backend: IndexBackend::Fast(fast),
+                repo_root,
+                metadata,
+            });
+        }
+
+        // Fall back to legacy bincode index
         let base = load_base(index_dir)?;
         let delta = load_delta(index_dir)?;
+        let runtime = RuntimeIndex::from_snapshots(base, delta);
+        let metadata = runtime.metadata.clone();
+        let repo_root = runtime.repo_root.clone();
         Ok(Self {
-            runtime: RuntimeIndex::from_snapshots(base, delta),
+            backend: IndexBackend::Legacy(runtime),
+            repo_root,
+            metadata,
         })
     }
 
     pub fn metadata(&self) -> &search_core::IndexMetadata {
-        &self.runtime.metadata
+        &self.metadata
     }
 
     pub fn repo_root(&self) -> &Path {
-        &self.runtime.repo_root
+        &self.repo_root
     }
 
     pub fn search(&self, request: &QueryRequest) -> Result<SearchExecution, SearchIndexError> {
         let started = Instant::now();
         let plan = plan_query(request);
-        let filtered_docs = self.path_filtered_docs(request)?;
-        let candidate_docs = match request.kind {
-            SearchKind::Path => filtered_docs.clone(),
-            _ if matches!(plan.strategy, search_core::SearchExecutionStrategy::Indexed) => {
-                self.index_candidates(request, &filtered_docs)?
+
+        let (_filtered_docs, candidate_docs) = match &self.backend {
+            IndexBackend::Fast(fast) => {
+                let filtered = self.fast_path_filtered_docs(fast, request)?;
+                let candidates = match request.kind {
+                    SearchKind::Path => filtered.clone(),
+                    _ if matches!(plan.strategy, search_core::SearchExecutionStrategy::Indexed) => {
+                        self.fast_index_candidates(fast, request, &filtered)?
+                    }
+                    _ => filtered.clone(),
+                };
+                (filtered, candidates)
             }
-            _ => filtered_docs.clone(),
+            IndexBackend::Legacy(runtime) => {
+                let filtered = self.legacy_path_filtered_docs(runtime, request)?;
+                let candidates = match request.kind {
+                    SearchKind::Path => filtered.clone(),
+                    _ if matches!(plan.strategy, search_core::SearchExecutionStrategy::Indexed) => {
+                        self.legacy_index_candidates(runtime, request, &filtered)?
+                    }
+                    _ => filtered.clone(),
+                };
+                (filtered, candidates)
+            }
         };
 
         let execution = if matches!(request.kind, SearchKind::Path) {
             self.collect_path_hits(&candidate_docs)
         } else {
-            self.collect_content_hits(request, &candidate_docs)?
+            self.collect_content_hits_parallel(request, &candidate_docs)?
         };
 
         Ok(SearchExecution {
@@ -91,7 +135,7 @@ impl SearchEngine {
                     .total_line_matches
                     .max(execution.summary.files_with_matches),
                 bytes_scanned: execution.metrics.bytes_scanned,
-                index_bytes_read: Some(self.runtime.metadata.build_stats.index_bytes),
+                index_bytes_read: Some(self.metadata.build_stats.index_bytes),
             },
             ..execution
         })
@@ -174,39 +218,50 @@ impl SearchEngine {
         })
     }
 
-    fn path_filtered_docs(&self, request: &QueryRequest) -> Result<Vec<u32>, SearchIndexError> {
-        let mut current: Option<HashSet<u32>> = None;
-        let globset = build_globset(&request.globs)?;
+    // ---- Fast index methods ----
+
+    fn fast_path_filtered_docs(
+        &self,
+        fast: &FastIndex,
+        request: &QueryRequest,
+    ) -> Result<Vec<u32>, SearchIndexError> {
+        let mut current: Option<Vec<u32>> = None;
 
         if !request.exact_paths.is_empty() {
-            let mut matched = HashSet::new();
+            let mut matched = Vec::new();
             for path in &request.exact_paths {
-                if let Some(doc_id) = self.runtime.path_lookup.get(path) {
-                    matched.insert(*doc_id);
+                if let Some(doc_id) = fast.path_to_doc_id(path) {
+                    matched.push(doc_id);
                 }
             }
-            current = intersect_sets(current, matched);
+            matched.sort_unstable();
+            matched.dedup();
+            current = intersect_sorted(current, matched);
         }
 
         if !request.exact_names.is_empty() {
-            let mut matched = HashSet::new();
+            let mut matched = Vec::new();
             for name in &request.exact_names {
-                if let Some(doc_ids) = self.runtime.filename_map.get(&name.to_ascii_lowercase()) {
+                if let Some(doc_ids) = fast.docs_by_filename(&name.to_ascii_lowercase()) {
                     matched.extend(doc_ids.iter().copied());
                 }
             }
-            current = intersect_sets(current, matched);
+            matched.sort_unstable();
+            matched.dedup();
+            current = intersect_sorted(current, matched);
         }
 
         let extensions = request.normalized_extensions();
         if !extensions.is_empty() {
-            let mut matched = HashSet::new();
+            let mut matched = Vec::new();
             for extension in extensions {
-                if let Some(doc_ids) = self.runtime.extension_map.get(&extension) {
+                if let Some(doc_ids) = fast.docs_by_extension(&extension) {
                     matched.extend(doc_ids.iter().copied());
                 }
             }
-            current = intersect_sets(current, matched);
+            matched.sort_unstable();
+            matched.dedup();
+            current = intersect_sorted(current, matched);
         }
 
         let mut path_substrings = request.path_substrings.clone();
@@ -214,77 +269,83 @@ impl SearchEngine {
             path_substrings.push(request.pattern.clone());
         }
         if !path_substrings.is_empty() {
-            let mut matched = HashSet::new();
+            let mut matched = Vec::new();
             for pattern in path_substrings {
-                matched.extend(self.path_candidates_for_substring(&pattern)?);
+                matched.extend(self.fast_path_candidates_for_substring(fast, &pattern)?);
             }
-            current = intersect_sets(current, matched);
+            matched.sort_unstable();
+            matched.dedup();
+            current = intersect_sorted(current, matched);
         }
 
+        let globset = build_globset(&request.globs)?;
         if !request.path_prefixes.is_empty() || globset.is_some() {
-            let mut matched = HashSet::new();
-            for doc in &self.runtime.docs {
+            let all_docs = fast.all_docs();
+            let mut matched = Vec::new();
+            for (doc_id, path) in &all_docs {
                 let prefix_match = request.path_prefixes.is_empty()
-                    || request
-                        .path_prefixes
-                        .iter()
-                        .any(|prefix| doc.relative_path.starts_with(prefix));
-                let glob_match = globset
-                    .as_ref()
-                    .map(|set| set.is_match(doc.relative_path.as_str()))
-                    .unwrap_or(true);
+                    || request.path_prefixes.iter().any(|prefix| path.starts_with(prefix));
+                let glob_match = globset.as_ref().map(|set| set.is_match(path.as_str())).unwrap_or(true);
                 if prefix_match && glob_match {
-                    matched.insert(doc.doc_id);
+                    matched.push(*doc_id);
                 }
             }
-            current = intersect_sets(current, matched);
+            matched.sort_unstable();
+            current = intersect_sorted(current, matched);
         }
 
-        let mut docs: Vec<u32> = current
-            .unwrap_or_else(|| self.runtime.docs.iter().map(|doc| doc.doc_id).collect())
-            .into_iter()
-            .collect();
-        docs.sort_unstable();
-        Ok(docs)
+        Ok(current.unwrap_or_else(|| fast.all_doc_ids()))
     }
 
-    fn path_candidates_for_substring(&self, pattern: &str) -> Result<Vec<u32>, SearchIndexError> {
+    fn fast_path_candidates_for_substring(
+        &self,
+        fast: &FastIndex,
+        pattern: &str,
+    ) -> Result<Vec<u32>, SearchIndexError> {
         if pattern.is_empty() {
-            return Ok(self.runtime.docs.iter().map(|doc| doc.doc_id).collect());
+            return Ok(fast.all_doc_ids());
         }
         let lower = pattern.to_ascii_lowercase();
         if lower.len() < 3 {
-            return Ok(self
-                .runtime
-                .docs
+            return Ok(fast
+                .all_docs()
                 .iter()
-                .filter(|doc| doc.relative_path.to_ascii_lowercase().contains(&lower))
-                .map(|doc| doc.doc_id)
+                .filter(|(_, path)| path.to_ascii_lowercase().contains(&lower))
+                .map(|(id, _)| *id)
                 .collect());
         }
 
         let grams = trigrams_from_text(&lower);
-        let mut current: Option<HashSet<u32>> = None;
-        for gram in grams {
-            let Some(postings) = self.runtime.path_postings.get(&gram) else {
+        let mut candidate_lists: Vec<Vec<u32>> = Vec::new();
+        for gram in &grams {
+            let Some(postings) = fast.path_postings(*gram) else {
                 return Ok(Vec::new());
             };
-            current = intersect_sets(current, postings.iter().copied().collect::<HashSet<u32>>());
+            candidate_lists.push(postings);
         }
-        Ok(current
-            .unwrap_or_default()
+        candidate_lists.sort_by_key(|l| l.len());
+
+        let mut result = candidate_lists[0].clone();
+        for list in &candidate_lists[1..] {
+            result = sorted_intersect(&result, list);
+            if result.is_empty() {
+                return Ok(Vec::new());
+            }
+        }
+
+        Ok(result
             .into_iter()
             .filter(|doc_id| {
-                self.runtime
-                    .doc(*doc_id)
-                    .map(|doc| doc.relative_path.to_ascii_lowercase().contains(&lower))
+                fast.doc_path(*doc_id)
+                    .map(|p| p.to_ascii_lowercase().contains(&lower))
                     .unwrap_or(false)
             })
             .collect())
     }
 
-    fn index_candidates(
+    fn fast_index_candidates(
         &self,
+        fast: &FastIndex,
         request: &QueryRequest,
         filtered_docs: &[u32],
     ) -> Result<Vec<u32>, SearchIndexError> {
@@ -304,31 +365,202 @@ impl SearchEngine {
         }
 
         let grams = trigrams_from_text(&seed.to_ascii_lowercase());
-        let mut current: Option<HashSet<u32>> = None;
-        for gram in grams {
-            let Some(postings) = self.runtime.content_postings.get(&gram) else {
+        let mut posting_lists: Vec<Vec<u32>> = Vec::new();
+        for gram in &grams {
+            let Some(postings) = fast.content_postings(*gram) else {
                 return Ok(Vec::new());
             };
-            current = intersect_sets(current, postings.iter().copied().collect::<HashSet<u32>>());
+            posting_lists.push(postings);
+        }
+        posting_lists.sort_by_key(|l| l.len());
+
+        let mut candidates = posting_lists[0].clone();
+        for list in &posting_lists[1..] {
+            candidates = sorted_intersect(&candidates, list);
+            if candidates.is_empty() {
+                return Ok(Vec::new());
+            }
+        }
+        candidates = sorted_intersect(&candidates, filtered_docs);
+        Ok(candidates)
+    }
+
+    // ---- Legacy index methods ----
+
+    fn legacy_path_filtered_docs(&self, runtime: &RuntimeIndex, request: &QueryRequest) -> Result<Vec<u32>, SearchIndexError> {
+        let mut current: Option<Vec<u32>> = None;
+
+        if !request.exact_paths.is_empty() {
+            let mut matched = Vec::new();
+            for path in &request.exact_paths {
+                if let Some(doc_id) = runtime.path_lookup.get(path) {
+                    matched.push(*doc_id);
+                }
+            }
+            matched.sort_unstable();
+            matched.dedup();
+            current = intersect_sorted(current, matched);
         }
 
-        let filtered_set: HashSet<u32> = filtered_docs.iter().copied().collect();
-        let mut docs: Vec<u32> = current
-            .unwrap_or_default()
+        if !request.exact_names.is_empty() {
+            let mut matched = Vec::new();
+            for name in &request.exact_names {
+                if let Some(doc_ids) = runtime.filename_map.get(&name.to_ascii_lowercase()) {
+                    matched.extend(doc_ids.iter().copied());
+                }
+            }
+            matched.sort_unstable();
+            matched.dedup();
+            current = intersect_sorted(current, matched);
+        }
+
+        let extensions = request.normalized_extensions();
+        if !extensions.is_empty() {
+            let mut matched = Vec::new();
+            for extension in extensions {
+                if let Some(doc_ids) = runtime.extension_map.get(&extension) {
+                    matched.extend(doc_ids.iter().copied());
+                }
+            }
+            matched.sort_unstable();
+            matched.dedup();
+            current = intersect_sorted(current, matched);
+        }
+
+        let mut path_substrings = request.path_substrings.clone();
+        if matches!(request.kind, SearchKind::Path) && !request.pattern.is_empty() {
+            path_substrings.push(request.pattern.clone());
+        }
+        if !path_substrings.is_empty() {
+            let mut matched = Vec::new();
+            for pattern in path_substrings {
+                matched.extend(self.legacy_path_candidates_for_substring(runtime, &pattern)?);
+            }
+            matched.sort_unstable();
+            matched.dedup();
+            current = intersect_sorted(current, matched);
+        }
+
+        let globset = build_globset(&request.globs)?;
+        if !request.path_prefixes.is_empty() || globset.is_some() {
+            let mut matched = Vec::new();
+            for doc in &runtime.docs {
+                let prefix_match = request.path_prefixes.is_empty()
+                    || request
+                        .path_prefixes
+                        .iter()
+                        .any(|prefix| doc.relative_path.starts_with(prefix));
+                let glob_match = globset
+                    .as_ref()
+                    .map(|set| set.is_match(doc.relative_path.as_str()))
+                    .unwrap_or(true);
+                if prefix_match && glob_match {
+                    matched.push(doc.doc_id);
+                }
+            }
+            matched.sort_unstable();
+            current = intersect_sorted(current, matched);
+        }
+
+        Ok(current.unwrap_or_else(|| runtime.docs.iter().map(|doc| doc.doc_id).collect()))
+    }
+
+    fn legacy_path_candidates_for_substring(&self, runtime: &RuntimeIndex, pattern: &str) -> Result<Vec<u32>, SearchIndexError> {
+        if pattern.is_empty() {
+            return Ok(runtime.docs.iter().map(|doc| doc.doc_id).collect());
+        }
+        let lower = pattern.to_ascii_lowercase();
+        if lower.len() < 3 {
+            return Ok(runtime
+                .docs
+                .iter()
+                .filter(|doc| doc.relative_path.to_ascii_lowercase().contains(&lower))
+                .map(|doc| doc.doc_id)
+                .collect());
+        }
+
+        let grams = trigrams_from_text(&lower);
+        let mut candidate_lists: Vec<&[u32]> = Vec::new();
+        for gram in &grams {
+            let Some(postings) = runtime.path_postings.get(gram) else {
+                return Ok(Vec::new());
+            };
+            candidate_lists.push(postings);
+        }
+        candidate_lists.sort_by_key(|list| list.len());
+
+        let mut result = candidate_lists[0].to_vec();
+        for list in &candidate_lists[1..] {
+            result = sorted_intersect(&result, list);
+            if result.is_empty() {
+                return Ok(Vec::new());
+            }
+        }
+
+        Ok(result
             .into_iter()
-            .filter(|doc_id| filtered_set.contains(doc_id))
-            .collect();
-        docs.sort_unstable();
-        Ok(docs)
+            .filter(|doc_id| {
+                runtime
+                    .doc(*doc_id)
+                    .map(|doc| doc.relative_path.to_ascii_lowercase().contains(&lower))
+                    .unwrap_or(false)
+            })
+            .collect())
+    }
+
+    fn legacy_index_candidates(
+        &self,
+        runtime: &RuntimeIndex,
+        request: &QueryRequest,
+        filtered_docs: &[u32],
+    ) -> Result<Vec<u32>, SearchIndexError> {
+        let plan = plan_query(request);
+        let seed = match request.kind {
+            SearchKind::Literal | SearchKind::Auto => request.pattern.as_str(),
+            SearchKind::Regex => plan
+                .literal_seeds
+                .iter()
+                .max_by_key(|seed| seed.len())
+                .map(String::as_str)
+                .unwrap_or_default(),
+            SearchKind::Path => "",
+        };
+        if seed.len() < 3 {
+            return Ok(filtered_docs.to_vec());
+        }
+
+        let grams = trigrams_from_text(&seed.to_ascii_lowercase());
+        let mut posting_lists: Vec<&[u32]> = Vec::new();
+        for gram in &grams {
+            let Some(postings) = runtime.content_postings.get(gram) else {
+                return Ok(Vec::new());
+            };
+            posting_lists.push(postings);
+        }
+        posting_lists.sort_by_key(|list| list.len());
+
+        let mut candidates = posting_lists[0].to_vec();
+        for list in &posting_lists[1..] {
+            candidates = sorted_intersect(&candidates, list);
+            if candidates.is_empty() {
+                return Ok(Vec::new());
+            }
+        }
+        candidates = sorted_intersect(&candidates, filtered_docs);
+        Ok(candidates)
     }
 
     fn collect_path_hits(&self, doc_ids: &[u32]) -> SearchExecution {
         let mut hits = Vec::new();
         for doc_id in doc_ids {
-            if let Some(doc) = self.runtime.doc(*doc_id) {
-                hits.push(SearchHit::Path {
-                    path: doc.relative_path.clone(),
-                });
+            let path = match &self.backend {
+                IndexBackend::Fast(fast) => fast.doc_path(*doc_id),
+                IndexBackend::Legacy(runtime) => {
+                    runtime.doc(*doc_id).map(|d| d.relative_path.clone())
+                }
+            };
+            if let Some(path) = path {
+                hits.push(SearchHit::Path { path });
             }
         }
         SearchExecution {
@@ -345,44 +577,81 @@ impl SearchEngine {
         }
     }
 
-    fn collect_content_hits(
+    fn collect_content_hits_parallel(
         &self,
         request: &QueryRequest,
         doc_ids: &[u32],
     ) -> Result<SearchExecution, SearchIndexError> {
         let matcher = build_matcher(request)?;
+        let max_results = request.max_results.unwrap_or(usize::MAX);
+        let total_found = AtomicUsize::new(0);
+        let done = AtomicBool::new(false);
+
+        // Resolve doc paths upfront to enable parallel file I/O
+        let work_items: Vec<(u32, std::path::PathBuf, String)> = doc_ids
+            .iter()
+            .filter_map(|doc_id| {
+                let rel_path = match &self.backend {
+                    IndexBackend::Fast(fast) => fast.doc_path(*doc_id),
+                    IndexBackend::Legacy(runtime) => {
+                        runtime.doc(*doc_id).map(|d| d.relative_path.clone())
+                    }
+                }?;
+                Some((*doc_id, self.repo_root.join(&rel_path), rel_path))
+            })
+            .collect();
+
+        // Parallel verification using rayon
+        let results: Vec<Option<(SearchHit, usize, u64)>> = work_items
+            .par_iter()
+            .map(|(_doc_id, abs_path, rel_path): &(u32, std::path::PathBuf, String)| {
+                if done.load(Ordering::Relaxed) {
+                    return None;
+                }
+
+                let bytes = match read_candidate_mmap(abs_path) {
+                    Ok(b) => b,
+                    Err(_) => return None,
+                };
+                let text = String::from_utf8_lossy(&bytes);
+                let remaining = max_results.saturating_sub(total_found.load(Ordering::Relaxed));
+                if remaining == 0 {
+                    done.store(true, Ordering::Relaxed);
+                    return None;
+                }
+
+                match match_lines(&text, &matcher, Some(remaining)) {
+                    Some(lines) => {
+                        let count = lines.len();
+                        let prev = total_found.fetch_add(count, Ordering::Relaxed);
+                        if prev + count >= max_results {
+                            done.store(true, Ordering::Relaxed);
+                        }
+                        Some((
+                            SearchHit::Content {
+                                path: rel_path.to_string(),
+                                lines,
+                            },
+                            count,
+                            bytes.len() as u64,
+                        ))
+                    }
+                    None => None,
+                }
+            })
+            .collect();
+
         let mut hits = Vec::new();
         let mut bytes_scanned = 0_u64;
-        let mut verified_docs = 0_usize;
         let mut files_with_matches = 0_usize;
         let mut total_line_matches = 0_usize;
-        let max_results = request.max_results.unwrap_or(usize::MAX);
 
-        for doc_id in doc_ids {
-            let Some(doc) = self.runtime.doc(*doc_id) else {
-                continue;
-            };
-            verified_docs += 1;
-            let absolute_path = self.runtime.repo_root.join(&doc.relative_path);
-            let bytes = read_candidate_bytes(&absolute_path)?;
-            bytes_scanned += bytes.len() as u64;
-            let text = String::from_utf8_lossy(&bytes);
-
-            if let Some(lines) = match_lines(
-                &text,
-                &matcher,
-                Some(max_results.saturating_sub(total_line_matches)),
-            ) {
-                total_line_matches += lines.len();
-                files_with_matches += 1;
-                hits.push(SearchHit::Content {
-                    path: doc.relative_path.clone(),
-                    lines,
-                });
-                if total_line_matches >= max_results {
-                    break;
-                }
-            }
+        for result in results.into_iter().flatten() {
+            let (hit, count, size) = result;
+            hits.push(hit);
+            files_with_matches += 1;
+            total_line_matches += count;
+            bytes_scanned += size;
         }
 
         Ok(SearchExecution {
@@ -392,7 +661,7 @@ impl SearchEngine {
                 total_line_matches,
             },
             metrics: SearchMetrics {
-                verified_docs,
+                verified_docs: work_items.len(),
                 bytes_scanned,
                 ..SearchMetrics::default()
             },
@@ -400,9 +669,28 @@ impl SearchEngine {
     }
 }
 
-fn intersect_sets(current: Option<HashSet<u32>>, incoming: HashSet<u32>) -> Option<HashSet<u32>> {
+/// Sorted intersection of two sorted slices — O(n+m) with no hashing.
+fn sorted_intersect(a: &[u32], b: &[u32]) -> Vec<u32> {
+    let mut result = Vec::with_capacity(a.len().min(b.len()));
+    let (mut i, mut j) = (0, 0);
+    while i < a.len() && j < b.len() {
+        match a[i].cmp(&b[j]) {
+            std::cmp::Ordering::Less => i += 1,
+            std::cmp::Ordering::Greater => j += 1,
+            std::cmp::Ordering::Equal => {
+                result.push(a[i]);
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    result
+}
+
+/// Intersect an optional accumulated result with a new sorted vec.
+fn intersect_sorted(current: Option<Vec<u32>>, incoming: Vec<u32>) -> Option<Vec<u32>> {
     Some(match current {
-        Some(current) => current.intersection(&incoming).copied().collect(),
+        Some(current) => sorted_intersect(&current, &incoming),
         None => incoming,
     })
 }
@@ -446,14 +734,34 @@ fn match_lines(text: &str, matcher: &Regex, limit: Option<usize>) -> Option<Vec<
     }
 }
 
-fn read_candidate_bytes(path: &Path) -> Result<Vec<u8>, SearchIndexError> {
+/// Read candidate file using mmap — avoids copying for large files.
+fn read_candidate_mmap(path: &Path) -> Result<CandidateBytes, SearchIndexError> {
     let file = File::open(path)?;
     let metadata = file.metadata()?;
-    if metadata.len() > 1_000_000 {
+    let len = metadata.len();
+    if len == 0 {
+        return Ok(CandidateBytes::Owned(Vec::new()));
+    }
+    if len > 32_768 {
         let mmap = unsafe { Mmap::map(&file)? };
-        Ok(mmap.to_vec())
+        Ok(CandidateBytes::Mapped(mmap))
     } else {
-        Ok(std::fs::read(path)?)
+        Ok(CandidateBytes::Owned(std::fs::read(path)?))
+    }
+}
+
+enum CandidateBytes {
+    Owned(Vec<u8>),
+    Mapped(Mmap),
+}
+
+impl std::ops::Deref for CandidateBytes {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        match self {
+            CandidateBytes::Owned(v) => v,
+            CandidateBytes::Mapped(m) => m,
+        }
     }
 }
 

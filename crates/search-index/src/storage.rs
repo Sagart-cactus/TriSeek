@@ -7,6 +7,15 @@ use std::path::{Path, PathBuf};
 const BASE_FILE: &str = "base.bin";
 const DELTA_FILE: &str = "delta.bin";
 const METADATA_FILE: &str = "metadata.json";
+const FAST_INDEX_FILE: &str = "fast.idx";
+
+pub fn fast_index_path(index_dir: &Path) -> PathBuf {
+    index_dir.join(FAST_INDEX_FILE)
+}
+
+pub fn fast_index_exists(index_dir: &Path) -> bool {
+    index_dir.join(FAST_INDEX_FILE).exists()
+}
 
 pub fn default_index_dir(repo_root: &Path) -> PathBuf {
     repo_root.join(".triseek-index")

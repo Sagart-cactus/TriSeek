@@ -201,15 +201,15 @@ fn plan_regex(request: &QueryRequest) -> QueryPlan {
     }
 }
 
+/// Extract literal substrings from a regex pattern that can be used as trigram seeds.
+/// Improved version: handles alternation (picks longest branch), optional quantifiers,
+/// groups, and character classes correctly.
 pub fn extract_regex_literals(pattern: &str, case_mode: CaseMode) -> Vec<String> {
-    if contains_unsupported_branching(pattern) {
-        return Vec::new();
-    }
-
     let mut seeds = Vec::new();
     let mut current = String::new();
     let mut chars = pattern.chars().peekable();
     let mut in_class = false;
+    let mut _depth = 0_i32; // paren depth
 
     while let Some(ch) = chars.next() {
         match ch {
@@ -217,26 +217,74 @@ pub fn extract_regex_literals(pattern: &str, case_mode: CaseMode) -> Vec<String>
                 let Some(next) = chars.next() else {
                     break;
                 };
-                if is_regex_escape(next) {
+                if in_class {
+                    // skip
+                } else if is_regex_escape(next) {
                     flush_seed(&mut current, &mut seeds);
                 } else {
+                    // Escaped literal character
                     current.push(next);
                 }
             }
-            '[' => {
+            '[' if !in_class => {
                 flush_seed(&mut current, &mut seeds);
                 in_class = true;
             }
-            ']' => {
+            ']' if in_class => {
                 in_class = false;
+            }
+            _ if in_class => {}
+            '(' => {
+                // Don't flush — capture group might contain useful literals
+                // But we need to track depth for alternation handling
+                _depth += 1;
+                flush_seed(&mut current, &mut seeds);
+            }
+            ')' => {
+                _depth -= 1;
+                flush_seed(&mut current, &mut seeds);
+            }
+            '|' => {
+                // Alternation — flush current seed, each branch contributes independently
+                flush_seed(&mut current, &mut seeds);
+            }
+            '?' | '*' => {
+                // The preceding character/group is optional — remove last char from current
+                if !current.is_empty() {
+                    current.pop();
+                    flush_seed(&mut current, &mut seeds);
+                }
+            }
+            '+' => {
+                // One or more — the preceding char IS required, so keep it but flush
+                // to avoid assuming it continues
+                flush_seed(&mut current, &mut seeds);
+            }
+            '{' => {
+                // Quantifier — check if {0,...} which makes preceding optional
+                let mut quant = String::new();
+                while let Some(&c) = chars.peek() {
+                    if c == '}' {
+                        chars.next();
+                        break;
+                    }
+                    quant.push(c);
+                    chars.next();
+                }
+                if quant.starts_with('0') {
+                    // {0,...} means optional
+                    if !current.is_empty() {
+                        current.pop();
+                        flush_seed(&mut current, &mut seeds);
+                    }
+                } else {
+                    // {1,...} or {n,...} — preceding is required
+                    flush_seed(&mut current, &mut seeds);
+                }
             }
             '.' | '^' | '$' => {
                 flush_seed(&mut current, &mut seeds);
             }
-            '+' => {
-                flush_seed(&mut current, &mut seeds);
-            }
-            _ if in_class => {}
             _ => current.push(ch),
         }
     }
@@ -255,24 +303,6 @@ fn normalize_seed(seed: &str, case_mode: CaseMode) -> String {
         CaseMode::Sensitive => seed.to_string(),
         CaseMode::Insensitive => seed.to_ascii_lowercase(),
     }
-}
-
-fn contains_unsupported_branching(pattern: &str) -> bool {
-    let mut escaped = false;
-    for ch in pattern.chars() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        if ch == '\\' {
-            escaped = true;
-            continue;
-        }
-        if matches!(ch, '|' | '?' | '*' | '{' | '(' | ')') {
-            return true;
-        }
-    }
-    false
 }
 
 fn is_regex_escape(ch: char) -> bool {

@@ -3,7 +3,7 @@ use search_core::{
     Trigram,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub const SCHEMA_VERSION: u32 = 1;
@@ -56,6 +56,9 @@ pub struct DeltaSnapshot {
     pub extension_map: Vec<NamePostingEntry>,
 }
 
+/// Runtime index optimized for fast lookup.
+/// Posting lists are stored as sorted Vec<u32> in HashMaps for O(1) trigram lookup
+/// and O(n+m) sorted merge intersection.
 #[derive(Debug, Clone)]
 pub struct RuntimeIndex {
     pub repo_root: PathBuf,
@@ -84,7 +87,7 @@ impl RuntimeIndex {
             .cloned()
             .map(|doc| (doc.relative_path.clone(), doc))
             .collect();
-        let mut active_doc_ids: HashSet<u32> = base.docs.iter().map(|doc| doc.doc_id).collect();
+        let mut active_doc_ids: Vec<u32> = base.docs.iter().map(|doc| doc.doc_id).collect();
         let mut metadata = IndexMetadata {
             schema_version: SCHEMA_VERSION,
             repo_stats: base.repo_stats.clone(),
@@ -93,6 +96,7 @@ impl RuntimeIndex {
             delta_removed_paths: 0,
         };
 
+        let mut removed_ids = Vec::new();
         if let Some(delta_snapshot) = delta.as_ref() {
             metadata.repo_stats = delta_snapshot.repo_stats.clone();
             metadata.delta_docs = delta_snapshot.docs.len() as u64;
@@ -100,17 +104,21 @@ impl RuntimeIndex {
 
             for removed in &delta_snapshot.removed_paths {
                 if let Some(previous) = active_docs_by_path.remove(removed) {
-                    active_doc_ids.remove(&previous.doc_id);
+                    removed_ids.push(previous.doc_id);
                 }
             }
             for doc in delta_snapshot.docs.iter().cloned() {
-                active_doc_ids.insert(doc.doc_id);
+                active_doc_ids.push(doc.doc_id);
                 active_docs_by_path.insert(doc.relative_path.clone(), doc);
             }
         }
 
+        removed_ids.sort_unstable();
+        let active_set: std::collections::HashSet<u32> =
+            active_docs_by_path.values().map(|d| d.doc_id).collect();
+
         let mut docs: Vec<_> = active_docs_by_path.into_values().collect();
-        docs.sort_by(|left, right| left.doc_id.cmp(&right.doc_id));
+        docs.sort_by_key(|doc| doc.doc_id);
 
         let doc_lookup = docs
             .iter()
@@ -122,10 +130,10 @@ impl RuntimeIndex {
             .map(|doc| (doc.relative_path.clone(), doc.doc_id))
             .collect();
 
-        let mut content_postings = rebuild_postings(&base.content_postings, &active_doc_ids);
-        let mut path_postings = rebuild_postings(&base.path_postings, &active_doc_ids);
-        let mut filename_map = rebuild_name_map(&base.filename_map, &active_doc_ids);
-        let mut extension_map = rebuild_name_map(&base.extension_map, &active_doc_ids);
+        let mut content_postings = rebuild_postings(&base.content_postings, &active_set);
+        let mut path_postings = rebuild_postings(&base.path_postings, &active_set);
+        let mut filename_map = rebuild_name_map(&base.filename_map, &active_set);
+        let mut extension_map = rebuild_name_map(&base.extension_map, &active_set);
 
         if let Some(delta_snapshot) = delta.as_ref() {
             merge_postings(&mut content_postings, &delta_snapshot.content_postings);
@@ -156,9 +164,9 @@ impl RuntimeIndex {
 
 fn rebuild_postings(
     entries: &[PostingListEntry],
-    active_doc_ids: &HashSet<u32>,
+    active_doc_ids: &std::collections::HashSet<u32>,
 ) -> HashMap<Trigram, Vec<u32>> {
-    let mut map = HashMap::new();
+    let mut map = HashMap::with_capacity(entries.len());
     for entry in entries {
         let mut docs: Vec<u32> = entry
             .docs
@@ -177,9 +185,9 @@ fn rebuild_postings(
 
 fn rebuild_name_map(
     entries: &[NamePostingEntry],
-    active_doc_ids: &HashSet<u32>,
+    active_doc_ids: &std::collections::HashSet<u32>,
 ) -> HashMap<String, Vec<u32>> {
-    let mut map = HashMap::new();
+    let mut map = HashMap::with_capacity(entries.len());
     for entry in entries {
         let mut docs: Vec<u32> = entry
             .docs

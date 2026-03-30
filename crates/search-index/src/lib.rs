@@ -1,6 +1,7 @@
 mod build;
 mod engine;
 mod error;
+pub mod fastindex;
 mod model;
 mod storage;
 mod walker;

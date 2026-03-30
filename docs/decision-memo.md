@@ -1,46 +1,53 @@
-# Decision Memo
+# Decision Memo (Updated)
 
-TriSeek should not replace the current shell-based search path as the default runtime yet. The final benchmark run showed acceptable correctness on the covered workloads after revalidation, but the indexed engine still regressed latency, repeated-session behavior, and memory footprint across every measured repo category.
+## Status: Indexed engine now recommended for Medium and Large repos
+
+After two rounds of optimization, TriSeek's indexed engine now significantly outperforms shell-based tools (rg, fd) on medium and large repositories for both single-query and session workloads.
 
 ## Inputs
 
-- Benchmark summary: `bench/results/final-run/summary.md`
-- Raw timing artifacts: `bench/results/final-run/report.json` and `bench/results/final-run/report.csv`
-- Correctness revalidation: `bench/results/final-run/correctness-revalidation.md`
-- Full repo measurements: `bench/results/prepared_repos_full.json`
+- Round 2 benchmark: `bench/results/round2-fastindex/summary.md`
+- Optimization log: `docs/optimization-log.md`
+- Previous decision: the original memo recommended against integration; this update reverses that for medium+ repos.
 
-## Recommendation Table
+## Recommendation Table (Updated)
 
-| Repo Category | Cold Start Winner | Repeated Session Winner | CPU Winner | Memory Winner | Recommended Default |
-|---|---|---|---|---|---|
-| Small | `rg` / shell tools | `rg` / shell tools | `rg` / shell tools | roughly tied | `rg` for content, `fd` or `rg --files` for paths |
-| Medium | `rg` / shell tools | `rg` / shell tools | mixed, slight TriSeek edge on some cases | `rg` / shell tools | `rg` for content, `fd` or `rg --files` for paths |
-| Large | `rg` / shell tools | `rg` / shell tools | mixed, roughly tied | `rg` / shell tools by a large margin | `rg` for content, `fd` or `rg --files` for paths |
-| Very Large | not benchmarked | not benchmarked | not benchmarked | not benchmarked | do not activate indexed search until a real very-large corpus is measured |
+| Repo Category | Cold Start Winner | Repeated Session Winner | Recommended Default |
+|---|---|---|---|
+| Small (<5K files) | `rg` / shell tools (TriSeek ~1.5x slower) | TriSeek (2.4x faster at 20 queries) | `rg` for cold start; indexed if session detected |
+| Medium (5K-50K) | **TriSeek** (7-10x faster on content, 2x on paths) | **TriSeek** (9.4x faster at 20 queries) | **Indexed** (build index eagerly) |
+| Large (50K-500K) | **TriSeek** (10-14x faster on content) | **TriSeek** (16.3x faster at 20 queries) | **Indexed** (build index eagerly) |
+| Very Large | not benchmarked | not benchmarked | build index in background, use rg until ready |
 
-## Decision Criteria
+## Key Results
 
-- Correctness: acceptable for the benchmarked workload families after the final revalidation pass.
-- Cold-start latency: fails the bar. TriSeek was slower in 38 of 39 timed single-query cases.
-- Repeated-session speedup: fails the bar. No session benchmark beat the shell baseline.
-- Build/update amortization: fails the bar on medium and large repos. The large-repo index took 68.3 s to build and 9.9 s to update.
-- Memory/operational cost: fails the bar. The indexed path had materially higher resident-set usage and adds index lifecycle complexity.
+### Single-Query Performance
+- **Won 30 of 39 single-query cases** (was 1/39 before optimization)
+- Kubernetes: 7.5x to 10x faster than rg on content search
+- Linux: 10x to 14x faster than rg on content search
+- Path queries: competitive or faster on medium/large repos
 
-## Outcome
+### Session Performance (Agent Workloads)
+- kubernetes 20-query session: **9.4x faster** than rg
+- linux 20-query session: **16.3x faster** than rg
+- Every session benchmark won except serde session_100
 
-- Integration decision: do not integrate the indexed engine as the default search path.
-- Activation policy: keep the existing shell-based routing for all measured categories.
-- Fallback policy:
-  - content search: `rg`
-  - suffix/exact filename search: `fd`
-  - full path listing or substring search: `rg --files`-based flow
-  - unsupported or degenerate queries: direct shell fallback
-- Indexed engine status: keep available only behind an explicit opt-in or developer flag while it is being optimized.
+### Remaining Weaknesses
+1. **Small repos**: rg is faster for cold single queries (but TriSeek wins sessions)
+2. **regex_weak patterns**: No extractable literals → falls back to full scan (6-10x slower)
+3. **Build time**: 13s (medium), 75s (large) — needs background build strategy
+4. **Index size**: Fast index is ~560MB for linux (larger than source) — acceptable for dev machines
 
-## What Would Need to Improve
+## Updated Decision
 
-- Stronger pruning so high-match and path-heavy queries do not fan out into massive verification sets.
-- Lower per-query memory pressure, especially on large indexes.
-- Better literal extraction for regex planning and better handling of path-only workloads.
-- Query/session caching that actually amortizes repeated searches.
-- A validated benchmark on a real `very_large` corpus before claiming any threshold where indexed search should activate automatically.
+- **Medium+ repos**: Activate indexed search as default after first build
+- **Small repos**: Keep rg for cold start, switch to indexed after 2-3 queries in a session
+- **Build strategy**: Build index in background on first use, serve from rg until ready
+- **Incremental updates**: 40ms-8s depending on repo size — run before each session
+- **regex_weak**: Keep rg fallback for patterns with no extractable literals
+
+## What Changed
+
+The two critical optimizations that flipped the performance picture:
+1. **Parallel verification with rayon**: Candidate files are read and matched in parallel across all CPU cores. This eliminated the sequential I/O bottleneck.
+2. **Fast binary index format**: Custom mmap-friendly format replaces bincode deserialization. Index opens in <5ms (was 200-800ms) with near-zero heap allocation. Posting lists are read directly from mapped memory.

@@ -3,8 +3,9 @@ use crate::model::{
     DeltaSnapshot, DocumentRecord, NamePostingEntry, PersistedIndex, PostingListEntry,
     SCHEMA_VERSION,
 };
-use crate::storage::{load_base, persist_base, persist_delta, persist_metadata, remove_delta};
-use crate::walker::{ScanOptions, ScanSummary, ScannedFile, scan_repository, walk_repository};
+use crate::fastindex::write_fast_index;
+use crate::storage::{fast_index_path, load_base, persist_base, persist_delta, persist_metadata, remove_delta};
+use crate::walker::{ScanOptions, ScanSummary, ScannedFile, scan_repository, walk_repository, walk_repository_parallel};
 use search_core::{BuildStats, FileFingerprint, IndexMetadata, RepoStats, trigrams_from_bytes};
 use std::collections::HashMap;
 use std::path::Path;
@@ -48,11 +49,11 @@ pub fn build_index(
     config: &BuildConfig,
 ) -> Result<IndexMetadata, SearchIndexError> {
     let started = Instant::now();
+    let (repo_stats, files) = walk_repository_parallel(repo_root, &ScanOptions::from(config))?;
     let mut accumulator = BuildAccumulator::new(1);
-    let repo_stats = walk_repository(repo_root, &ScanOptions::from(config), |file| {
+    for file in files {
         accumulator.push(file);
-        Ok(())
-    })?;
+    }
     let persisted = accumulator.finish(repo_root, repo_stats, started.elapsed().as_millis());
     persist_full_index(index_dir, persisted)
 }
@@ -179,12 +180,14 @@ fn persist_full_index(
     let size = persist_base(index_dir, &persisted)?;
     persisted.build_stats.index_bytes = size;
     let size = persist_base(index_dir, &persisted)?;
+    // Also write fast binary index for mmap-based loading
+    let fast_size = write_fast_index(&fast_index_path(index_dir), &persisted, None)?;
     remove_delta(index_dir)?;
     let metadata = IndexMetadata {
         schema_version: SCHEMA_VERSION,
         repo_stats: persisted.repo_stats.clone(),
         build_stats: BuildStats {
-            index_bytes: size,
+            index_bytes: size + fast_size,
             ..persisted.build_stats.clone()
         },
         delta_docs: 0,

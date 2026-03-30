@@ -1,0 +1,40 @@
+repo_slug,query_label,family,baseline_tool,correct,indexed_p50_ms,baseline_p50_ms,indexed_p95_ms,baseline_p95_ms,indexed_max_rss_kib,baseline_max_rss_kib
+serde-rs_serde,path_all,file_listing,rg --files,true,32.745,14.491,33.325,17.674,4300800,4034560
+serde-rs_serde,path_suffix,file_listing,fd,true,32.984,19.020,33.372,22.510,4329472,6152192
+serde-rs_serde,path_exact_name,file_listing,fd,true,31.167,17.810,36.088,20.785,4268032,5226496
+serde-rs_serde,path_substring,file_listing,rg --files | rg,true,32.902,25.393,33.353,27.820,4366336,4055040
+serde-rs_serde,literal_selective,literal_search,rg,true,21.462,16.417,23.902,17.797,5283840,5464064
+serde-rs_serde,literal_moderate,literal_search,rg,true,22.638,16.711,24.550,17.596,5484544,5451776
+serde-rs_serde,literal_high,literal_search,rg,true,30.587,16.368,32.060,17.368,5849088,5824512
+serde-rs_serde,regex_anchor,regex_search,rg,true,22.505,16.666,23.955,18.245,5554176,5591040
+serde-rs_serde,regex_weak,regex_search,rg,true,51.779,20.456,53.668,21.742,6893568,6848512
+serde-rs_serde,literal_no_match,literal_search,rg,true,21.257,16.866,22.791,18.878,5120000,5169152
+serde-rs_serde,regex_no_match,regex_search,rg,true,21.350,16.794,22.758,18.776,5246976,5283840
+serde-rs_serde,multi_or,mixed_search,rg,true,34.916,17.273,36.227,21.311,5947392,6049792
+serde-rs_serde,path_plus_content,mixed_search,rg,true,20.470,16.055,22.326,17.216,5263360,5156864
+kubernetes_kubernetes,path_all,file_listing,rg --files,true,877.609,78.938,896.385,84.881,408739840,9351168
+kubernetes_kubernetes,path_suffix,file_listing,fd,true,862.273,75.182,880.594,79.334,407875584,14000128
+kubernetes_kubernetes,path_exact_name,file_listing,fd,true,878.068,72.427,891.206,74.823,408829952,10190848
+kubernetes_kubernetes,path_substring,file_listing,rg --files | rg,true,872.783,89.977,887.543,93.833,408473600,9564160
+kubernetes_kubernetes,literal_selective,literal_search,rg,true,868.531,386.242,880.489,394.548,407154688,13180928
+kubernetes_kubernetes,literal_moderate,literal_search,rg,false,875.935,391.195,898.294,402.882,408612864,13254656
+kubernetes_kubernetes,literal_high,literal_search,rg,false,891.765,403.337,907.649,415.058,408190976,15073280
+kubernetes_kubernetes,regex_anchor,regex_search,rg,true,874.548,386.894,896.165,396.865,408920064,13127680
+kubernetes_kubernetes,regex_weak,regex_search,rg,true,5677.962,864.659,5931.812,951.448,853024768,17891328
+kubernetes_kubernetes,literal_no_match,literal_search,rg,true,879.387,383.229,906.736,403.652,407044096,13115392
+kubernetes_kubernetes,regex_no_match,regex_search,rg,true,881.239,394.831,916.269,401.069,408702976,12992512
+kubernetes_kubernetes,multi_or,mixed_search,rg,false,890.497,418.663,914.650,426.005,408858624,15958016
+kubernetes_kubernetes,path_plus_content,mixed_search,rg,true,876.484,212.956,935.090,216.504,407846912,9981952
+torvalds_linux,path_all,file_listing,rg --files,true,4205.711,108.898,4361.626,111.567,1803616256,12300288
+torvalds_linux,path_suffix,file_listing,fd,true,4210.556,105.296,4364.209,131.085,1808494592,16601088
+torvalds_linux,path_exact_name,file_listing,fd,true,4182.189,98.220,4285.707,101.539,1802264576,13049856
+torvalds_linux,path_substring,file_listing,rg --files | rg,true,4260.259,121.329,4416.670,131.420,1805770752,12058624
+torvalds_linux,literal_selective,literal_search,rg,true,4173.223,1532.755,4297.346,1580.455,1808261120,14553088
+torvalds_linux,literal_moderate,literal_search,rg,true,4178.098,1532.614,4371.264,1573.571,1805123584,14946304
+torvalds_linux,literal_high,literal_search,rg,true,4256.241,1552.297,4336.629,1611.852,1805111296,14721024
+torvalds_linux,regex_anchor,regex_search,rg,true,4245.412,1540.570,4495.249,1557.240,1808637952,14540800
+torvalds_linux,regex_weak,regex_search,rg,true,28187.387,2835.879,28504.236,3133.563,3316465664,18055168
+torvalds_linux,literal_no_match,literal_search,rg,true,3979.252,1505.774,4160.871,1541.260,1808551936,14393344
+torvalds_linux,regex_no_match,regex_search,rg,true,3989.836,1498.106,4262.855,1551.141,1802780672,14462976
+torvalds_linux,multi_or,mixed_search,rg,false,4013.118,1533.357,4250.026,1554.432,1802350592,14954496
+torvalds_linux,path_plus_content,mixed_search,rg,true,4008.764,508.743,4265.447,525.347,1803575296,10289152
