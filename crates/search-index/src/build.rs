@@ -1,11 +1,16 @@
 use crate::error::SearchIndexError;
+use crate::fastindex::write_fast_index;
 use crate::model::{
     DeltaSnapshot, DocumentRecord, NamePostingEntry, PersistedIndex, PostingListEntry,
     SCHEMA_VERSION,
 };
-use crate::fastindex::write_fast_index;
-use crate::storage::{fast_index_path, load_base, persist_base, persist_delta, persist_metadata, remove_delta};
-use crate::walker::{ScanOptions, ScanSummary, ScannedFile, scan_repository, walk_repository, walk_repository_parallel};
+use crate::storage::{
+    fast_index_path, load_base, persist_base, persist_delta, persist_metadata, remove_delta,
+};
+use crate::walker::{
+    ScanOptions, ScanSummary, ScannedFile, scan_repository, walk_repository,
+    walk_repository_parallel,
+};
 use search_core::{BuildStats, FileFingerprint, IndexMetadata, RepoStats, trigrams_from_bytes};
 use std::collections::HashMap;
 use std::path::Path;

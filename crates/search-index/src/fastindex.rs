@@ -43,7 +43,7 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::error::SearchIndexError;
-use crate::model::{DocumentRecord, PersistedIndex, DeltaSnapshot};
+use crate::model::{DeltaSnapshot, DocumentRecord, PersistedIndex};
 
 const MAGIC: &[u8; 8] = b"TRISEEK\0";
 const VERSION: u32 = 2;
@@ -99,7 +99,9 @@ impl FastIndex {
         let mmap = unsafe { Mmap::map(&file)? };
 
         if mmap.len() < HEADER_SIZE {
-            return Err(SearchIndexError::InvalidQuery("index file too small".into()));
+            return Err(SearchIndexError::InvalidQuery(
+                "index file too small".into(),
+            ));
         }
         if &mmap[0..8] != MAGIC {
             return Err(SearchIndexError::InvalidQuery("invalid index magic".into()));
@@ -125,8 +127,7 @@ impl FastIndex {
         // Build trigram lookup tables
         let content_table =
             build_trigram_lookup(&mmap, content_table_offset, num_content_trigrams as usize);
-        let path_table =
-            build_trigram_lookup(&mmap, path_table_offset, num_path_trigrams as usize);
+        let path_table = build_trigram_lookup(&mmap, path_table_offset, num_path_trigrams as usize);
 
         // Build doc metadata maps
         let mut path_to_doc = HashMap::with_capacity(num_docs as usize);
@@ -136,10 +137,25 @@ impl FastIndex {
         for i in 0..num_docs as usize {
             let entry = read_doc_entry(&mmap, docs_offset, i);
             let doc_id = entry.doc_id;
-            let path = read_string(&mmap, strings_offset, entry.path_offset, entry.path_len as usize);
-            let name = read_string(&mmap, strings_offset, entry.name_offset, entry.name_len as usize);
+            let path = read_string(
+                &mmap,
+                strings_offset,
+                entry.path_offset,
+                entry.path_len as usize,
+            );
+            let name = read_string(
+                &mmap,
+                strings_offset,
+                entry.name_offset,
+                entry.name_len as usize,
+            );
             let ext = if entry.ext_len > 0 {
-                Some(read_string(&mmap, strings_offset, entry.ext_offset, entry.ext_len as usize))
+                Some(read_string(
+                    &mmap,
+                    strings_offset,
+                    entry.ext_offset,
+                    entry.ext_len as usize,
+                ))
             } else {
                 None
             };
@@ -228,10 +244,25 @@ impl FastIndex {
             return None;
         }
         let entry = read_doc_entry(&self.mmap, self.docs_offset, doc_id as usize);
-        let path = read_string(&self.mmap, self.strings_offset, entry.path_offset, entry.path_len as usize);
-        let name = read_string(&self.mmap, self.strings_offset, entry.name_offset, entry.name_len as usize);
+        let path = read_string(
+            &self.mmap,
+            self.strings_offset,
+            entry.path_offset,
+            entry.path_len as usize,
+        );
+        let name = read_string(
+            &self.mmap,
+            self.strings_offset,
+            entry.name_offset,
+            entry.name_len as usize,
+        );
         let ext = if entry.ext_len > 0 {
-            Some(read_string(&self.mmap, self.strings_offset, entry.ext_offset, entry.ext_len as usize))
+            Some(read_string(
+                &self.mmap,
+                self.strings_offset,
+                entry.ext_offset,
+                entry.ext_len as usize,
+            ))
         } else {
             None
         };
@@ -323,7 +354,14 @@ pub fn write_fast_index(
             (0, 0)
         };
 
-        string_offsets.push((path_offset, path_len, name_offset, name_len, ext_offset, ext_len));
+        string_offsets.push((
+            path_offset,
+            path_len,
+            name_offset,
+            name_len,
+            ext_offset,
+            ext_len,
+        ));
     }
 
     // Sort trigram tables and build posting arrays
@@ -369,8 +407,7 @@ pub fn write_fast_index(
     // Build doc entries
     let mut doc_entries = Vec::with_capacity(docs.len());
     for (i, doc) in docs.iter().enumerate() {
-        let (path_offset, path_len, name_offset, name_len, ext_offset, ext_len) =
-            string_offsets[i];
+        let (path_offset, path_len, name_offset, name_len, ext_offset, ext_len) = string_offsets[i];
         doc_entries.push(DocEntry {
             doc_id: i as u32,
             path_offset,
@@ -508,13 +545,21 @@ fn merge_for_write(
     // Merge content postings
     let mut content_map: HashMap<u32, Vec<u32>> = HashMap::new();
     for entry in &base.content_postings {
-        let filtered: Vec<u32> = entry.docs.iter().copied().filter(|id| active_ids.contains(id)).collect();
+        let filtered: Vec<u32> = entry
+            .docs
+            .iter()
+            .copied()
+            .filter(|id| active_ids.contains(id))
+            .collect();
         if !filtered.is_empty() {
             content_map.insert(entry.trigram, filtered);
         }
     }
     for entry in &delta.content_postings {
-        content_map.entry(entry.trigram).or_default().extend(&entry.docs);
+        content_map
+            .entry(entry.trigram)
+            .or_default()
+            .extend(&entry.docs);
         if let Some(list) = content_map.get_mut(&entry.trigram) {
             list.sort_unstable();
             list.dedup();
@@ -524,13 +569,21 @@ fn merge_for_write(
     // Merge path postings
     let mut path_map: HashMap<u32, Vec<u32>> = HashMap::new();
     for entry in &base.path_postings {
-        let filtered: Vec<u32> = entry.docs.iter().copied().filter(|id| active_ids.contains(id)).collect();
+        let filtered: Vec<u32> = entry
+            .docs
+            .iter()
+            .copied()
+            .filter(|id| active_ids.contains(id))
+            .collect();
         if !filtered.is_empty() {
             path_map.insert(entry.trigram, filtered);
         }
     }
     for entry in &delta.path_postings {
-        path_map.entry(entry.trigram).or_default().extend(&entry.docs);
+        path_map
+            .entry(entry.trigram)
+            .or_default()
+            .extend(&entry.docs);
         if let Some(list) = path_map.get_mut(&entry.trigram) {
             list.sort_unstable();
             list.dedup();

@@ -8,6 +8,41 @@
 
 ---
 
+## Round 3: Correctness Hardening + Summary-Only Ripgrep Fast Path
+
+**Changes:**
+- Fixed fast-index open so delta overlays remain visible after incremental updates
+- Fixed regex alternation pruning so OR queries union branch candidates instead of dropping branches
+- Fixed parallel verification so `--max-results` is enforced deterministically
+- Added a summary-only ripgrep fast path that avoids parsing full JSON hit streams
+- Tightened binary detection for invalid-UTF8, control-heavy files
+- Normalized CRLF line endings and skipped non-text rg events in benchmark correctness comparison
+- Added regression tests for delta visibility, alternation correctness, max-results, and binary skipping
+
+**Round 3 artifacts:**
+- `bench/results/round3-fixed/summary.md`
+- `bench/results/round3-fixed/correctness-revalidation.md`
+
+**Benchmark Results (Round 3):**
+
+- **35 / 65 single-query wins**
+- **8 / 10 session wins**
+- Medium and large repos remain strongly in TriSeek's favor
+- Small repos still favor raw shell tools for cold single-query latency
+
+Representative wins:
+
+- `kubernetes_kubernetes regex_weak`: **679 ms vs 1248 ms**
+- `torvalds_linux literal_selective`: **144 ms vs 2009 ms**
+- `rust-lang_rust session_20`: **330 ms vs 5226 ms**
+- `BurntSushi_ripgrep session_20`: **43 ms vs 91 ms**
+
+**Takeaway:**
+
+- The indexed engine is now functionally sound on the benchmarked query families after revalidation.
+- The performance story is clearly positive for medium and large repos, especially for repeated sessions.
+- Small repos are still better served by direct shell tools for cold single-query latency, so adaptive routing remains the right default strategy.
+
 ## Round 1: Parallel Verification + Sorted Merge + mmap reads + Regex Extraction
 **Changes:**
 - Added rayon for parallel candidate file verification in `collect_content_hits`

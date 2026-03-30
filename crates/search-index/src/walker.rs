@@ -332,6 +332,12 @@ fn looks_binary(contents: &[u8]) -> bool {
         .iter()
         .filter(|byte| matches!(byte, b'\n' | b'\r' | b'\t' | 0x20..=0x7e))
         .count();
+    let suspicious_controls = sample
+        .iter()
+        .filter(|byte| matches!(byte, 0x00..=0x08 | 0x0b | 0x0c | 0x0e..=0x1f))
+        .count();
     let ratio = printable as f64 / sample.len().max(1) as f64;
-    ratio < 0.85
+    suspicious_controls * 200 >= sample.len().max(1)
+        || (suspicious_controls > 0 && ratio < 0.95)
+        || ratio < 0.85
 }

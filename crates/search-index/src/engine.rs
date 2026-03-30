@@ -2,7 +2,9 @@ use crate::build::{BuildConfig, build_index, update_index};
 use crate::error::SearchIndexError;
 use crate::fastindex::FastIndex;
 use crate::model::{RuntimeIndex, SearchExecution};
-use crate::storage::{default_index_dir, fast_index_exists, fast_index_path, load_base, load_delta};
+use crate::storage::{
+    default_index_dir, fast_index_exists, fast_index_path, load_base, load_delta,
+};
 use crate::walker::{ScanOptions, scan_repository};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use memmap2::Mmap;
@@ -52,8 +54,12 @@ impl SearchEngine {
     }
 
     pub fn open(index_dir: &Path) -> Result<Self, SearchIndexError> {
-        // Prefer fast mmap-based index if available
-        if fast_index_exists(index_dir) {
+        let delta = load_delta(index_dir)?;
+
+        // Prefer fast mmap-based index only when there is no delta overlay.
+        // The fast index is a materialized base snapshot; if a delta exists,
+        // fall back to the legacy runtime that merges base + delta correctly.
+        if fast_index_exists(index_dir) && delta.is_none() {
             let metadata = crate::storage::read_index_metadata(index_dir)?;
             let repo_root = std::path::PathBuf::from(&metadata.repo_stats.repo_root);
             let fast = FastIndex::open(&fast_index_path(index_dir))?;
@@ -66,7 +72,6 @@ impl SearchEngine {
 
         // Fall back to legacy bincode index
         let base = load_base(index_dir)?;
-        let delta = load_delta(index_dir)?;
         let runtime = RuntimeIndex::from_snapshots(base, delta);
         let metadata = runtime.metadata.clone();
         let repo_root = runtime.repo_root.clone();
@@ -284,8 +289,14 @@ impl SearchEngine {
             let mut matched = Vec::new();
             for (doc_id, path) in &all_docs {
                 let prefix_match = request.path_prefixes.is_empty()
-                    || request.path_prefixes.iter().any(|prefix| path.starts_with(prefix));
-                let glob_match = globset.as_ref().map(|set| set.is_match(path.as_str())).unwrap_or(true);
+                    || request
+                        .path_prefixes
+                        .iter()
+                        .any(|prefix| path.starts_with(prefix));
+                let glob_match = globset
+                    .as_ref()
+                    .map(|set| set.is_match(path.as_str()))
+                    .unwrap_or(true);
                 if prefix_match && glob_match {
                     matched.push(*doc_id);
                 }
@@ -350,44 +361,54 @@ impl SearchEngine {
         filtered_docs: &[u32],
     ) -> Result<Vec<u32>, SearchIndexError> {
         let plan = plan_query(request);
-        let seed = match request.kind {
-            SearchKind::Literal | SearchKind::Auto => request.pattern.as_str(),
-            SearchKind::Regex => plan
-                .literal_seeds
-                .iter()
-                .max_by_key(|seed| seed.len())
-                .map(String::as_str)
-                .unwrap_or_default(),
-            SearchKind::Path => "",
-        };
-        if seed.len() < 3 {
-            return Ok(filtered_docs.to_vec());
-        }
-
-        let grams = trigrams_from_text(&seed.to_ascii_lowercase());
-        let mut posting_lists: Vec<Vec<u32>> = Vec::new();
-        for gram in &grams {
-            let Some(postings) = fast.content_postings(*gram) else {
-                return Ok(Vec::new());
-            };
-            posting_lists.push(postings);
-        }
-        posting_lists.sort_by_key(|l| l.len());
-
-        let mut candidates = posting_lists[0].clone();
-        for list in &posting_lists[1..] {
-            candidates = sorted_intersect(&candidates, list);
-            if candidates.is_empty() {
-                return Ok(Vec::new());
+        match request.kind {
+            SearchKind::Literal | SearchKind::Auto => {
+                if request.pattern.len() < 3 {
+                    return Ok(filtered_docs.to_vec());
+                }
+                let candidates = fast_candidates_for_seed(fast, &request.pattern)?;
+                Ok(sorted_intersect(&candidates, filtered_docs))
             }
+            SearchKind::Regex => {
+                let seeds: Vec<&str> = plan
+                    .literal_seeds
+                    .iter()
+                    .filter(|seed| seed.len() >= 3)
+                    .map(String::as_str)
+                    .collect();
+                if seeds.is_empty() {
+                    return Ok(filtered_docs.to_vec());
+                }
+
+                let mut candidates = if regex_has_unescaped_alternation(&request.pattern) {
+                    let mut union = Vec::new();
+                    for seed in seeds {
+                        let seed_candidates = fast_candidates_for_seed(fast, seed)?;
+                        union = sorted_union(&union, &seed_candidates);
+                    }
+                    union
+                } else {
+                    let mut current: Option<Vec<u32>> = None;
+                    for seed in seeds {
+                        let seed_candidates = fast_candidates_for_seed(fast, seed)?;
+                        current = intersect_sorted(current, seed_candidates);
+                    }
+                    current.unwrap_or_default()
+                };
+                candidates = sorted_intersect(&candidates, filtered_docs);
+                Ok(candidates)
+            }
+            SearchKind::Path => Ok(Vec::new()),
         }
-        candidates = sorted_intersect(&candidates, filtered_docs);
-        Ok(candidates)
     }
 
     // ---- Legacy index methods ----
 
-    fn legacy_path_filtered_docs(&self, runtime: &RuntimeIndex, request: &QueryRequest) -> Result<Vec<u32>, SearchIndexError> {
+    fn legacy_path_filtered_docs(
+        &self,
+        runtime: &RuntimeIndex,
+        request: &QueryRequest,
+    ) -> Result<Vec<u32>, SearchIndexError> {
         let mut current: Option<Vec<u32>> = None;
 
         if !request.exact_paths.is_empty() {
@@ -465,7 +486,11 @@ impl SearchEngine {
         Ok(current.unwrap_or_else(|| runtime.docs.iter().map(|doc| doc.doc_id).collect()))
     }
 
-    fn legacy_path_candidates_for_substring(&self, runtime: &RuntimeIndex, pattern: &str) -> Result<Vec<u32>, SearchIndexError> {
+    fn legacy_path_candidates_for_substring(
+        &self,
+        runtime: &RuntimeIndex,
+        pattern: &str,
+    ) -> Result<Vec<u32>, SearchIndexError> {
         if pattern.is_empty() {
             return Ok(runtime.docs.iter().map(|doc| doc.doc_id).collect());
         }
@@ -515,39 +540,45 @@ impl SearchEngine {
         filtered_docs: &[u32],
     ) -> Result<Vec<u32>, SearchIndexError> {
         let plan = plan_query(request);
-        let seed = match request.kind {
-            SearchKind::Literal | SearchKind::Auto => request.pattern.as_str(),
-            SearchKind::Regex => plan
-                .literal_seeds
-                .iter()
-                .max_by_key(|seed| seed.len())
-                .map(String::as_str)
-                .unwrap_or_default(),
-            SearchKind::Path => "",
-        };
-        if seed.len() < 3 {
-            return Ok(filtered_docs.to_vec());
-        }
-
-        let grams = trigrams_from_text(&seed.to_ascii_lowercase());
-        let mut posting_lists: Vec<&[u32]> = Vec::new();
-        for gram in &grams {
-            let Some(postings) = runtime.content_postings.get(gram) else {
-                return Ok(Vec::new());
-            };
-            posting_lists.push(postings);
-        }
-        posting_lists.sort_by_key(|list| list.len());
-
-        let mut candidates = posting_lists[0].to_vec();
-        for list in &posting_lists[1..] {
-            candidates = sorted_intersect(&candidates, list);
-            if candidates.is_empty() {
-                return Ok(Vec::new());
+        match request.kind {
+            SearchKind::Literal | SearchKind::Auto => {
+                if request.pattern.len() < 3 {
+                    return Ok(filtered_docs.to_vec());
+                }
+                let candidates = legacy_candidates_for_seed(runtime, &request.pattern)?;
+                Ok(sorted_intersect(&candidates, filtered_docs))
             }
+            SearchKind::Regex => {
+                let seeds: Vec<&str> = plan
+                    .literal_seeds
+                    .iter()
+                    .filter(|seed| seed.len() >= 3)
+                    .map(String::as_str)
+                    .collect();
+                if seeds.is_empty() {
+                    return Ok(filtered_docs.to_vec());
+                }
+
+                let mut candidates = if regex_has_unescaped_alternation(&request.pattern) {
+                    let mut union = Vec::new();
+                    for seed in seeds {
+                        let seed_candidates = legacy_candidates_for_seed(runtime, seed)?;
+                        union = sorted_union(&union, &seed_candidates);
+                    }
+                    union
+                } else {
+                    let mut current: Option<Vec<u32>> = None;
+                    for seed in seeds {
+                        let seed_candidates = legacy_candidates_for_seed(runtime, seed)?;
+                        current = intersect_sorted(current, seed_candidates);
+                    }
+                    current.unwrap_or_default()
+                };
+                candidates = sorted_intersect(&candidates, filtered_docs);
+                Ok(candidates)
+            }
+            SearchKind::Path => Ok(Vec::new()),
         }
-        candidates = sorted_intersect(&candidates, filtered_docs);
-        Ok(candidates)
     }
 
     fn collect_path_hits(&self, doc_ids: &[u32]) -> SearchExecution {
@@ -586,6 +617,7 @@ impl SearchEngine {
         let max_results = request.max_results.unwrap_or(usize::MAX);
         let total_found = AtomicUsize::new(0);
         let done = AtomicBool::new(false);
+        let verified_docs = AtomicUsize::new(0);
 
         // Resolve doc paths upfront to enable parallel file I/O
         let work_items: Vec<(u32, std::path::PathBuf, String)> = doc_ids
@@ -604,41 +636,67 @@ impl SearchEngine {
         // Parallel verification using rayon
         let results: Vec<Option<(SearchHit, usize, u64)>> = work_items
             .par_iter()
-            .map(|(_doc_id, abs_path, rel_path): &(u32, std::path::PathBuf, String)| {
-                if done.load(Ordering::Relaxed) {
-                    return None;
-                }
-
-                let bytes = match read_candidate_mmap(abs_path) {
-                    Ok(b) => b,
-                    Err(_) => return None,
-                };
-                let text = String::from_utf8_lossy(&bytes);
-                let remaining = max_results.saturating_sub(total_found.load(Ordering::Relaxed));
-                if remaining == 0 {
-                    done.store(true, Ordering::Relaxed);
-                    return None;
-                }
-
-                match match_lines(&text, &matcher, Some(remaining)) {
-                    Some(lines) => {
-                        let count = lines.len();
-                        let prev = total_found.fetch_add(count, Ordering::Relaxed);
-                        if prev + count >= max_results {
-                            done.store(true, Ordering::Relaxed);
-                        }
-                        Some((
-                            SearchHit::Content {
-                                path: rel_path.to_string(),
-                                lines,
-                            },
-                            count,
-                            bytes.len() as u64,
-                        ))
+            .map(
+                |(_doc_id, abs_path, rel_path): &(u32, std::path::PathBuf, String)| {
+                    if done.load(Ordering::Relaxed) {
+                        return None;
                     }
-                    None => None,
-                }
-            })
+
+                    let bytes = match read_candidate_mmap(abs_path) {
+                        Ok(b) => b,
+                        Err(_) => return None,
+                    };
+                    verified_docs.fetch_add(1, Ordering::Relaxed);
+                    let text = String::from_utf8_lossy(&bytes);
+                    let remaining = max_results.saturating_sub(total_found.load(Ordering::Relaxed));
+                    if remaining == 0 {
+                        done.store(true, Ordering::Relaxed);
+                        return None;
+                    }
+
+                    match match_lines(&text, &matcher, Some(remaining)) {
+                        Some(mut lines) => loop {
+                            let prev = total_found.load(Ordering::Relaxed);
+                            if prev >= max_results {
+                                done.store(true, Ordering::Relaxed);
+                                return None;
+                            }
+                            let allowed = max_results - prev;
+                            let keep = lines.len().min(allowed);
+                            if keep == 0 {
+                                done.store(true, Ordering::Relaxed);
+                                return None;
+                            }
+                            if total_found
+                                .compare_exchange(
+                                    prev,
+                                    prev + keep,
+                                    Ordering::Relaxed,
+                                    Ordering::Relaxed,
+                                )
+                                .is_ok()
+                            {
+                                if keep < lines.len() {
+                                    lines.truncate(keep);
+                                }
+                                if prev + keep >= max_results {
+                                    done.store(true, Ordering::Relaxed);
+                                }
+                                let count = lines.len();
+                                return Some((
+                                    SearchHit::Content {
+                                        path: rel_path.to_string(),
+                                        lines,
+                                    },
+                                    count,
+                                    bytes.len() as u64,
+                                ));
+                            }
+                        },
+                        None => None,
+                    }
+                },
+            )
             .collect();
 
         let mut hits = Vec::new();
@@ -661,12 +719,65 @@ impl SearchEngine {
                 total_line_matches,
             },
             metrics: SearchMetrics {
-                verified_docs: work_items.len(),
+                verified_docs: verified_docs.load(Ordering::Relaxed),
                 bytes_scanned,
                 ..SearchMetrics::default()
             },
         })
     }
+}
+
+fn fast_candidates_for_seed(fast: &FastIndex, seed: &str) -> Result<Vec<u32>, SearchIndexError> {
+    let grams = trigrams_from_text(&seed.to_ascii_lowercase());
+    if grams.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut posting_lists: Vec<Vec<u32>> = Vec::new();
+    for gram in &grams {
+        let Some(postings) = fast.content_postings(*gram) else {
+            return Ok(Vec::new());
+        };
+        posting_lists.push(postings);
+    }
+    posting_lists.sort_by_key(|list| list.len());
+
+    let mut candidates = posting_lists[0].clone();
+    for list in &posting_lists[1..] {
+        candidates = sorted_intersect(&candidates, list);
+        if candidates.is_empty() {
+            return Ok(Vec::new());
+        }
+    }
+    Ok(candidates)
+}
+
+fn legacy_candidates_for_seed(
+    runtime: &RuntimeIndex,
+    seed: &str,
+) -> Result<Vec<u32>, SearchIndexError> {
+    let grams = trigrams_from_text(&seed.to_ascii_lowercase());
+    if grams.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut posting_lists: Vec<&[u32]> = Vec::new();
+    for gram in &grams {
+        let Some(postings) = runtime.content_postings.get(gram) else {
+            return Ok(Vec::new());
+        };
+        posting_lists.push(postings);
+    }
+    posting_lists.sort_by_key(|list| list.len());
+
+    let mut candidates = posting_lists[0].to_vec();
+    for list in &posting_lists[1..] {
+        candidates = sorted_intersect(&candidates, list);
+        if candidates.is_empty() {
+            return Ok(Vec::new());
+        }
+    }
+    Ok(candidates)
 }
 
 /// Sorted intersection of two sorted slices — O(n+m) with no hashing.
@@ -687,12 +798,56 @@ fn sorted_intersect(a: &[u32], b: &[u32]) -> Vec<u32> {
     result
 }
 
+fn sorted_union(a: &[u32], b: &[u32]) -> Vec<u32> {
+    let mut result = Vec::with_capacity(a.len() + b.len());
+    let (mut i, mut j) = (0, 0);
+    while i < a.len() && j < b.len() {
+        match a[i].cmp(&b[j]) {
+            std::cmp::Ordering::Less => {
+                result.push(a[i]);
+                i += 1;
+            }
+            std::cmp::Ordering::Greater => {
+                result.push(b[j]);
+                j += 1;
+            }
+            std::cmp::Ordering::Equal => {
+                result.push(a[i]);
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    result.extend_from_slice(&a[i..]);
+    result.extend_from_slice(&b[j..]);
+    result
+}
+
 /// Intersect an optional accumulated result with a new sorted vec.
 fn intersect_sorted(current: Option<Vec<u32>>, incoming: Vec<u32>) -> Option<Vec<u32>> {
     Some(match current {
         Some(current) => sorted_intersect(&current, &incoming),
         None => incoming,
     })
+}
+
+fn regex_has_unescaped_alternation(pattern: &str) -> bool {
+    let mut escaped = false;
+    let mut in_class = false;
+    for ch in pattern.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' => escaped = true,
+            '[' if !in_class => in_class = true,
+            ']' if in_class => in_class = false,
+            '|' if !in_class => return true,
+            _ => {}
+        }
+    }
+    false
 }
 
 fn build_matcher(request: &QueryRequest) -> Result<Regex, SearchIndexError> {

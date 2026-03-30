@@ -1230,15 +1230,15 @@ fn run_baseline_once(command: &CommandSpec, query: &BenchQuery) -> Result<Search
                 continue;
             }
             let data = &value["data"];
+            let Some(line_text) = data["lines"]["text"].as_str() else {
+                continue;
+            };
             let path = data["path"]["text"]
                 .as_str()
                 .unwrap_or_default()
                 .to_string();
             let line_number = data["line_number"].as_u64().unwrap_or_default() as usize;
-            let line_text = data["lines"]["text"]
-                .as_str()
-                .map(|value| value.trim_end_matches('\n').to_string())
-                .unwrap_or_default();
+            let line_text = line_text.trim_end_matches(['\n', '\r']).to_string();
             let column = data["submatches"]
                 .get(0)
                 .and_then(|item| item["start"].as_u64())
@@ -1325,7 +1325,7 @@ fn canonicalize_hits(hits: &[SearchHit]) -> HashSet<String> {
                         normalize_path(path),
                         line.line_number,
                         line.column,
-                        line.line_text
+                        normalize_line_text(&line.line_text)
                     ));
                 }
             }
@@ -1336,6 +1336,10 @@ fn canonicalize_hits(hits: &[SearchHit]) -> HashSet<String> {
 
 fn normalize_path(path: &str) -> String {
     path.trim_start_matches("./").to_string()
+}
+
+fn normalize_line_text(text: &str) -> String {
+    text.trim_end_matches('\r').to_string()
 }
 
 fn aggregate_metrics(samples: &[IterationMetrics]) -> AggregateMetrics {

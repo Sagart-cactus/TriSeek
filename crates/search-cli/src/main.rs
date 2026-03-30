@@ -289,7 +289,7 @@ fn handle_search(args: SearchArgs) -> Result<SearchResponse> {
         AdaptiveRoute::DirectScan => {
             SearchEngine::search_direct(&repo_root, &request, &BuildConfig::default())?
         }
-        AdaptiveRoute::Ripgrep => run_rg_search(&repo_root, &request)?,
+        AdaptiveRoute::Ripgrep => run_rg_search(&repo_root, &request, args.summary_only)?,
     };
 
     let mut response = SearchResponse {
@@ -375,7 +375,7 @@ fn handle_session(args: SessionArgs) -> Result<SessionOutput> {
             AdaptiveRoute::DirectScan => {
                 SearchEngine::search_direct(&repo_root, &request, &BuildConfig::default())?
             }
-            AdaptiveRoute::Ripgrep => run_rg_search(&repo_root, &request)?,
+            AdaptiveRoute::Ripgrep => run_rg_search(&repo_root, &request, args.summary_only)?,
         };
 
         total_matches += execution.summary.total_line_matches;
@@ -484,17 +484,26 @@ fn resolve_repo_root(repo: Option<&Path>, index_dir: Option<&Path>) -> Result<Pa
     bail!("repo root is required when index metadata cannot supply it")
 }
 
-fn run_rg_search(repo_root: &Path, request: &QueryRequest) -> Result<SearchExecution> {
+fn run_rg_search(
+    repo_root: &Path,
+    request: &QueryRequest,
+    summary_only: bool,
+) -> Result<SearchExecution> {
     if matches!(request.kind, SearchKind::Path) {
         bail!("path queries should not route to ripgrep execution");
     }
     let started = Instant::now();
     let mut command = Command::new("rg");
     command.current_dir(repo_root);
-    command.arg("--json");
-    command.arg("--line-number");
     command.arg("--color").arg("never");
     command.arg("--no-heading");
+
+    if summary_only {
+        command.arg("--count");
+    } else {
+        command.arg("--json");
+        command.arg("--line-number");
+    }
 
     if request.include_hidden {
         command.arg("--hidden");
@@ -536,6 +545,41 @@ fn run_rg_search(repo_root: &Path, request: &QueryRequest) -> Result<SearchExecu
         bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
     }
 
+    if summary_only {
+        let mut files_with_matches = 0_usize;
+        let mut total_line_matches = 0_usize;
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let Some((_, count)) = line.rsplit_once(':') else {
+                continue;
+            };
+            let count = count.trim().parse::<usize>().unwrap_or_default();
+            if count > 0 {
+                files_with_matches += 1;
+                total_line_matches += count;
+            }
+        }
+        return Ok(SearchExecution {
+            summary: SearchSummary {
+                files_with_matches,
+                total_line_matches,
+            },
+            metrics: SearchMetrics {
+                process: ProcessMetrics {
+                    wall_millis: started.elapsed().as_secs_f64() * 1_000.0,
+                    user_cpu_millis: None,
+                    system_cpu_millis: None,
+                    max_rss_kib: None,
+                },
+                candidate_docs: 0,
+                verified_docs: 0,
+                matches_returned: total_line_matches,
+                bytes_scanned: 0,
+                index_bytes_read: None,
+            },
+            ..SearchExecution::default()
+        });
+    }
+
     let mut grouped = BTreeMap::<String, Vec<search_core::SearchLineMatch>>::new();
     for line in String::from_utf8_lossy(&output.stdout).lines() {
         let value: Value = serde_json::from_str(line)?;
@@ -550,7 +594,7 @@ fn run_rg_search(repo_root: &Path, request: &QueryRequest) -> Result<SearchExecu
             .to_string();
         let line_text = data["lines"]["text"]
             .as_str()
-            .map(|value| value.trim_end_matches('\n').to_string())
+            .map(|value| value.trim_end_matches(['\n', '\r']).to_string())
             .unwrap_or_default();
         let line_number = data["line_number"].as_u64().unwrap_or_default() as usize;
         let column = data["submatches"]
