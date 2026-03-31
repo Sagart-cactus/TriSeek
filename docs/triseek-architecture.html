@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TriSeek — Code Architecture</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg-deep: #0a0e17;
+  --bg-panel: #0f1520;
+  --bg-card: #141c2b;
+  --bg-elevated: #1a2436;
+  --bg-input: #0d1219;
+  --border: #1e2d42;
+  --border-bright: #2a4060;
+  --text-primary: #e2e8f0;
+  --text-secondary: #8899b0;
+  --text-dim: #4a5c74;
+  --accent-cyan: #22d3ee;
+  --accent-cyan-dim: #0e7490;
+  --accent-green: #34d399;
+  --accent-green-dim: #065f46;
+  --accent-orange: #fb923c;
+  --accent-orange-dim: #9a3412;
+  --accent-purple: #a78bfa;
+  --accent-purple-dim: #5b21b6;
+  --accent-red: #f87171;
+  --accent-yellow: #fbbf24;
+  --accent-pink: #f472b6;
+  --glow-cyan: 0 0 30px rgba(34, 211, 238, 0.15);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--border-bright) var(--bg-deep); }
+body { background: var(--bg-deep); color: var(--text-primary); font-family: 'Space Grotesk', sans-serif; line-height: 1.7; overflow-x: hidden; }
+::selection { background: var(--accent-cyan); color: var(--bg-deep); }
+
+body::before {
+  content: '';
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  pointer-events: none; z-index: 9999;
+}
+
+.grid-bg {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background-image:
+    linear-gradient(rgba(34,211,238,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34,211,238,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none; z-index: 0;
+}
+
+.container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; position: relative; z-index: 1; }
+
+/* NAV */
+.top-nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: rgba(10,14,23,0.85); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  z-index: 100; padding: 0.6rem 2rem;
+  display: flex; align-items: center; gap: 2rem;
+}
+.top-nav .logo {
+  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.9rem;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.top-nav a {
+  color: var(--text-dim); text-decoration: none; font-size: 0.8rem;
+  transition: color 0.2s; font-family: 'JetBrains Mono', monospace;
+}
+.top-nav a:hover { color: var(--accent-cyan); }
+
+/* HERO */
+.hero {
+  padding: 8rem 2rem 4rem;
+  text-align: center;
+}
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.4rem 1.2rem;
+  border: 1px solid var(--accent-purple-dim); border-radius: 100px;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+  color: var(--accent-purple); letter-spacing: 0.1em; text-transform: uppercase;
+  margin-bottom: 1.5rem;
+}
+.hero h1 {
+  font-size: clamp(2.5rem, 6vw, 4.5rem); font-weight: 700;
+  letter-spacing: -0.03em; line-height: 1.1; margin-bottom: 1rem;
+}
+.hero h1 .hl { color: var(--accent-cyan); }
+.hero-sub { color: var(--text-secondary); font-size: 1.1rem; max-width: 650px; margin: 0 auto 2rem; }
+
+/* SECTIONS */
+section { padding: 4rem 0; }
+.section-num {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.68rem;
+  color: var(--accent-cyan-dim); letter-spacing: 0.2em; text-transform: uppercase;
+  margin-bottom: 0.4rem;
+}
+h2 { font-size: clamp(1.8rem, 3.5vw, 2.5rem); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.75rem; }
+h2 .hl { color: var(--accent-cyan); }
+h3 { font-size: 1.15rem; font-weight: 600; margin-bottom: 0.5rem; }
+.section-desc { color: var(--text-secondary); font-size: 1rem; max-width: 700px; margin-bottom: 2.5rem; }
+
+/* CARDS */
+.card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.75rem; margin-bottom: 1.5rem;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.card:hover { border-color: var(--border-bright); box-shadow: var(--glow-cyan); }
+.card-head { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 1rem; }
+.card-ico {
+  width: 36px; height: 36px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0;
+}
+.card-ico.cy { background: rgba(34,211,238,0.1); color: var(--accent-cyan); }
+.card-ico.gn { background: rgba(52,211,153,0.1); color: var(--accent-green); }
+.card-ico.or { background: rgba(251,146,60,0.1); color: var(--accent-orange); }
+.card-ico.pu { background: rgba(167,139,250,0.1); color: var(--accent-purple); }
+.card-ico.pk { background: rgba(244,114,182,0.1); color: var(--accent-pink); }
+.card-ico.yw { background: rgba(251,191,36,0.1); color: var(--accent-yellow); }
+
+/* CODE */
+.code-block { background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 1rem 0; }
+.code-block .tb {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--text-dim);
+}
+.code-block .tb .dots { display: flex; gap: 5px; }
+.code-block .tb .dots span { width: 10px; height: 10px; border-radius: 50%; }
+.code-block .tb .dots span:nth-child(1) { background: #ff5f57; }
+.code-block .tb .dots span:nth-child(2) { background: #ffbd2e; }
+.code-block .tb .dots span:nth-child(3) { background: #28c840; }
+.code-block pre {
+  padding: 1.1rem; overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; line-height: 1.65; color: var(--text-primary);
+}
+.kw { color: var(--accent-purple); } .fn { color: var(--accent-cyan); } .str { color: var(--accent-green); }
+.num { color: var(--accent-orange); } .cmt { color: var(--text-dim); font-style: italic; }
+.type { color: var(--accent-yellow); } .op { color: var(--accent-pink); }
+
+/* GRID LAYOUTS */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
+.four-col { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; }
+@media (max-width: 900px) { .three-col, .four-col { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .two-col, .three-col, .four-col { grid-template-columns: 1fr; } }
+
+/* TAG */
+.tag {
+  display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.55rem;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+.tag.cy { background: rgba(34,211,238,0.1); border: 1px solid var(--accent-cyan-dim); color: var(--accent-cyan); }
+.tag.gn { background: rgba(52,211,153,0.1); border: 1px solid var(--accent-green-dim); color: var(--accent-green); }
+.tag.or { background: rgba(251,146,60,0.1); border: 1px solid var(--accent-orange-dim); color: var(--accent-orange); }
+.tag.pu { background: rgba(167,139,250,0.1); border: 1px solid var(--accent-purple-dim); color: var(--accent-purple); }
+.tag.pk { background: rgba(244,114,182,0.1); border: 1px solid rgba(244,114,182,0.3); color: var(--accent-pink); }
+.tag.yw { background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.3); color: var(--accent-yellow); }
+
+/* ARCHITECTURE DIAGRAM */
+.arch-diagram { margin: 2rem 0; position: relative; }
+
+.arch-layer {
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.25rem; margin-bottom: 1.25rem;
+  position: relative;
+}
+.arch-layer-label {
+  position: absolute; top: -0.65rem; left: 1.25rem;
+  background: var(--bg-deep); padding: 0 0.5rem;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.65rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+
+.arch-boxes { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+.arch-box {
+  flex: 1 1 180px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 1rem; cursor: default; transition: all 0.3s;
+  min-width: 160px;
+}
+.arch-box:hover { border-color: var(--border-bright); transform: translateY(-2px); box-shadow: var(--glow-cyan); }
+.arch-box .name {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+.arch-box .desc { font-size: 0.78rem; color: var(--text-dim); line-height: 1.4; }
+
+.arch-arrow {
+  text-align: center; color: var(--text-dim); font-size: 1.2rem;
+  margin: -0.5rem 0; position: relative; z-index: 1;
+}
+
+/* FLOW DIAGRAM */
+.flow-h {
+  display: flex; align-items: stretch; gap: 0; margin: 2rem 0; overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+.flow-h-step {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 130px; flex: 1; position: relative;
+}
+.flow-h-box {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.75rem 0.5rem; text-align: center; width: 100%;
+  transition: border-color 0.3s;
+}
+.flow-h-box:hover { border-color: var(--border-bright); }
+.flow-h-box .label {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+.flow-h-box .sub { font-size: 0.68rem; color: var(--text-dim); }
+.flow-h-arrow {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 36px; color: var(--text-dim); font-size: 1rem;
+  flex-shrink: 0;
+}
+
+/* DATA TABLE */
+.dtable { width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; margin: 1rem 0; }
+.dtable th {
+  text-align: left; padding: 0.6rem 0.8rem;
+  border-bottom: 2px solid var(--border-bright); color: var(--text-dim);
+  font-weight: 500; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
+}
+.dtable td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+.dtable tr:hover td { background: rgba(34,211,238,0.03); }
+
+/* STRUCT VIZ */
+.struct-viz {
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px;
+  padding: 1.25rem; margin: 1rem 0;
+}
+.struct-title {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; font-weight: 600;
+  color: var(--accent-yellow); margin-bottom: 0.75rem;
+}
+.struct-field {
+  display: flex; align-items: baseline; gap: 0.5rem; padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(30,45,66,0.5);
+}
+.struct-field:last-child { border-bottom: none; }
+.struct-field .fname { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--accent-cyan); min-width: 180px; }
+.struct-field .ftype { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--accent-purple); min-width: 200px; }
+.struct-field .fdesc { font-size: 0.75rem; color: var(--text-dim); }
+
+/* ENUM VIZ */
+.enum-row {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(30,45,66,0.5);
+}
+.enum-row:last-child { border-bottom: none; }
+.enum-variant {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-weight: 600;
+  color: var(--accent-green); min-width: 140px;
+}
+.enum-desc { font-size: 0.78rem; color: var(--text-dim); }
+
+/* DECISION TREE */
+.decision-tree { margin: 1.5rem 0; }
+.dt-node {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.75rem 1rem; margin-bottom: 0.5rem;
+  display: flex; align-items: center; gap: 0.75rem;
+}
+.dt-node.question { border-left: 3px solid var(--accent-yellow); }
+.dt-node.answer { border-left: 3px solid var(--accent-green); margin-left: 2rem; }
+.dt-node.answer.rg { border-left-color: var(--accent-orange); }
+.dt-node .dt-label {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+}
+.dt-node.question .dt-label { color: var(--accent-yellow); }
+.dt-node.answer .dt-label { color: var(--accent-green); }
+.dt-node.answer.rg .dt-label { color: var(--accent-orange); }
+.dt-branch { margin-left: 1rem; border-left: 2px solid var(--border); padding-left: 1rem; }
+
+/* REVEAL */
+.reveal { opacity: 0; transform: translateY(25px); transition: opacity 0.6s ease-out, transform 0.6s ease-out; }
+.reveal.visible { opacity: 1; transform: translateY(0); }
+
+/* FOOTER */
+footer {
+  padding: 3rem 0 1.5rem; text-align: center; color: var(--text-dim); font-size: 0.78rem;
+  border-top: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+
+<nav class="top-nav">
+  <span class="logo">TriSeek Architecture</span>
+  <a href="#workspace">Workspace</a>
+  <a href="#crates">Crates</a>
+  <a href="#data-types">Types</a>
+  <a href="#index-build">Build</a>
+  <a href="#search-flow">Search</a>
+  <a href="#routing">Routing</a>
+  <a href="#engine">Engine</a>
+  <a href="#fastindex">FastIndex</a>
+</nav>
+
+<!-- ═══════ HERO ═══════ -->
+<header class="hero" id="top">
+  <div class="hero-badge">Rust Workspace &middot; 4 Crates &middot; ~3,500 LOC</div>
+  <h1>Code <span class="hl">Architecture</span></h1>
+  <p class="hero-sub">A deep dive into every crate, module, struct, and data flow in TriSeek &mdash; how the pieces fit together, what each component does, and how a search query travels through the system.</p>
+</header>
+
+<!-- ═══════ WORKSPACE ═══════ -->
+<section id="workspace">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-num">01 &mdash; Workspace</div>
+      <h2>Project <span class="hl">Structure</span></h2>
+      <p class="section-desc">TriSeek is a Cargo workspace with 4 crates, each with a clear responsibility boundary. Dependencies flow downward: CLI depends on everything, Index depends on Core, Core depends on nothing.</p>
+    </div>
+
+    <div class="arch-diagram reveal">
+      <!-- CLI Layer -->
+      <div class="arch-layer" style="border-color: var(--accent-pink);">
+        <span class="arch-layer-label" style="color: var(--accent-pink);">Entry Points</span>
+        <div class="arch-boxes">
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-pink)">search-cli</div>
+            <div class="desc">CLI binary. Parses args, routes commands (build, search, session, update, stats), formats output as JSON.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-pink)">search-bench</div>
+            <div class="desc">Benchmark harness. Loads manifest YAML, runs cold/warm trials, measures p50/p90, compares against ripgrep baseline.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-arrow">&darr;</div>
+
+      <!-- Index Layer -->
+      <div class="arch-layer" style="border-color: var(--accent-cyan);">
+        <span class="arch-layer-label" style="color: var(--accent-cyan);">Index &amp; Engine</span>
+        <div class="arch-boxes">
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-cyan)">engine.rs</div>
+            <div class="desc">SearchEngine struct. Dual-backend (Fast/Legacy). Parallel verification via rayon. Regex matching + line extraction.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-cyan)">fastindex.rs</div>
+            <div class="desc">Mmap-based binary index. Zero-copy posting list reads. 96-byte header, trigram tables, doc table, string pool.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-cyan)">build.rs</div>
+            <div class="desc">Index construction. Full builds + delta updates. BuildAccumulator collects trigrams per file, then persists.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-cyan)">walker.rs</div>
+            <div class="desc">Parallel file walker using ignore crate. Respects .gitignore. Binary detection. Up to 8 threads.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-cyan)">model.rs</div>
+            <div class="desc">Data models: PersistedIndex, RuntimeIndex, DeltaSnapshot, DocumentRecord. Merge logic for base+delta.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-cyan)">storage.rs</div>
+            <div class="desc">File I/O layer. Reads/writes base.bin, delta.bin, metadata.json, fast.idx. Path conventions.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-arrow">&darr;</div>
+
+      <!-- Core Layer -->
+      <div class="arch-layer" style="border-color: var(--accent-green);">
+        <span class="arch-layer-label" style="color: var(--accent-green);">Core</span>
+        <div class="arch-boxes">
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-green)">planner.rs</div>
+            <div class="desc">Query planning + adaptive routing. Classifies query shape, selectivity, repo size. Chooses Indexed/Scan/Ripgrep.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-green)">trigram.rs</div>
+            <div class="desc">Trigram encoding (3 bytes &rarr; u32), extraction from text/bytes. Normalization for case-insensitive matching.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-green)">query.rs</div>
+            <div class="desc">QueryRequest struct with pattern, kind, filters (path, extension, glob), case mode, max_results.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-green)">result.rs</div>
+            <div class="desc">SearchResponse, SearchHit (Content/Path), SearchLineMatch, SearchSummary. Full query audit trail.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-green)">repo.rs</div>
+            <div class="desc">RepoStats, RepoCategory (Small/Medium/Large/VeryLarge), IndexMetadata, FileFingerprint, BuildStats.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-green)">metrics.rs</div>
+            <div class="desc">ProcessMetrics (wall/cpu/rss), SearchMetrics (candidates/verified/bytes), SessionMetrics (amortized costs).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- File tree -->
+    <div class="card reveal">
+      <h3>Directory Layout</h3>
+      <div class="code-block" style="margin-top:0.75rem">
+        <div class="tb"><div class="dots"><span></span><span></span><span></span></div> file tree</div>
+        <pre><span class="str">TriSeek/</span>
+<span class="cmt">  Cargo.toml                      # workspace root</span>
+  <span class="str">crates/</span>
+    <span class="str">search-core/src/</span>
+      <span class="fn">lib.rs</span>                      <span class="cmt"># re-exports all modules</span>
+      <span class="fn">query.rs</span>                    <span class="cmt"># QueryRequest, SearchKind, CaseMode</span>
+      <span class="fn">result.rs</span>                   <span class="cmt"># SearchResponse, SearchHit, SearchLineMatch</span>
+      <span class="fn">planner.rs</span>                  <span class="cmt"># plan_query(), route_query(), extract_regex_literals()</span>
+      <span class="fn">trigram.rs</span>                  <span class="cmt"># encode_trigram(), trigrams_from_bytes()</span>
+      <span class="fn">repo.rs</span>                     <span class="cmt"># RepoStats, RepoCategory, IndexMetadata</span>
+      <span class="fn">metrics.rs</span>                  <span class="cmt"># ProcessMetrics, SearchMetrics, SessionMetrics</span>
+    <span class="str">search-index/src/</span>
+      <span class="fn">lib.rs</span>                      <span class="cmt"># re-exports</span>
+      <span class="fn">engine.rs</span>                   <span class="cmt"># SearchEngine, IndexBackend, parallel verification</span>
+      <span class="fn">fastindex.rs</span>                <span class="cmt"># FastIndex mmap format, write_fast_index()</span>
+      <span class="fn">build.rs</span>                    <span class="cmt"># build_index(), update_index(), BuildAccumulator</span>
+      <span class="fn">walker.rs</span>                   <span class="cmt"># walk_repository_parallel(), binary detection</span>
+      <span class="fn">model.rs</span>                    <span class="cmt"># PersistedIndex, RuntimeIndex, DeltaSnapshot</span>
+      <span class="fn">storage.rs</span>                  <span class="cmt"># file I/O: base.bin, delta.bin, fast.idx</span>
+    <span class="str">search-cli/src/</span>
+      <span class="fn">main.rs</span>                     <span class="cmt"># CLI entry: build, search, session, update, stats</span>
+    <span class="str">search-bench/src/</span>
+      <span class="fn">main.rs</span>                     <span class="cmt"># benchmark harness with cold/warm trials</span>
+  <span class="str">.triseek-index/</span>                   <span class="cmt"># generated index directory</span>
+    <span class="fn">base.bin</span>                      <span class="cmt"># bincode-serialized full index</span>
+    <span class="fn">fast.idx</span>                      <span class="cmt"># mmap binary format (primary)</span>
+    <span class="fn">delta.bin</span>                     <span class="cmt"># optional incremental changes</span>
+    <span class="fn">metadata.json</span>                 <span class="cmt"># index metadata + repo stats</span></pre>
+      </div>
+    </div>
+
+    <!-- Dependencies -->
+    <div class="card reveal">
+      <h3>Key Dependencies</h3>
+      <table class="dtable">
+        <thead>
+          <tr><th>Crate</th><th>Purpose</th><th>Used In</th></tr>
+        </thead>
+        <tbody>
+          <tr><td style="color:var(--accent-cyan)">rayon 1.10</td><td>Work-stealing parallelism</td><td>engine.rs &mdash; parallel file verification</td></tr>
+          <tr><td style="color:var(--accent-cyan)">memmap2 0.9</td><td>Memory-mapped file I/O</td><td>fastindex.rs &mdash; zero-copy index, engine.rs &mdash; large file reads</td></tr>
+          <tr><td style="color:var(--accent-cyan)">ignore 0.4</td><td>Git-aware parallel file walking</td><td>walker.rs &mdash; respects .gitignore</td></tr>
+          <tr><td style="color:var(--accent-cyan)">regex / regex-syntax</td><td>Pattern matching + AST parsing</td><td>engine.rs &mdash; verification, planner.rs &mdash; literal extraction</td></tr>
+          <tr><td style="color:var(--accent-cyan)">bincode 2.0</td><td>Binary serialization</td><td>storage.rs &mdash; base.bin / delta.bin format</td></tr>
+          <tr><td style="color:var(--accent-cyan)">xxhash-rust</td><td>Fast 64-bit hashing</td><td>walker.rs &mdash; file fingerprinting for delta detection</td></tr>
+          <tr><td style="color:var(--accent-cyan)">clap 4.5</td><td>CLI argument parsing</td><td>search-cli main.rs</td></tr>
+          <tr><td style="color:var(--accent-cyan)">globset 0.4</td><td>Glob pattern matching</td><td>engine.rs &mdash; --glob path filters</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ CRATES ═══════ -->
+<section id="crates">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-num">02 &mdash; Crate Deep Dive</div>
+      <h2>search-core: <span class="hl">The Brain</span></h2>
+      <p class="section-desc">The core crate has zero I/O. It defines query types, result types, the trigram encoding scheme, repo classification, and &mdash; most importantly &mdash; the query planner that decides <em>how</em> to execute each search.</p>
+    </div>
+
+    <!-- QueryRequest -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico yw">Q</div>
+        <h3>QueryRequest <span class="tag yw">query.rs</span></h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:1rem">Every search starts here. The CLI parses user input into this struct, which flows through the entire pipeline.</p>
+      <div class="struct-viz">
+        <div class="struct-title">struct QueryRequest</div>
+        <div class="struct-field"><span class="fname">kind</span><span class="ftype">SearchKind</span><span class="fdesc">Literal | Regex | Path | Auto</span></div>
+        <div class="struct-field"><span class="fname">engine</span><span class="ftype">SearchEngineKind</span><span class="fdesc">Indexed | DirectScan | Ripgrep | Auto</span></div>
+        <div class="struct-field"><span class="fname">pattern</span><span class="ftype">String</span><span class="fdesc">The search pattern</span></div>
+        <div class="struct-field"><span class="fname">case_mode</span><span class="ftype">CaseMode</span><span class="fdesc">Sensitive | Insensitive</span></div>
+        <div class="struct-field"><span class="fname">path_substrings</span><span class="ftype">Vec&lt;String&gt;</span><span class="fdesc">Filter: path must contain these</span></div>
+        <div class="struct-field"><span class="fname">path_prefixes</span><span class="ftype">Vec&lt;String&gt;</span><span class="fdesc">Filter: path starts with these</span></div>
+        <div class="struct-field"><span class="fname">exact_paths</span><span class="ftype">Vec&lt;String&gt;</span><span class="fdesc">Filter: exact path match</span></div>
+        <div class="struct-field"><span class="fname">exact_names</span><span class="ftype">Vec&lt;String&gt;</span><span class="fdesc">Filter: exact filename</span></div>
+        <div class="struct-field"><span class="fname">extensions</span><span class="ftype">Vec&lt;String&gt;</span><span class="fdesc">Filter: file extensions (.rs, .go)</span></div>
+        <div class="struct-field"><span class="fname">globs</span><span class="ftype">Vec&lt;String&gt;</span><span class="fdesc">Filter: glob patterns</span></div>
+        <div class="struct-field"><span class="fname">max_results</span><span class="ftype">Option&lt;usize&gt;</span><span class="fdesc">Early termination limit</span></div>
+      </div>
+    </div>
+
+    <!-- Planner -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico gn">P</div>
+        <h3>Query Planner <span class="tag gn">planner.rs</span></h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:1rem">The planner runs in two phases: <strong>plan</strong> (what shape is this query?) then <strong>route</strong> (which engine should execute it?).</p>
+
+      <div class="two-col" style="margin-bottom:1rem">
+        <div>
+          <h3 style="font-size:0.9rem; margin-bottom:0.5rem">QueryShape <span class="tag yw">enum</span></h3>
+          <div class="struct-viz" style="margin:0">
+            <div class="enum-row"><span class="enum-variant">Literal</span><span class="enum-desc">Plain string, 3+ chars</span></div>
+            <div class="enum-row"><span class="enum-variant">ShortLiteral</span><span class="enum-desc">&lt; 3 chars (no useful trigrams)</span></div>
+            <div class="enum-row"><span class="enum-variant">RegexAnchored</span><span class="enum-desc">Regex with extractable literals</span></div>
+            <div class="enum-row"><span class="enum-variant">RegexWeak</span><span class="enum-desc">Pure regex, no literal seeds</span></div>
+            <div class="enum-row"><span class="enum-variant">Path</span><span class="enum-desc">Path-only search</span></div>
+          </div>
+        </div>
+        <div>
+          <h3 style="font-size:0.9rem; margin-bottom:0.5rem">QuerySelectivity <span class="tag yw">enum</span></h3>
+          <div class="struct-viz" style="margin:0">
+            <div class="enum-row"><span class="enum-variant">High</span><span class="enum-desc">&gt; 5 chars &rarr; very few candidates</span></div>
+            <div class="enum-row"><span class="enum-variant">Medium</span><span class="enum-desc">3-5 chars &rarr; moderate candidates</span></div>
+            <div class="enum-row"><span class="enum-variant">Low</span><span class="enum-desc">&lt; 3 chars &rarr; many candidates</span></div>
+            <div class="enum-row"><span class="enum-variant">Unknown</span><span class="enum-desc">Regex without clear literal length</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="code-block">
+        <div class="tb"><div class="dots"><span></span><span></span><span></span></div> planner.rs &mdash; plan_query()</div>
+        <pre><span class="kw">pub fn</span> <span class="fn">plan_query</span>(request: &amp;<span class="type">QueryRequest</span>) -> <span class="type">QueryPlan</span> {
+    <span class="kw">match</span> request.kind {
+        <span class="type">Path</span>         => strategy: <span class="type">PathIndex</span>,
+        <span class="type">Literal</span>|<span class="type">Auto</span> => {
+            <span class="kw">if</span> pattern.len() &lt; <span class="num">3</span> => <span class="type">ShortLiteral</span> + <span class="type">DirectScan</span>
+            <span class="kw">else</span>                  => <span class="type">Literal</span> + <span class="type">Indexed</span>
+        }
+        <span class="type">Regex</span>        => {
+            seeds = <span class="fn">extract_regex_literals</span>(pattern)
+            <span class="kw">if</span> longest_seed &gt;= <span class="num">3</span> => <span class="type">RegexAnchored</span> + <span class="type">Indexed</span>
+            <span class="kw">else</span>                   => <span class="type">RegexWeak</span> + <span class="type">DirectScan</span>
+        }
+    }
+}</pre>
+      </div>
+    </div>
+
+    <!-- Trigram encoding -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico cy">T</div>
+        <h3>Trigram Encoding <span class="tag cy">trigram.rs</span></h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:0.75rem">3 bytes packed into a u32. All text is lowercased before encoding for case-insensitive index lookups.</p>
+      <div class="code-block">
+        <div class="tb"><div class="dots"><span></span><span></span><span></span></div> trigram.rs</div>
+        <pre><span class="kw">pub type</span> <span class="type">Trigram</span> = <span class="type">u32</span>;
+
+<span class="kw">pub fn</span> <span class="fn">encode_trigram</span>(bytes: &amp;[<span class="type">u8</span>]) -> <span class="type">Option</span>&lt;<span class="type">Trigram</span>&gt; {
+    (bytes[<span class="num">0</span>] <span class="kw">as</span> <span class="type">u32</span>) &lt;&lt; <span class="num">16</span>
+  | (bytes[<span class="num">1</span>] <span class="kw">as</span> <span class="type">u32</span>) &lt;&lt; <span class="num">8</span>
+  |  bytes[<span class="num">2</span>] <span class="kw">as</span> <span class="type">u32</span>
+}
+
+<span class="kw">pub fn</span> <span class="fn">trigrams_from_bytes</span>(bytes: &amp;[<span class="type">u8</span>]) -> <span class="type">Vec</span>&lt;<span class="type">Trigram</span>&gt; {
+    <span class="kw">let</span> normalized = <span class="fn">normalize_for_index</span>(bytes); <span class="cmt">// lowercase</span>
+    normalized.<span class="fn">windows</span>(<span class="num">3</span>)
+        .<span class="fn">filter_map</span>(<span class="fn">encode_trigram</span>)
+        .<span class="fn">collect</span>::&lt;<span class="type">BTreeSet</span>&lt;_&gt;&gt;() <span class="cmt">// dedup + sort</span>
+        .<span class="fn">into_iter</span>().<span class="fn">collect</span>()
+}</pre>
+      </div>
+    </div>
+
+    <!-- SearchResponse -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico or">R</div>
+        <h3>SearchResponse <span class="tag or">result.rs</span></h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:0.75rem">The full audit trail: what was requested, how it was planned, which engine ran it, and every hit found.</p>
+      <div class="struct-viz">
+        <div class="struct-title">struct SearchResponse</div>
+        <div class="struct-field"><span class="fname">request</span><span class="ftype">QueryRequest</span><span class="fdesc">Original query</span></div>
+        <div class="struct-field"><span class="fname">effective_kind</span><span class="ftype">SearchKind</span><span class="fdesc">Resolved search kind</span></div>
+        <div class="struct-field"><span class="fname">engine</span><span class="ftype">SearchEngineKind</span><span class="fdesc">Which engine ran</span></div>
+        <div class="struct-field"><span class="fname">routing</span><span class="ftype">AdaptiveRoutingDecision</span><span class="fdesc">Why this engine was chosen</span></div>
+        <div class="struct-field"><span class="fname">plan</span><span class="ftype">QueryPlan</span><span class="fdesc">Shape, selectivity, seeds</span></div>
+        <div class="struct-field"><span class="fname">hits</span><span class="ftype">Vec&lt;SearchHit&gt;</span><span class="fdesc">Content { path, lines } | Path { path }</span></div>
+        <div class="struct-field"><span class="fname">summary</span><span class="ftype">SearchSummary</span><span class="fdesc">files_with_matches, total_line_matches</span></div>
+        <div class="struct-field"><span class="fname">metrics</span><span class="ftype">SearchMetrics</span><span class="fdesc">Timing, candidates, bytes scanned</span></div>
+      </div>
+    </div>
+
+    <!-- RepoCategory -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico pu">C</div>
+        <h3>Repo Classification <span class="tag pu">repo.rs</span></h3>
+      </div>
+      <table class="dtable">
+        <thead><tr><th>Category</th><th>Files</th><th>Disk Size</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td style="color:var(--accent-green)">Small</td><td>&lt; 5K</td><td>&lt; 200 MB</td><td>serde, ripgrep</td></tr>
+          <tr><td style="color:var(--accent-cyan)">Medium</td><td>5K&ndash;50K</td><td>200 MB&ndash;2 GB</td><td>kubernetes</td></tr>
+          <tr><td style="color:var(--accent-orange)">Large</td><td>50K&ndash;500K</td><td>2&ndash;20 GB</td><td>linux, rust</td></tr>
+          <tr><td style="color:var(--accent-red)">VeryLarge</td><td>&gt; 500K</td><td>&gt; 20 GB</td><td>chromium</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ DATA TYPES ═══════ -->
+<section id="data-types">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-num">03 &mdash; Index Data Model</div>
+      <h2>How Data is <span class="hl">Stored</span></h2>
+      <p class="section-desc">The index exists in three layers: PersistedIndex (full snapshot), optional DeltaSnapshot (incremental changes), and RuntimeIndex (merged in-memory view). The FastIndex provides the same data via mmap.</p>
+    </div>
+
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico cy">D</div>
+        <h3>DocumentRecord <span class="tag cy">model.rs</span></h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:0.75rem">Each file in the repo gets a DocumentRecord with a unique doc_id. The fingerprint enables delta detection on subsequent builds.</p>
+      <div class="struct-viz">
+        <div class="struct-title">struct DocumentRecord</div>
+        <div class="struct-field"><span class="fname">doc_id</span><span class="ftype">u32</span><span class="fdesc">Unique identifier within index</span></div>
+        <div class="struct-field"><span class="fname">relative_path</span><span class="ftype">String</span><span class="fdesc">"src/engine.rs" (always / separators)</span></div>
+        <div class="struct-field"><span class="fname">file_name</span><span class="ftype">String</span><span class="fdesc">"engine.rs"</span></div>
+        <div class="struct-field"><span class="fname">extension</span><span class="ftype">Option&lt;String&gt;</span><span class="fdesc">"rs" (lowercase)</span></div>
+        <div class="struct-field"><span class="fname">fingerprint</span><span class="ftype">FileFingerprint</span><span class="fdesc">{ size, modified_unix_secs, hash: xxh3_64 }</span></div>
+      </div>
+    </div>
+
+    <div class="two-col reveal">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico gn">P</div>
+          <h3>PersistedIndex <span class="tag gn">base.bin</span></h3>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:0.5rem">Full snapshot serialized with bincode. Contains everything needed to answer queries.</p>
+        <div class="struct-viz" style="margin-top:0.5rem">
+          <div class="struct-title" style="font-size:0.8rem">struct PersistedIndex</div>
+          <div class="struct-field"><span class="fname" style="min-width:140px">docs</span><span class="ftype" style="min-width:auto">Vec&lt;DocumentRecord&gt;</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:140px">content_postings</span><span class="ftype" style="min-width:auto">Vec&lt;PostingListEntry&gt;</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:140px">path_postings</span><span class="ftype" style="min-width:auto">Vec&lt;PostingListEntry&gt;</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:140px">filename_map</span><span class="ftype" style="min-width:auto">Vec&lt;NamePostingEntry&gt;</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:140px">extension_map</span><span class="ftype" style="min-width:auto">Vec&lt;NamePostingEntry&gt;</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico or">D</div>
+          <h3>DeltaSnapshot <span class="tag or">delta.bin</span></h3>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:0.5rem">Incremental changes since last full build. Merged into base at load time via RuntimeIndex::from_snapshots().</p>
+        <div class="struct-viz" style="margin-top:0.5rem">
+          <div class="struct-title" style="font-size:0.8rem">struct DeltaSnapshot</div>
+          <div class="struct-field"><span class="fname" style="min-width:140px">removed_paths</span><span class="ftype" style="min-width:auto">Vec&lt;String&gt;</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:140px">docs</span><span class="ftype" style="min-width:auto">Vec&lt;DocumentRecord&gt;</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:140px">content_postings</span><span class="ftype" style="min-width:auto">Vec&lt;PostingListEntry&gt;</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:140px"><em>+ same maps</em></span><span class="ftype" style="min-width:auto"></span></div>
+        </div>
+        <p style="color:var(--text-dim); font-size:0.78rem; margin-top:0.5rem">If delta_ratio &gt; 25% of base, triggers a full rebuild instead.</p>
+      </div>
+    </div>
+
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico pu">B</div>
+        <h3>IndexBackend <span class="tag pu">engine.rs</span></h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:0.75rem">The engine abstracts over two index implementations. It prefers Fast (mmap) but falls back to Legacy when a delta layer exists.</p>
+      <div class="struct-viz">
+        <div class="struct-title">enum IndexBackend</div>
+        <div class="enum-row"><span class="enum-variant">Fast(FastIndex)</span><span class="enum-desc">mmap'd binary format. Used when fast.idx exists and no delta layer. &lt;5ms open time.</span></div>
+        <div class="enum-row"><span class="enum-variant">Legacy(RuntimeIndex)</span><span class="enum-desc">Deserialized from bincode. Merges base + delta. HashMaps in memory. ~600ms open time.</span></div>
+      </div>
+      <div class="code-block" style="margin-top:0.75rem">
+        <div class="tb"><div class="dots"><span></span><span></span><span></span></div> engine.rs &mdash; open()</div>
+        <pre><span class="kw">pub fn</span> <span class="fn">open</span>(index_dir: &amp;<span class="type">Path</span>) -> <span class="type">Result</span>&lt;<span class="type">Self</span>&gt; {
+    <span class="kw">let</span> metadata = <span class="fn">read_index_metadata</span>(index_dir)?;
+    <span class="kw">let</span> has_delta = <span class="fn">delta_exists</span>(index_dir);
+
+    <span class="kw">if</span> <span class="fn">fast_index_exists</span>(index_dir) && !has_delta {
+        <span class="cmt">// Preferred: zero-copy mmap</span>
+        <span class="kw">let</span> fast = <span class="type">FastIndex</span>::<span class="fn">open</span>(<span class="fn">fast_index_path</span>(index_dir))?;
+        <span class="kw">return</span> <span class="type">Ok</span>(<span class="type">SearchEngine</span> { backend: <span class="type">Fast</span>(fast), .. });
+    }
+
+    <span class="cmt">// Fallback: deserialize + merge</span>
+    <span class="kw">let</span> base = <span class="fn">load_base</span>(index_dir)?;
+    <span class="kw">let</span> delta = <span class="fn">load_delta</span>(index_dir)?;
+    <span class="kw">let</span> runtime = <span class="type">RuntimeIndex</span>::<span class="fn">from_snapshots</span>(base, delta);
+    <span class="type">Ok</span>(<span class="type">SearchEngine</span> { backend: <span class="type">Legacy</span>(runtime), .. })
+}</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ INDEX BUILD ═══════ -->
+<section id="index-build">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-num">04 &mdash; Index Build Pipeline</div>
+      <h2>Building the <span class="hl">Index</span></h2>
+      <p class="section-desc">The build pipeline walks the repository in parallel, extracts trigrams from each file, accumulates posting lists, and writes both bincode (legacy) and mmap (fast) index formats.</p>
+    </div>
+
+    <div class="flow-h reveal">
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-green-dim)">
+          <div class="label" style="color:var(--accent-green)">walk_parallel()</div>
+          <div class="sub">walker.rs</div>
+          <div class="sub">8 threads, .gitignore</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-cyan-dim)">
+          <div class="label" style="color:var(--accent-cyan)">BuildAccumulator</div>
+          <div class="sub">build.rs</div>
+          <div class="sub">trigrams per file</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-purple-dim)">
+          <div class="label" style="color:var(--accent-purple)">PersistedIndex</div>
+          <div class="sub">model.rs</div>
+          <div class="sub">posting lists + docs</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-orange-dim)">
+          <div class="label" style="color:var(--accent-orange)">persist()</div>
+          <div class="sub">storage.rs</div>
+          <div class="sub">base.bin + metadata.json</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-pink);">
+          <div class="label" style="color:var(--accent-pink)">write_fast_index()</div>
+          <div class="sub">fastindex.rs</div>
+          <div class="sub">fast.idx (mmap)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Walker -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico gn">W</div>
+        <h3>Parallel Walker <span class="tag gn">walker.rs</span></h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:0.75rem">Uses the <code style="color:var(--accent-orange)">ignore</code> crate's parallel walker which natively respects <code>.gitignore</code>, <code>.ignore</code>, and hidden file rules.</p>
+      <div class="two-col">
+        <div>
+          <h3 style="font-size:0.85rem; color:var(--text-dim); margin-bottom:0.4rem">For each file:</h3>
+          <ul style="color:var(--text-secondary); font-size:0.85rem; list-style:none; padding:0">
+            <li style="padding:0.2rem 0">1. Check file size &le; max (default: no limit)</li>
+            <li style="padding:0.2rem 0">2. Read full contents into memory</li>
+            <li style="padding:0.2rem 0">3. Binary detection: null bytes in first 4KB, or &gt;20% control chars</li>
+            <li style="padding:0.2rem 0">4. Compute xxh3_64 hash for fingerprinting</li>
+            <li style="padding:0.2rem 0">5. Emit ScannedFile to shared Mutex&lt;Vec&gt;</li>
+          </ul>
+        </div>
+        <div>
+          <div class="struct-viz" style="margin:0">
+            <div class="struct-title" style="font-size:0.8rem">struct ScannedFile</div>
+            <div class="struct-field"><span class="fname" style="min-width:120px">relative_path</span><span class="ftype" style="min-width:auto">String</span></div>
+            <div class="struct-field"><span class="fname" style="min-width:120px">contents</span><span class="ftype" style="min-width:auto">Vec&lt;u8&gt;</span></div>
+            <div class="struct-field"><span class="fname" style="min-width:120px">content_hash</span><span class="ftype" style="min-width:auto">u64 (xxh3)</span></div>
+            <div class="struct-field"><span class="fname" style="min-width:120px">extension</span><span class="ftype" style="min-width:auto">Option&lt;String&gt;</span></div>
+            <div class="struct-field"><span class="fname" style="min-width:120px">file_size</span><span class="ftype" style="min-width:auto">u64</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BuildAccumulator -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico cy">A</div>
+        <h3>BuildAccumulator <span class="tag cy">build.rs</span></h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:0.75rem">For each ScannedFile, the accumulator assigns a doc_id, extracts content + path trigrams, and builds inverted posting lists.</p>
+      <div class="code-block">
+        <div class="tb"><div class="dots"><span></span><span></span><span></span></div> build.rs &mdash; push()</div>
+        <pre><span class="kw">fn</span> <span class="fn">push</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, file: <span class="type">ScannedFile</span>) {
+    <span class="kw">let</span> doc_id = <span class="kw">self</span>.next_doc_id;  <span class="cmt">// sequential u32</span>
+    <span class="kw">self</span>.next_doc_id += <span class="num">1</span>;
+
+    <span class="cmt">// Content trigrams → posting lists</span>
+    <span class="kw">for</span> tri <span class="kw">in</span> <span class="fn">trigrams_from_bytes</span>(&amp;file.contents) {
+        <span class="kw">self</span>.content_postings
+            .<span class="fn">entry</span>(tri).<span class="fn">or_default</span>().<span class="fn">push</span>(doc_id);
+    }
+
+    <span class="cmt">// Path trigrams → separate posting lists</span>
+    <span class="kw">for</span> tri <span class="kw">in</span> <span class="fn">trigrams_from_bytes</span>(file.relative_path.<span class="fn">as_bytes</span>()) {
+        <span class="kw">self</span>.path_postings
+            .<span class="fn">entry</span>(tri).<span class="fn">or_default</span>().<span class="fn">push</span>(doc_id);
+    }
+
+    <span class="cmt">// Filename + extension maps for exact lookups</span>
+    <span class="kw">self</span>.filename_map.<span class="fn">entry</span>(file.file_name.<span class="fn">to_lowercase</span>())...;
+    <span class="kw">self</span>.extension_map.<span class="fn">entry</span>(ext.<span class="fn">to_lowercase</span>())...;
+}</pre>
+      </div>
+    </div>
+
+    <!-- Delta updates -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico or">U</div>
+        <h3>Delta Updates <span class="tag or">build.rs &mdash; update_index()</span></h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:0.75rem">Instead of rebuilding from scratch, <code style="color:var(--accent-orange)">update_index()</code> compares fingerprints (size + mtime + xxh3 hash) to detect changes.</p>
+      <div class="decision-tree">
+        <div class="dt-node question"><span class="dt-label">How many files changed since last build?</span></div>
+        <div class="dt-branch">
+          <div class="dt-node answer"><span class="dt-label">&gt; 25% of files &rarr; full rebuild (faster than delta merge)</span></div>
+          <div class="dt-node answer"><span class="dt-label">&le; 25% &rarr; create DeltaSnapshot with only changed/new/removed files</span></div>
+        </div>
+      </div>
+      <p style="color:var(--text-dim); font-size:0.82rem; margin-top:0.5rem">Delta exists as delta.bin alongside base.bin. At load time, RuntimeIndex::from_snapshots() merges them. Note: when a delta exists, the Fast (mmap) backend is not used &mdash; it falls back to Legacy to apply the merge.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ SEARCH FLOW ═══════ -->
+<section id="search-flow">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-num">05 &mdash; Search Execution</div>
+      <h2>End-to-End <span class="hl">Search Flow</span></h2>
+      <p class="section-desc">What happens from the moment you type a query to when results appear. Every search travels through the same pipeline: parse &rarr; plan &rarr; route &rarr; filter &rarr; candidates &rarr; verify &rarr; results.</p>
+    </div>
+
+    <div class="flow-h reveal" style="flex-wrap:wrap;">
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-pink);">
+          <div class="label" style="color:var(--accent-pink)">CLI Parse</div>
+          <div class="sub">main.rs</div>
+          <div class="sub">args &rarr; QueryRequest</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-yellow);">
+          <div class="label" style="color:var(--accent-yellow)">plan_query()</div>
+          <div class="sub">planner.rs</div>
+          <div class="sub">shape + selectivity</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-green-dim)">
+          <div class="label" style="color:var(--accent-green)">route_query()</div>
+          <div class="sub">planner.rs</div>
+          <div class="sub">Indexed / rg / Scan</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-cyan-dim)">
+          <div class="label" style="color:var(--accent-cyan)">Path Filters</div>
+          <div class="sub">engine.rs</div>
+          <div class="sub">ext, name, glob, prefix</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-purple-dim)">
+          <div class="label" style="color:var(--accent-purple)">Trigram Candidates</div>
+          <div class="sub">engine.rs</div>
+          <div class="sub">posting list intersect</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-orange-dim)">
+          <div class="label" style="color:var(--accent-orange)">Parallel Verify</div>
+          <div class="sub">engine.rs + rayon</div>
+          <div class="sub">regex on candidates</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-green-dim)">
+          <div class="label" style="color:var(--accent-green)">SearchResponse</div>
+          <div class="sub">result.rs</div>
+          <div class="sub">hits + metrics</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detailed walkthrough -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico cy">E</div>
+        <h3>Example: Searching for "HttpResponse" in Kubernetes</h3>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:1rem; margin-top:0.5rem">
+        <div style="display:flex; gap:0.75rem; align-items:flex-start">
+          <span class="tag cy" style="flex-shrink:0; min-width:20px; justify-content:center">1</span>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; font-size:0.9rem">CLI parses input</p>
+            <p style="color:var(--text-dim); font-size:0.82rem"><code>triseek search "HttpResponse"</code> &rarr; QueryRequest { kind: Auto, pattern: "HttpResponse", engine: Auto }</p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:0.75rem; align-items:flex-start">
+          <span class="tag yw" style="flex-shrink:0; min-width:20px; justify-content:center">2</span>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; font-size:0.9rem">plan_query() classifies the query</p>
+            <p style="color:var(--text-dim); font-size:0.82rem">12 chars &rarr; shape: Literal, selectivity: High, strategy: Indexed, seeds: ["httpresponse"]</p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:0.75rem; align-items:flex-start">
+          <span class="tag gn" style="flex-shrink:0; min-width:20px; justify-content:center">3</span>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; font-size:0.9rem">route_query() selects engine</p>
+            <p style="color:var(--text-dim); font-size:0.82rem">Kubernetes = Medium repo, High selectivity &rarr; route: Indexed. Reason: "medium_repo, high selectivity, index available"</p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:0.75rem; align-items:flex-start">
+          <span class="tag cy" style="flex-shrink:0; min-width:20px; justify-content:center">4</span>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; font-size:0.9rem">SearchEngine::open() loads fast.idx via mmap</p>
+            <p style="color:var(--text-dim); font-size:0.82rem">No delta exists &rarr; Fast backend. Mmap maps file into address space in &lt;5ms. No deserialization.</p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:0.75rem; align-items:flex-start">
+          <span class="tag pu" style="flex-shrink:0; min-width:20px; justify-content:center">5</span>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; font-size:0.9rem">fast_path_filtered_docs() applies path filters</p>
+            <p style="color:var(--text-dim); font-size:0.82rem">No path filters in this query &rarr; all 28,132 doc_ids pass through.</p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:0.75rem; align-items:flex-start">
+          <span class="tag pu" style="flex-shrink:0; min-width:20px; justify-content:center">6</span>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; font-size:0.9rem">fast_index_candidates() intersects posting lists</p>
+            <p style="color:var(--text-dim); font-size:0.82rem">Extract trigrams from "httpresponse" (lowercased): "htt", "ttp", "tpr", "pre", "res", "esp", "spo", "pon", "ons", "nse". Look up each in content_table &rarr; 10 posting lists. Sorted intersection yields ~5 candidate doc_ids.</p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:0.75rem; align-items:flex-start">
+          <span class="tag or" style="flex-shrink:0; min-width:20px; justify-content:center">7</span>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; font-size:0.9rem">collect_content_hits_parallel() verifies candidates</p>
+            <p style="color:var(--text-dim); font-size:0.82rem">5 candidates distributed across rayon thread pool. Each file: read (mmap if &gt;32KB), compile regex from escaped literal, scan lines. AtomicBool for early termination if max_results reached.</p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:0.75rem; align-items:flex-start">
+          <span class="tag gn" style="flex-shrink:0; min-width:20px; justify-content:center">8</span>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; font-size:0.9rem">Return SearchResponse</p>
+            <p style="color:var(--text-dim); font-size:0.82rem">Hits with file paths + line matches, summary (files_with_matches, total_line_matches), metrics (wall_millis: ~50ms, candidate_docs: 5, bytes_scanned: 45KB).</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ ROUTING ═══════ -->
+<section id="routing">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-num">06 &mdash; Adaptive Routing</div>
+      <h2>The <span class="hl">Decision</span> Tree</h2>
+      <p class="section-desc">route_query() in planner.rs decides which execution engine handles each query. The decision considers repo size, query shape, selectivity, whether an index exists, and session context.</p>
+    </div>
+
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico yw">?</div>
+        <h3>Routing Logic</h3>
+      </div>
+
+      <div class="decision-tree">
+        <div class="dt-node question"><span class="dt-label">Did user explicitly choose an engine? (--engine index/scan/rg)</span></div>
+        <div class="dt-branch">
+          <div class="dt-node answer"><span class="dt-label">Yes &rarr; use that engine directly</span></div>
+        </div>
+
+        <div class="dt-node question" style="margin-top:0.75rem"><span class="dt-label">Is an index available?</span></div>
+        <div class="dt-branch">
+          <div class="dt-node answer rg"><span class="dt-label">No + Path query &rarr; DirectScan (walk files, match paths)</span></div>
+          <div class="dt-node answer rg"><span class="dt-label">No + Content query &rarr; Ripgrep (fastest without index)</span></div>
+        </div>
+
+        <div class="dt-node question" style="margin-top:0.75rem"><span class="dt-label">Index exists. What's the repo category?</span></div>
+        <div class="dt-branch">
+          <div class="dt-node answer rg"><span class="dt-label">Small + not repeated_session &rarr; Ripgrep (page cache makes brute force free)</span></div>
+          <div class="dt-node answer rg"><span class="dt-label">Medium + not repeated_session + Low selectivity &rarr; Ripgrep</span></div>
+          <div class="dt-node answer"><span class="dt-label">Medium/Large/VeryLarge + High/Medium selectivity &rarr; Indexed</span></div>
+          <div class="dt-node answer"><span class="dt-label">Any size + repeated_session hint &rarr; Indexed (amortize index load)</span></div>
+        </div>
+      </div>
+
+      <p style="color:var(--text-dim); font-size:0.82rem; margin-top:1rem">After routing, <code style="color:var(--accent-orange)">adjust_route_for_filters()</code> in main.rs may override: if heavy path filters are set and the route was Ripgrep, it may switch to Indexed if the index can narrow candidates faster than rg can walk+filter.</p>
+    </div>
+
+    <!-- Three execution paths -->
+    <div class="three-col reveal">
+      <div class="card" style="border-top: 3px solid var(--accent-cyan)">
+        <div class="card-head">
+          <div class="card-ico cy">I</div>
+          <h3>Indexed</h3>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.85rem">Open index &rarr; path filter &rarr; trigram candidates &rarr; parallel verify. Cost: O(posting lists + candidates).</p>
+        <p style="color:var(--text-dim); font-size:0.78rem; margin-top:0.5rem">Best for: medium+ repos, selective queries, session workloads.</p>
+      </div>
+      <div class="card" style="border-top: 3px solid var(--accent-orange)">
+        <div class="card-head">
+          <div class="card-ico or">R</div>
+          <h3>Ripgrep</h3>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.85rem">Spawn <code>rg --json</code> subprocess. Parse JSON output for hits. Cost: O(all files).</p>
+        <p style="color:var(--text-dim); font-size:0.78rem; margin-top:0.5rem">Best for: small repos, weak regex, one-off queries, no index built yet.</p>
+      </div>
+      <div class="card" style="border-top: 3px solid var(--accent-green)">
+        <div class="card-head">
+          <div class="card-ico gn">S</div>
+          <h3>DirectScan</h3>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.85rem">Walk repo with scanner, apply path/content filters inline. Cost: O(all files).</p>
+        <p style="color:var(--text-dim); font-size:0.78rem; margin-top:0.5rem">Best for: short literals (&lt;3 chars), path-only queries without index.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ ENGINE ═══════ -->
+<section id="engine">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-num">07 &mdash; Search Engine Internals</div>
+      <h2>Inside <span class="hl">engine.rs</span></h2>
+      <p class="section-desc">The ~1000-line engine module is the heart of TriSeek. It orchestrates path filtering, candidate selection, parallel verification, and line-level match extraction.</p>
+    </div>
+
+    <!-- Path filtering -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico pu">F</div>
+        <h3>Path Filtering Pipeline</h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:0.75rem">Before any content search, path filters narrow the doc set. Each filter type uses the most efficient lookup available.</p>
+      <table class="dtable">
+        <thead><tr><th>Filter</th><th>Fast Backend</th><th>Legacy Backend</th></tr></thead>
+        <tbody>
+          <tr><td style="color:var(--accent-cyan)">exact_paths</td><td>path_to_doc HashMap O(1)</td><td>path_lookup HashMap O(1)</td></tr>
+          <tr><td style="color:var(--accent-cyan)">exact_names</td><td>filename_map HashMap O(1)</td><td>filename_map HashMap O(1)</td></tr>
+          <tr><td style="color:var(--accent-cyan)">extensions</td><td>extension_map HashMap O(1)</td><td>extension_map HashMap O(1)</td></tr>
+          <tr><td style="color:var(--accent-cyan)">path_substrings</td><td>Trigram search on path postings (3+ chars) or linear scan (&lt;3)</td><td>Same, via path_postings HashMap</td></tr>
+          <tr><td style="color:var(--accent-cyan)">path_prefixes</td><td>Linear scan all_docs(), starts_with check</td><td>Same</td></tr>
+          <tr><td style="color:var(--accent-cyan)">globs</td><td>GlobSet match on all_docs()</td><td>Same</td></tr>
+        </tbody>
+      </table>
+      <p style="color:var(--text-dim); font-size:0.78rem; margin-top:0.5rem">Multiple filters are intersected: a doc must pass ALL filters. Result is a sorted Vec&lt;u32&gt; of surviving doc_ids.</p>
+    </div>
+
+    <!-- Candidate selection -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico cy">C</div>
+        <h3>Trigram Candidate Selection</h3>
+      </div>
+
+      <div class="code-block">
+        <div class="tb"><div class="dots"><span></span><span></span><span></span></div> engine.rs &mdash; fast_index_candidates()</div>
+        <pre><span class="kw">match</span> plan.shape {
+    <span class="type">Literal</span> | <span class="type">Auto</span> <span class="kw">if</span> pattern.len() &lt; <span class="num">3</span> => {
+        <span class="cmt">// Too short for trigrams — return all filtered docs</span>
+        <span class="kw">return</span> filtered_docs;
+    }
+    <span class="type">Literal</span> | <span class="type">Auto</span> => {
+        <span class="cmt">// Extract trigrams from the literal, intersect posting lists</span>
+        <span class="kw">let</span> candidates = <span class="fn">fast_candidates_for_seed</span>(fast, pattern);
+        <span class="fn">sorted_intersect</span>(&amp;candidates, &amp;filtered_docs)
+    }
+    <span class="type">RegexAnchored</span> => {
+        <span class="cmt">// Use extracted literal seeds from the regex</span>
+        <span class="kw">if</span> <span class="fn">regex_has_unescaped_alternation</span>(pattern) {
+            <span class="cmt">// OR pattern: union of each seed's candidates</span>
+            seeds.<span class="fn">iter</span>().<span class="fn">fold</span>(<span class="type">Vec</span>::<span class="fn">new</span>(), |acc, seed|
+                <span class="fn">sorted_union</span>(&amp;acc, &amp;<span class="fn">fast_candidates_for_seed</span>(fast, seed))
+            )
+        } <span class="kw">else</span> {
+            <span class="cmt">// AND pattern: intersection of each seed's candidates</span>
+            seeds.<span class="fn">iter</span>().<span class="fn">fold</span>(<span class="type">None</span>, |acc, seed|
+                <span class="fn">intersect_sorted</span>(acc, <span class="fn">fast_candidates_for_seed</span>(fast, seed))
+            )
+        }
+    }
+}</pre>
+      </div>
+    </div>
+
+    <!-- Parallel verification -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico or">V</div>
+        <h3>Parallel Verification <span class="tag or">rayon par_iter()</span></h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:0.75rem">The final step: read each candidate file and run the actual pattern match. This is the only phase that touches the filesystem.</p>
+
+      <div class="two-col">
+        <div>
+          <h3 style="font-size:0.85rem; color:var(--text-dim)">How it works</h3>
+          <ol style="color:var(--text-secondary); font-size:0.85rem; padding-left:1.25rem">
+            <li style="padding:0.15rem 0">Resolve all candidates upfront as (doc_id, PathBuf, rel_path)</li>
+            <li style="padding:0.15rem 0">Build regex matcher from pattern + case mode</li>
+            <li style="padding:0.15rem 0">Rayon distributes files across work-stealing thread pool</li>
+            <li style="padding:0.15rem 0">Each thread: read file (mmap &gt;32KB, Vec &lt;32KB)</li>
+            <li style="padding:0.15rem 0">match_lines() scans for regex matches, extracts line number + column</li>
+            <li style="padding:0.15rem 0">AtomicBool <code>done</code> flag for early termination</li>
+            <li style="padding:0.15rem 0">AtomicUsize <code>total_found</code> tracks match count</li>
+            <li style="padding:0.15rem 0">Mutex protects shared results Vec</li>
+          </ol>
+        </div>
+        <div>
+          <h3 style="font-size:0.85rem; color:var(--text-dim)">CandidateBytes</h3>
+          <div class="struct-viz" style="margin:0.5rem 0">
+            <div class="struct-title" style="font-size:0.8rem">enum CandidateBytes</div>
+            <div class="enum-row"><span class="enum-variant">Owned(Vec&lt;u8&gt;)</span><span class="enum-desc">&lt; 32KB files</span></div>
+            <div class="enum-row"><span class="enum-variant">Mapped(Mmap)</span><span class="enum-desc">&ge; 32KB files, zero-copy</span></div>
+          </div>
+          <p style="color:var(--text-dim); font-size:0.78rem; margin-top:0.5rem">Both implement Deref&lt;Target=[u8]&gt; so the matcher doesn't care which variant it gets.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sorted operations -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico gn">O</div>
+        <h3>Set Operations on Sorted Arrays</h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:0.5rem">All posting lists and candidate sets are sorted Vec&lt;u32&gt;. Two-pointer merge avoids HashSet allocation overhead.</p>
+      <div class="two-col">
+        <div class="code-block" style="margin:0">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div> sorted_intersect() &mdash; O(n+m)</div>
+          <pre><span class="kw">while</span> i &lt; a.len() && j &lt; b.len() {
+    <span class="kw">match</span> a[i].<span class="fn">cmp</span>(&amp;b[j]) {
+        <span class="type">Equal</span>   => { out.<span class="fn">push</span>(a[i]); i+=<span class="num">1</span>; j+=<span class="num">1</span>; }
+        <span class="type">Less</span>    => i += <span class="num">1</span>,
+        <span class="type">Greater</span> => j += <span class="num">1</span>,
+    }
+}</pre>
+        </div>
+        <div class="code-block" style="margin:0">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div> sorted_union() &mdash; O(n+m)</div>
+          <pre><span class="kw">while</span> i &lt; a.len() && j &lt; b.len() {
+    <span class="kw">match</span> a[i].<span class="fn">cmp</span>(&amp;b[j]) {
+        <span class="type">Equal</span>   => { out.<span class="fn">push</span>(a[i]); i+=<span class="num">1</span>; j+=<span class="num">1</span>; }
+        <span class="type">Less</span>    => { out.<span class="fn">push</span>(a[i]); i+=<span class="num">1</span>; }
+        <span class="type">Greater</span> => { out.<span class="fn">push</span>(b[j]); j+=<span class="num">1</span>; }
+    }
+}
+<span class="cmt">// drain remaining from both sides</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ FAST INDEX ═══════ -->
+<section id="fastindex">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-num">08 &mdash; Fast Index Format</div>
+      <h2>Inside <span class="hl">fast.idx</span></h2>
+      <p class="section-desc">A custom flat binary format designed for mmap. No parsing step &mdash; posting lists are read as raw &amp;[u32] slices directly from mapped memory. Every section is at a fixed or header-declared offset.</p>
+    </div>
+
+    <!-- Layout -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico pk">L</div>
+        <h3>Binary Layout</h3>
+      </div>
+      <div style="display:flex; border-radius:8px; overflow:hidden; border:1px solid var(--border); margin:1rem 0; height:50px;">
+        <div style="flex:0.5; background:rgba(167,139,250,0.3); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--accent-purple);">Header<br>96B</div>
+        <div style="flex:2; background:rgba(34,211,238,0.2); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--accent-cyan); text-align:center">Content<br>Trigram Table</div>
+        <div style="flex:5; background:rgba(34,211,238,0.12); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--accent-cyan); text-align:center">Content<br>Postings</div>
+        <div style="flex:1.5; background:rgba(52,211,153,0.2); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--accent-green); text-align:center">Path<br>Trigram Table</div>
+        <div style="flex:3; background:rgba(52,211,153,0.12); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--accent-green); text-align:center">Path<br>Postings</div>
+        <div style="flex:2; background:rgba(251,146,60,0.2); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--accent-orange); text-align:center">Doc<br>Table</div>
+        <div style="flex:2; background:rgba(251,146,60,0.12); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--accent-orange); text-align:center">String<br>Pool</div>
+      </div>
+
+      <!-- Header detail -->
+      <div class="struct-viz" style="margin-top:1rem">
+        <div class="struct-title" style="color:var(--accent-purple)">Header (96 bytes)</div>
+        <div class="struct-field"><span class="fname">magic</span><span class="ftype">[u8; 8]</span><span class="fdesc">"TRISEEK\0"</span></div>
+        <div class="struct-field"><span class="fname">version</span><span class="ftype">u32</span><span class="fdesc">Currently 2</span></div>
+        <div class="struct-field"><span class="fname">num_docs</span><span class="ftype">u32</span><span class="fdesc">Total documents indexed</span></div>
+        <div class="struct-field"><span class="fname">num_content_trigrams</span><span class="ftype">u32</span><span class="fdesc">Distinct content trigrams</span></div>
+        <div class="struct-field"><span class="fname">num_path_trigrams</span><span class="ftype">u32</span><span class="fdesc">Distinct path trigrams</span></div>
+        <div class="struct-field"><span class="fname">content_table_offset</span><span class="ftype">u64</span><span class="fdesc">Byte offset to content trigram table</span></div>
+        <div class="struct-field"><span class="fname">content_postings_offset</span><span class="ftype">u64</span><span class="fdesc">Byte offset to content posting arrays</span></div>
+        <div class="struct-field"><span class="fname">path_table_offset</span><span class="ftype">u64</span><span class="fdesc">Byte offset to path trigram table</span></div>
+        <div class="struct-field"><span class="fname">path_postings_offset</span><span class="ftype">u64</span><span class="fdesc">Byte offset to path posting arrays</span></div>
+        <div class="struct-field"><span class="fname">docs_offset</span><span class="ftype">u64</span><span class="fdesc">Byte offset to doc table</span></div>
+        <div class="struct-field"><span class="fname">strings_offset</span><span class="ftype">u64</span><span class="fdesc">Byte offset to string pool</span></div>
+        <div class="struct-field"><span class="fname">strings_size</span><span class="ftype">u64</span><span class="fdesc">Total string pool size</span></div>
+      </div>
+    </div>
+
+    <!-- Trigram table entry -->
+    <div class="two-col reveal">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico cy">T</div>
+          <h3>Trigram Table Entry <span style="font-size:0.75rem; color:var(--text-dim); font-weight:400">(12 bytes each)</span></h3>
+        </div>
+        <div class="struct-viz" style="margin:0">
+          <div class="struct-field"><span class="fname" style="min-width:80px">trigram</span><span class="ftype" style="min-width:auto">u32</span><span class="fdesc">The trigram key</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:80px">offset</span><span class="ftype" style="min-width:auto">u32</span><span class="fdesc">Index into posting array</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:80px">count</span><span class="ftype" style="min-width:auto">u32</span><span class="fdesc">Number of doc_ids</span></div>
+        </div>
+        <p style="color:var(--text-dim); font-size:0.78rem; margin-top:0.5rem">At open(), all entries are loaded into a HashMap&lt;u32, (u32, u32)&gt; for O(1) lookup.</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico or">D</div>
+          <h3>Doc Table Entry <span style="font-size:0.75rem; color:var(--text-dim); font-weight:400">(46 bytes each)</span></h3>
+        </div>
+        <div class="struct-viz" style="margin:0">
+          <div class="struct-field"><span class="fname" style="min-width:90px">doc_id</span><span class="ftype" style="min-width:auto">u32</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:90px">path_offset</span><span class="ftype" style="min-width:auto">u32 + u16 len</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:90px">name_offset</span><span class="ftype" style="min-width:auto">u32 + u16 len</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:90px">ext_offset</span><span class="ftype" style="min-width:auto">u32 + u8 len</span></div>
+          <div class="struct-field"><span class="fname" style="min-width:90px">fingerprint</span><span class="ftype" style="min-width:auto">u64 + i64 + u64</span></div>
+        </div>
+        <p style="color:var(--text-dim); font-size:0.78rem; margin-top:0.5rem">Strings stored in pool; entries hold (offset, length) pairs.</p>
+      </div>
+    </div>
+
+    <!-- Read path -->
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico gn">R</div>
+        <h3>Read Path: Trigram Lookup &rarr; Posting List</h3>
+      </div>
+      <div class="code-block">
+        <div class="tb"><div class="dots"><span></span><span></span><span></span></div> fastindex.rs &mdash; content_postings()</div>
+        <pre><span class="kw">pub fn</span> <span class="fn">content_postings</span>(&amp;<span class="kw">self</span>, trigram: <span class="type">u32</span>) -> <span class="type">Option</span>&lt;<span class="type">Vec</span>&lt;<span class="type">u32</span>&gt;&gt; {
+    <span class="cmt">// O(1) HashMap lookup</span>
+    <span class="kw">let</span> (offset, count) = <span class="kw">self</span>.content_table.<span class="fn">get</span>(&amp;trigram)?;
+
+    <span class="cmt">// Calculate byte position in mmap'd region</span>
+    <span class="kw">let</span> byte_offset = <span class="kw">self</span>.content_postings_offset
+                    + (*offset <span class="kw">as</span> <span class="type">usize</span>) * <span class="num">4</span>;
+
+    <span class="cmt">// Zero-copy: cast raw bytes to &amp;[u32]</span>
+    <span class="kw">let</span> ptr = <span class="kw">self</span>.mmap[byte_offset..].<span class="fn">as_ptr</span>() <span class="kw">as</span> *<span class="kw">const</span> <span class="type">u32</span>;
+    <span class="kw">let</span> slice = <span class="kw">unsafe</span> {
+        <span class="fn">slice::from_raw_parts</span>(ptr, *count <span class="kw">as</span> <span class="type">usize</span>)
+    };
+    <span class="type">Some</span>(slice.<span class="fn">to_vec</span>())
+}
+<span class="cmt">// Total cost: 1 HashMap lookup + 1 pointer cast + 1 Vec copy</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ CLI ═══════ -->
+<section id="cli">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-num">09 &mdash; CLI &amp; Bench</div>
+      <h2>Entry <span class="hl">Points</span></h2>
+      <p class="section-desc">The CLI binary and benchmark harness are thin wrappers that parse arguments, dispatch to the engine, and format output.</p>
+    </div>
+
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico pk">C</div>
+        <h3>CLI Commands <span class="tag pk">search-cli/main.rs</span></h3>
+      </div>
+      <table class="dtable">
+        <thead><tr><th>Command</th><th>Handler</th><th>What It Does</th></tr></thead>
+        <tbody>
+          <tr><td style="color:var(--accent-cyan)">build</td><td>handle_build()</td><td>Full index build: walk &rarr; accumulate &rarr; persist base.bin + fast.idx</td></tr>
+          <tr><td style="color:var(--accent-cyan)">update</td><td>handle_update()</td><td>Incremental update: fingerprint diff &rarr; delta or rebuild</td></tr>
+          <tr><td style="color:var(--accent-cyan)">search</td><td>handle_search()</td><td>Single query: plan &rarr; route &rarr; execute &rarr; JSON output</td></tr>
+          <tr><td style="color:var(--accent-cyan)">session</td><td>handle_session()</td><td>Multi-query from JSON file: per-query routing + aggregated metrics</td></tr>
+          <tr><td style="color:var(--accent-cyan)">stats</td><td>handle_stats()</td><td>Display index metadata: repo stats, build time, doc count</td></tr>
+          <tr><td style="color:var(--accent-cyan)">measure</td><td>handle_measure()</td><td>Scan repo without building index: for repo classification</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card reveal">
+      <div class="card-head">
+        <div class="card-ico yw">B</div>
+        <h3>Benchmark Harness <span class="tag yw">search-bench/main.rs</span></h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:0.75rem">Reads a manifest YAML listing repositories and query types. For each repo+query, runs cold trials (fresh process) and warm trials (reused index), measuring wall time via process metrics. Compares against ripgrep baseline.</p>
+      <div class="two-col">
+        <div>
+          <h3 style="font-size:0.85rem; color:var(--text-dim)">Benchmark types</h3>
+          <ul style="color:var(--text-secondary); font-size:0.85rem; list-style:none; padding:0">
+            <li style="padding:0.2rem 0">literal_selective &mdash; rare string</li>
+            <li style="padding:0.2rem 0">literal_moderate &mdash; medium frequency</li>
+            <li style="padding:0.2rem 0">literal_high &mdash; common string</li>
+            <li style="padding:0.2rem 0">regex_anchor &mdash; regex with literal seeds</li>
+            <li style="padding:0.2rem 0">regex_weak &mdash; pure regex, no literals</li>
+            <li style="padding:0.2rem 0">multi_or &mdash; alternation pattern</li>
+            <li style="padding:0.2rem 0">path_* &mdash; filename/path queries</li>
+            <li style="padding:0.2rem 0">session_20/100 &mdash; multi-query workload</li>
+          </ul>
+        </div>
+        <div>
+          <h3 style="font-size:0.85rem; color:var(--text-dim)">Output</h3>
+          <ul style="color:var(--text-secondary); font-size:0.85rem; list-style:none; padding:0">
+            <li style="padding:0.2rem 0">report.json &mdash; full results</li>
+            <li style="padding:0.2rem 0">report.csv &mdash; p50/p90 per query</li>
+            <li style="padding:0.2rem 0">summary.md &mdash; human-readable report</li>
+            <li style="padding:0.2rem 0">Correctness validation: match counts must agree with rg baseline</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>TriSeek Code Architecture &mdash; <a href="triseek-explained.html" style="color:var(--accent-cyan); text-decoration:none;">How TriSeek Works &rarr;</a></p>
+    <p style="margin-top:0.3rem; color:var(--text-dim)">Built with Rust. 4 crates, ~3,500 lines of code.</p>
+  </div>
+</footer>
+
+<script>
+// Scroll reveal
+const reveals = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+}, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+reveals.forEach(el => observer.observe(el));
+
+// Active nav link
+const navLinks = document.querySelectorAll('.top-nav a');
+const sections = document.querySelectorAll('section');
+const navObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(l => l.style.color = '');
+      const active = document.querySelector(`.top-nav a[href="#${entry.target.id}"]`);
+      if (active) active.style.color = 'var(--accent-cyan)';
+    }
+  });
+}, { threshold: 0.2 });
+sections.forEach(s => navObserver.observe(s));
+</script>
+</body>
+</html>
