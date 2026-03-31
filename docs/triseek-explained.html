@@ -1,0 +1,2166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TriSeek — How Trigram Search Works</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg-deep: #0a0e17;
+  --bg-panel: #0f1520;
+  --bg-card: #141c2b;
+  --bg-elevated: #1a2436;
+  --bg-input: #0d1219;
+  --border: #1e2d42;
+  --border-bright: #2a4060;
+  --text-primary: #e2e8f0;
+  --text-secondary: #8899b0;
+  --text-dim: #4a5c74;
+  --accent-cyan: #22d3ee;
+  --accent-cyan-dim: #0e7490;
+  --accent-green: #34d399;
+  --accent-green-dim: #065f46;
+  --accent-orange: #fb923c;
+  --accent-orange-dim: #9a3412;
+  --accent-purple: #a78bfa;
+  --accent-purple-dim: #5b21b6;
+  --accent-red: #f87171;
+  --accent-yellow: #fbbf24;
+  --accent-pink: #f472b6;
+  --glow-cyan: 0 0 30px rgba(34, 211, 238, 0.15);
+  --glow-green: 0 0 30px rgba(52, 211, 153, 0.15);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-bright) var(--bg-deep);
+}
+
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: 'Space Grotesk', sans-serif;
+  line-height: 1.7;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--accent-cyan);
+  color: var(--bg-deep);
+}
+
+/* Scanline overlay */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Grid background */
+.grid-bg {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* ═══════ HERO ═══════ */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  padding: 4rem 2rem;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1.2rem;
+  border: 1px solid var(--accent-cyan-dim);
+  border-radius: 100px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--accent-cyan);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 2rem;
+  animation: fadeSlideUp 0.8s ease-out;
+}
+
+.hero-badge .dot {
+  width: 6px; height: 6px;
+  background: var(--accent-cyan);
+  border-radius: 50%;
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px var(--accent-cyan); }
+  50% { opacity: 0.4; box-shadow: none; }
+}
+
+.hero h1 {
+  font-size: clamp(3rem, 8vw, 6rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin-bottom: 1.5rem;
+  animation: fadeSlideUp 0.8s ease-out 0.1s both;
+}
+
+.hero h1 .tri {
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero h1 .seek {
+  color: var(--text-primary);
+}
+
+.hero-sub {
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  max-width: 600px;
+  margin-bottom: 3rem;
+  animation: fadeSlideUp 0.8s ease-out 0.2s both;
+}
+
+.hero-stats {
+  display: flex;
+  gap: 3rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  animation: fadeSlideUp 0.8s ease-out 0.3s both;
+}
+
+.hero-stat {
+  text-align: center;
+}
+
+.hero-stat .value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  line-height: 1;
+}
+
+.hero-stat .label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 0.3rem;
+}
+
+.scroll-indicator {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  animation: float 3s ease-in-out infinite;
+}
+
+.scroll-indicator .arrow {
+  width: 20px; height: 20px;
+  border-right: 2px solid var(--text-dim);
+  border-bottom: 2px solid var(--text-dim);
+  transform: rotate(45deg);
+}
+
+@keyframes float {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(8px); }
+}
+
+/* ═══════ SECTIONS ═══════ */
+section {
+  padding: 6rem 0;
+  position: relative;
+}
+
+.section-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--accent-cyan-dim);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+h2 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 1rem;
+}
+
+h2 .highlight {
+  color: var(--accent-cyan);
+}
+
+h3 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--text-primary);
+}
+
+.section-desc {
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+  max-width: 700px;
+  margin-bottom: 3rem;
+}
+
+/* ═══════ CARDS ═══════ */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.card:hover {
+  border-color: var(--border-bright);
+  box-shadow: var(--glow-cyan);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.card-icon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.card-icon.cyan { background: rgba(34,211,238,0.1); color: var(--accent-cyan); }
+.card-icon.green { background: rgba(52,211,153,0.1); color: var(--accent-green); }
+.card-icon.orange { background: rgba(251,146,60,0.1); color: var(--accent-orange); }
+.card-icon.purple { background: rgba(167,139,250,0.1); color: var(--accent-purple); }
+
+/* ═══════ CODE BLOCKS ═══════ */
+.code-block {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 1rem 0;
+}
+
+.code-block .toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.code-block .toolbar .dots {
+  display: flex;
+  gap: 5px;
+}
+
+.code-block .toolbar .dots span {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+}
+
+.code-block .toolbar .dots span:nth-child(1) { background: #ff5f57; }
+.code-block .toolbar .dots span:nth-child(2) { background: #ffbd2e; }
+.code-block .toolbar .dots span:nth-child(3) { background: #28c840; }
+
+.code-block pre {
+  padding: 1.25rem;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+
+.code-block .kw { color: var(--accent-purple); }
+.code-block .fn { color: var(--accent-cyan); }
+.code-block .str { color: var(--accent-green); }
+.code-block .num { color: var(--accent-orange); }
+.code-block .cmt { color: var(--text-dim); font-style: italic; }
+.code-block .type { color: var(--accent-yellow); }
+.code-block .op { color: var(--accent-pink); }
+
+/* ═══════ INTERACTIVE TRIGRAM DEMO ═══════ */
+.trigram-demo {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  margin: 2rem 0;
+}
+
+.trigram-input {
+  width: 100%;
+  padding: 1rem 1.25rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--accent-cyan);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.1rem;
+  outline: none;
+  transition: border-color 0.3s;
+}
+
+.trigram-input:focus {
+  border-color: var(--accent-cyan-dim);
+  box-shadow: var(--glow-cyan);
+}
+
+.trigram-input::placeholder {
+  color: var(--text-dim);
+}
+
+.trigram-output {
+  margin-top: 1.5rem;
+  min-height: 60px;
+}
+
+.trigram-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.75rem;
+}
+
+.trigram-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.trigram-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  background: rgba(34,211,238,0.08);
+  border: 1px solid var(--accent-cyan-dim);
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--accent-cyan);
+  transition: all 0.2s;
+  animation: chipIn 0.3s ease-out;
+}
+
+@keyframes chipIn {
+  from { opacity: 0; transform: scale(0.8) translateY(5px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.sliding-window {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  background: var(--bg-input);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.sw-chars {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.sw-char {
+  width: 36px; height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+
+.sw-char.active {
+  background: rgba(34,211,238,0.15);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(34,211,238,0.2);
+}
+
+.sw-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sw-btn {
+  padding: 0.4rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sw-btn:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.sw-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.sw-current {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+  color: var(--accent-cyan);
+  min-width: 80px;
+  text-align: center;
+}
+
+/* ═══════ PIPELINE DIAGRAM ═══════ */
+.pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 2rem 0;
+}
+
+.pipeline-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  position: relative;
+}
+
+.pipeline-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 50px;
+}
+
+.pipeline-dot {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.pipeline-dot.cyan { background: rgba(34,211,238,0.15); color: var(--accent-cyan); border: 2px solid var(--accent-cyan-dim); }
+.pipeline-dot.green { background: rgba(52,211,153,0.15); color: var(--accent-green); border: 2px solid var(--accent-green-dim); }
+.pipeline-dot.orange { background: rgba(251,146,60,0.15); color: var(--accent-orange); border: 2px solid var(--accent-orange-dim); }
+.pipeline-dot.purple { background: rgba(167,139,250,0.15); color: var(--accent-purple); border: 2px solid var(--accent-purple-dim); }
+
+.pipeline-line {
+  width: 2px;
+  height: 100%;
+  min-height: 30px;
+  background: linear-gradient(to bottom, var(--border-bright), var(--border));
+  flex-grow: 1;
+}
+
+.pipeline-content {
+  padding-bottom: 2rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.pipeline-content h3 {
+  font-size: 1.1rem;
+  margin-bottom: 0.4rem;
+}
+
+.pipeline-content p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+/* ═══════ BINARY FORMAT DIAGRAM ═══════ */
+.binary-layout {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  margin: 2rem 0;
+  overflow-x: auto;
+}
+
+.bl-bar {
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  height: 60px;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.bl-segment {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  text-align: center;
+  line-height: 1.3;
+  cursor: default;
+  transition: filter 0.2s;
+  position: relative;
+}
+
+.bl-segment:hover { filter: brightness(1.3); }
+
+.bl-segment .seg-name {
+  font-weight: 600;
+  font-size: 0.7rem;
+}
+
+.bl-segment .seg-size {
+  opacity: 0.7;
+  font-size: 0.6rem;
+}
+
+.bl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.bl-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.bl-legend-swatch {
+  width: 14px; height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* ═══════ PARALLEL VIZ ═══════ */
+.parallel-viz {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  margin: 2rem 0;
+}
+
+.thread-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+.thread-lane {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.thread-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  width: 70px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.thread-bar-container {
+  flex: 1;
+  height: 32px;
+  background: var(--bg-input);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+}
+
+.thread-block {
+  height: 100%;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  color: rgba(255,255,255,0.8);
+  min-width: 20px;
+  transition: opacity 0.3s;
+}
+
+.thread-block.done { opacity: 0.5; }
+
+/* ═══════ BENCHMARK CHART ═══════ */
+.bench-chart {
+  margin: 2rem 0;
+}
+
+.bench-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.bench-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  width: 160px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.bench-bars {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bench-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 22px;
+}
+
+.bench-bar {
+  height: 100%;
+  border-radius: 3px;
+  position: relative;
+  min-width: 4px;
+  transition: width 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bench-bar.triseek {
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
+  box-shadow: 0 0 10px rgba(34,211,238,0.2);
+}
+
+.bench-bar.rg {
+  background: var(--text-dim);
+  opacity: 0.5;
+}
+
+.bench-bar-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.bench-bar-label.fast { color: var(--accent-cyan); }
+
+.speedup-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  background: rgba(34,211,238,0.1);
+  border: 1px solid var(--accent-cyan-dim);
+  border-radius: 100px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--accent-cyan);
+  flex-shrink: 0;
+}
+
+/* ═══════ TABLE ═══════ */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  margin: 1.5rem 0;
+}
+
+.data-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 2px solid var(--border-bright);
+  color: var(--text-dim);
+  font-weight: 500;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.data-table td {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.data-table tr:hover td {
+  background: rgba(34,211,238,0.03);
+}
+
+.data-table .winner {
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
+/* ═══════ TWO COLUMN ═══════ */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+@media (max-width: 768px) {
+  .two-col { grid-template-columns: 1fr; }
+  .hero-stats { gap: 2rem; }
+}
+
+/* ═══════ ANIMATIONS ═══════ */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ═══════ NAV ═══════ */
+.side-nav {
+  position: fixed;
+  right: 1.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 100;
+}
+
+@media (max-width: 900px) {
+  .side-nav { display: none; }
+}
+
+.side-nav a {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: all 0.3s;
+  display: block;
+}
+
+.side-nav a:hover,
+.side-nav a.active {
+  background: var(--accent-cyan);
+  box-shadow: 0 0 8px var(--accent-cyan);
+  transform: scale(1.3);
+}
+
+/* ═══════ COMPARISON ═══════ */
+.comparison-box {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 1rem;
+  align-items: center;
+  margin: 2rem 0;
+}
+
+.comparison-side {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.comparison-vs {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  padding: 0.5rem;
+}
+
+@media (max-width: 600px) {
+  .comparison-box { grid-template-columns: 1fr; }
+  .comparison-vs { transform: none; }
+}
+
+.big-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.big-number.slow { color: var(--text-dim); }
+.big-number.fast { color: var(--accent-cyan); }
+
+/* ═══════ FOOTER ═══════ */
+footer {
+  padding: 4rem 0 2rem;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  border-top: 1px solid var(--border);
+}
+
+/* posting list animation */
+.posting-demo {
+  margin: 1.5rem 0;
+}
+
+.posting-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.posting-trigram {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--accent-purple);
+  width: 50px;
+  flex-shrink: 0;
+  text-align: center;
+  padding: 0.3rem;
+  background: rgba(167,139,250,0.1);
+  border-radius: 4px;
+  border: 1px solid var(--accent-purple-dim);
+}
+
+.posting-files {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.posting-file {
+  padding: 0.25rem 0.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  transition: all 0.3s;
+}
+
+.posting-file.match {
+  background: rgba(34,211,238,0.12);
+  border-color: var(--accent-cyan-dim);
+  color: var(--accent-cyan);
+}
+
+.posting-file.no-match {
+  background: var(--bg-input);
+  color: var(--text-dim);
+}
+
+.intersection-result {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--bg-input);
+  border-radius: 8px;
+  border: 1px solid var(--accent-green-dim);
+}
+
+.intersection-result .label {
+  font-size: 0.7rem;
+  color: var(--accent-green);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+}
+
+/* ═══════ TOOLTIP ═══════ */
+.info-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  border-radius: 4px;
+  background: rgba(251,146,60,0.1);
+  border: 1px solid var(--accent-orange-dim);
+  color: var(--accent-orange);
+}
+
+/* ═══════ FLOW COMPARISON ═══════ */
+.flow-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin: 2rem 0;
+}
+
+@media (max-width: 768px) {
+  .flow-compare { grid-template-columns: 1fr; }
+}
+
+.flow-column {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  position: relative;
+}
+
+.flow-column.rg-col { border-top: 3px solid var(--text-dim); }
+.flow-column.ts-col { border-top: 3px solid var(--accent-cyan); }
+
+.flow-column-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.flow-column-title .tag {
+  font-size: 0.6rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 100px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.flow-column.rg-col .tag { background: rgba(74,92,116,0.3); color: var(--text-dim); }
+.flow-column.ts-col .tag { background: rgba(34,211,238,0.15); color: var(--accent-cyan); }
+
+.flow-step {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  align-items: flex-start;
+}
+
+.flow-step-num {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.rg-col .flow-step-num { background: rgba(74,92,116,0.2); color: var(--text-dim); border: 1px solid var(--text-dim); }
+.ts-col .flow-step-num { background: rgba(34,211,238,0.1); color: var(--accent-cyan); border: 1px solid var(--accent-cyan-dim); }
+
+.flow-step-text {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.flow-step-text strong { color: var(--text-primary); font-weight: 600; }
+.ts-col .flow-step-text strong { color: var(--accent-cyan); }
+
+.flow-arrow {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  margin: 0.25rem 0;
+  padding-left: 2rem;
+}
+
+.flow-cost {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.rg-col .flow-cost {
+  background: rgba(74,92,116,0.1);
+  border: 1px solid var(--text-dim);
+  color: var(--text-dim);
+}
+
+.ts-col .flow-cost {
+  background: rgba(34,211,238,0.08);
+  border: 1px solid var(--accent-cyan-dim);
+  color: var(--accent-cyan);
+}
+
+.flow-file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+  gap: 3px;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  background: var(--bg-input);
+  border-radius: 6px;
+}
+
+.flow-file-dot {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 3px;
+  transition: all 0.3s;
+}
+
+.flow-file-dot.scanned { background: rgba(248,113,113,0.3); border: 1px solid rgba(248,113,113,0.4); }
+.flow-file-dot.skipped { background: var(--bg-elevated); border: 1px solid var(--border); }
+.flow-file-dot.candidate { background: rgba(34,211,238,0.4); border: 1px solid var(--accent-cyan-dim); }
+.flow-file-dot.hit { background: rgba(52,211,153,0.6); border: 1px solid var(--accent-green-dim); }
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+
+<nav class="side-nav" id="sideNav">
+  <a href="#hero" title="Top"></a>
+  <a href="#trigrams" title="Trigrams"></a>
+  <a href="#rg-vs-triseek" title="rg vs TriSeek"></a>
+  <a href="#indexing" title="Indexing"></a>
+  <a href="#searching" title="Searching"></a>
+  <a href="#binary-format" title="Binary Format"></a>
+  <a href="#parallel" title="Parallelism"></a>
+  <a href="#benchmarks" title="Benchmarks"></a>
+</nav>
+
+<!-- ═══════════════════════════════════════════ HERO ═══════════════════════════════════════════ -->
+<header class="hero" id="hero">
+  <div class="hero-badge"><span class="dot"></span> Trigram-Indexed Code Search</div>
+  <h1><span class="tri">Tri</span><span class="seek">Seek</span></h1>
+  <p class="hero-sub">A code search engine that indexes every 3-byte sequence in your codebase, then answers queries in milliseconds using posting list intersection and parallel verification.</p>
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <div class="value">17.5x</div>
+      <div class="label">Faster than ripgrep</div>
+    </div>
+    <div class="hero-stat">
+      <div class="value">&lt;5ms</div>
+      <div class="label">Index open time</div>
+    </div>
+    <div class="hero-stat">
+      <div class="value">35/39</div>
+      <div class="label">Medium+ repo wins</div>
+    </div>
+  </div>
+  <div class="scroll-indicator">
+    <span>Scroll</span>
+    <div class="arrow"></div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════ TRIGRAMS ═══════════════════════════════════════════ -->
+<section id="trigrams">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-number">01 &mdash; The Core Idea</div>
+      <h2>What is a <span class="highlight">Trigram</span>?</h2>
+      <p class="section-desc">A trigram is a sliding window of 3 consecutive bytes through text. The string <code style="color:var(--accent-cyan)">hello</code> produces: <code style="color:var(--accent-green)">hel</code>, <code style="color:var(--accent-green)">ell</code>, <code style="color:var(--accent-green)">llo</code>. By building an index of which files contain which trigrams, we can dramatically narrow the search space for any query.</p>
+    </div>
+
+    <div class="trigram-demo reveal">
+      <label class="trigram-label">Type any text to see its trigrams extracted in real-time</label>
+      <input type="text" class="trigram-input" id="trigramInput" placeholder='Try: HttpResponse or "fn main"' value="search" autocomplete="off" spellcheck="false">
+
+      <div class="trigram-output">
+        <div class="trigram-label" style="margin-top:1.25rem">Extracted Trigrams <span id="trigramCount" style="color:var(--accent-cyan)"></span></div>
+        <div class="trigram-chips" id="trigramChips"></div>
+      </div>
+
+      <div class="sliding-window" id="slidingWindow">
+        <div class="trigram-label">Sliding Window Visualization</div>
+        <div class="sw-chars" id="swChars"></div>
+        <div class="sw-controls">
+          <button class="sw-btn" id="swPrev" disabled>&larr; Prev</button>
+          <div class="sw-current" id="swCurrent">---</div>
+          <button class="sw-btn" id="swNext">Next &rarr;</button>
+          <button class="sw-btn" id="swPlay">&#9654; Play</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="two-col reveal">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon cyan">?</div>
+          <h3>Why 3 bytes?</h3>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.95rem">
+          With 3 bytes we get 16.7 million possible trigrams (256&sup3;). This is selective enough to narrow search candidates dramatically, yet small enough that every reasonable search query of 3+ characters produces at least one trigram to look up. A bigram (2-byte) index would be too broad; a 4-gram too sparse.
+        </p>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon green">&#x21C4;</div>
+          <h3>Trigram as u32</h3>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.95rem">
+          Each trigram is encoded as a <code style="color:var(--accent-orange)">u32</code> integer: <code style="color:var(--accent-cyan)">byte[0] | (byte[1] &lt;&lt; 8) | (byte[2] &lt;&lt; 16)</code>. This compact representation makes hash lookups and comparisons blazing fast &mdash; just integer operations, no string allocation.
+        </p>
+        <div class="code-block" style="margin-top:1rem">
+          <div class="toolbar"><div class="dots"><span></span><span></span><span></span></div> trigram encoding</div>
+          <pre><span class="cmt">// "hel" → trigram u32</span>
+<span class="kw">let</span> t = <span class="num">0x68</span>         <span class="cmt">// 'h'</span>
+       | (<span class="num">0x65</span> &lt;&lt; <span class="num">8</span>)  <span class="cmt">// 'e'</span>
+       | (<span class="num">0x6C</span> &lt;&lt; <span class="num">16</span>); <span class="cmt">// 'l'</span>
+<span class="cmt">// t = 7104872</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ RG VS TRISEEK ═══════════════════════════════════════════ -->
+<section id="rg-vs-triseek">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-number">02 &mdash; The Key Difference</div>
+      <h2><span class="highlight">ripgrep</span> vs TriSeek</h2>
+      <p class="section-desc">ripgrep is the gold standard for grep. It's incredibly fast at scanning files &mdash; but it still scans <em>every single file</em>, every time. TriSeek takes a fundamentally different approach: build an index once, then answer queries by looking up which files <em>could</em> match before reading any of them.</p>
+    </div>
+
+    <div class="flow-compare reveal">
+      <!-- ripgrep column -->
+      <div class="flow-column rg-col">
+        <div class="flow-column-title">
+          ripgrep <span class="tag">brute force</span>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-step-num">1</div>
+          <div class="flow-step-text"><strong>Walk every file</strong> in the repository, respecting .gitignore</div>
+        </div>
+        <div class="flow-arrow">&darr;</div>
+
+        <div class="flow-step">
+          <div class="flow-step-num">2</div>
+          <div class="flow-step-text"><strong>Read each file</strong> from disk into memory (or mmap it)</div>
+        </div>
+        <div class="flow-arrow">&darr;</div>
+
+        <div class="flow-step">
+          <div class="flow-step-num">3</div>
+          <div class="flow-step-text"><strong>Run the regex</strong> / literal matcher against every byte of every file using SIMD-accelerated search</div>
+        </div>
+        <div class="flow-arrow">&darr;</div>
+
+        <div class="flow-step">
+          <div class="flow-step-num">4</div>
+          <div class="flow-step-text"><strong>Output matches</strong> as they're found</div>
+        </div>
+
+        <div style="margin:1rem 0 0.5rem">
+          <div class="trigram-label">Files touched for query "HttpResponse" in Kubernetes (28K files)</div>
+          <div class="flow-file-grid">
+            <div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div>
+            <div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div>
+            <div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div>
+            <div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div>
+            <div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div>
+            <div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div>
+            <div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div>
+            <div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div><div class="flow-file-dot scanned"></div>
+          </div>
+          <p style="font-size:0.75rem; color:var(--accent-red); margin-top:0.3rem">Every dot = a file read from disk. All 28,132 files scanned.</p>
+        </div>
+
+        <div class="flow-cost">~500 ms per query</div>
+      </div>
+
+      <!-- TriSeek column -->
+      <div class="flow-column ts-col">
+        <div class="flow-column-title">
+          TriSeek <span class="tag">indexed lookup</span>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-step-num">1</div>
+          <div class="flow-step-text"><strong>Extract trigrams</strong> from query: "Htt", "ttp", "tpR", "pRe", "Res", "esp", "spo", "pon", "ons", "nse"</div>
+        </div>
+        <div class="flow-arrow">&darr;</div>
+
+        <div class="flow-step">
+          <div class="flow-step-num">2</div>
+          <div class="flow-step-text"><strong>Look up posting lists</strong> &mdash; instant HashMap lookups from mmap'd index. Zero disk I/O.</div>
+        </div>
+        <div class="flow-arrow">&darr;</div>
+
+        <div class="flow-step">
+          <div class="flow-step-num">3</div>
+          <div class="flow-step-text"><strong>Intersect posting lists</strong> using sorted merge. Only files containing ALL trigrams survive.</div>
+        </div>
+        <div class="flow-arrow">&darr;</div>
+
+        <div class="flow-step">
+          <div class="flow-step-num">4</div>
+          <div class="flow-step-text"><strong>Verify only candidates</strong> &mdash; read just the handful of surviving files, in parallel across all CPU cores.</div>
+        </div>
+
+        <div style="margin:1rem 0 0.5rem">
+          <div class="trigram-label">Files touched for query "HttpResponse" in Kubernetes (28K files)</div>
+          <div class="flow-file-grid">
+            <div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot candidate"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div>
+            <div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div>
+            <div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot hit"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div>
+            <div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div>
+            <div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot candidate"></div><div class="flow-file-dot skipped"></div>
+            <div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot hit"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div>
+            <div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div>
+            <div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot hit"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div><div class="flow-file-dot skipped"></div>
+          </div>
+          <p style="font-size:0.75rem; color:var(--accent-cyan); margin-top:0.3rem">Only 5 files read from disk. 28,127 files never touched.</p>
+        </div>
+
+        <div class="flow-cost">~64 ms per query</div>
+      </div>
+    </div>
+
+    <!-- The insight -->
+    <div class="card reveal">
+      <div class="card-header">
+        <div class="card-icon cyan">&#x1F4A1;</div>
+        <h3>The Fundamental Tradeoff</h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.95rem; margin-bottom:1rem">
+        ripgrep pays a <strong style="color:var(--accent-red)">linear cost</strong> proportional to repo size on every query &mdash; it must touch every file. TriSeek pays an <strong style="color:var(--accent-cyan)">upfront indexing cost</strong> once, then each query cost is proportional to the <em>number of matching files</em>, not the total repo size. The larger the codebase, the bigger the advantage.
+      </p>
+
+      <div style="display:flex; gap:2rem; flex-wrap:wrap; margin-top:1rem">
+        <div>
+          <div class="trigram-label">ripgrep query cost</div>
+          <p style="font-family:'JetBrains Mono',monospace; font-size:0.9rem; color:var(--text-dim); margin-top:0.3rem">O(total files &times; avg file size)</p>
+        </div>
+        <div>
+          <div class="trigram-label">TriSeek query cost</div>
+          <p style="font-family:'JetBrains Mono',monospace; font-size:0.9rem; color:var(--accent-cyan); margin-top:0.3rem">O(posting list size + candidate files)</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- When rg wins -->
+    <div class="two-col reveal">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon green">&#x2713;</div>
+          <h3>When TriSeek wins</h3>
+        </div>
+        <ul style="color:var(--text-secondary); font-size:0.9rem; list-style:none; padding:0">
+          <li style="padding:0.3rem 0">&#x2192; Medium/large repos (1K+ files)</li>
+          <li style="padding:0.3rem 0">&#x2192; Selective queries with literal strings</li>
+          <li style="padding:0.3rem 0">&#x2192; Session workloads (many queries, index stays hot)</li>
+          <li style="padding:0.3rem 0">&#x2192; Agent workflows (Codex, Claude) doing 20+ searches</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon orange">&#x26A0;</div>
+          <h3>When ripgrep wins</h3>
+        </div>
+        <ul style="color:var(--text-secondary); font-size:0.9rem; list-style:none; padding:0">
+          <li style="padding:0.3rem 0">&#x2192; Small repos (page cache makes brute force free)</li>
+          <li style="padding:0.3rem 0">&#x2192; Pure regex with no extractable literals (<code style="color:var(--accent-orange)">\d{3}-\d{4}</code>)</li>
+          <li style="padding:0.3rem 0">&#x2192; One-off queries (no index yet built)</li>
+          <li style="padding:0.3rem 0">&#x2192; Very high match-count patterns (most files match)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ INDEXING ═══════════════════════════════════════════ -->
+<section id="indexing">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-number">03 &mdash; Building the Index</div>
+      <h2>How <span class="highlight">Indexing</span> Works</h2>
+      <p class="section-desc">TriSeek walks your repository, extracts trigrams from every file, and builds an inverted index &mdash; a map from each trigram to the set of files containing it.</p>
+    </div>
+
+    <div class="pipeline reveal">
+      <!-- Step 1 -->
+      <div class="pipeline-step">
+        <div class="pipeline-connector">
+          <div class="pipeline-dot cyan">1</div>
+          <div class="pipeline-line"></div>
+        </div>
+        <div class="pipeline-content">
+          <h3>Walk Repository</h3>
+          <p>Using the <code style="color:var(--accent-orange)">ignore</code> crate's parallel walker, all files are discovered respecting <code>.gitignore</code> rules. Threads are capped at <code>min(cores, 8)</code> for optimal I/O throughput.</p>
+          <div class="code-block" style="margin-top:0.75rem">
+            <div class="toolbar"><div class="dots"><span></span><span></span><span></span></div> walker.rs</div>
+            <pre><span class="kw">fn</span> <span class="fn">walk_repository_parallel</span>(root: &amp;<span class="type">Path</span>) {
+    WalkBuilder::<span class="fn">new</span>(root)
+        .<span class="fn">threads</span>(<span class="fn">num_cpus::get</span>().<span class="fn">min</span>(<span class="num">8</span>))
+        .<span class="fn">build_parallel</span>()
+        .<span class="fn">run</span>(|| { <span class="cmt">/* process each file */</span> });
+}</pre>
+          </div>
+        </div>
+      </div>
+      <!-- Step 2 -->
+      <div class="pipeline-step">
+        <div class="pipeline-connector">
+          <div class="pipeline-dot green">2</div>
+          <div class="pipeline-line"></div>
+        </div>
+        <div class="pipeline-content">
+          <h3>Extract Trigrams</h3>
+          <p>For each file, a sliding window of 3 bytes produces all trigrams. These are collected into a <code style="color:var(--accent-orange)">HashSet&lt;u32&gt;</code> per file (deduplication &mdash; we only need to know <em>if</em> a trigram appears, not how many times).</p>
+          <div class="code-block" style="margin-top:0.75rem">
+            <div class="toolbar"><div class="dots"><span></span><span></span><span></span></div> trigram extraction</div>
+            <pre><span class="kw">for</span> window <span class="kw">in</span> content.<span class="fn">windows</span>(<span class="num">3</span>) {
+    <span class="kw">let</span> tri = window[<span class="num">0</span>] <span class="kw">as</span> <span class="type">u32</span>
+           | (window[<span class="num">1</span>] <span class="kw">as</span> <span class="type">u32</span>) &lt;&lt; <span class="num">8</span>
+           | (window[<span class="num">2</span>] <span class="kw">as</span> <span class="type">u32</span>) &lt;&lt; <span class="num">16</span>;
+    trigrams.<span class="fn">insert</span>(tri);
+}</pre>
+          </div>
+        </div>
+      </div>
+      <!-- Step 3 -->
+      <div class="pipeline-step">
+        <div class="pipeline-connector">
+          <div class="pipeline-dot orange">3</div>
+          <div class="pipeline-line"></div>
+        </div>
+        <div class="pipeline-content">
+          <h3>Build Posting Lists</h3>
+          <p>The inverted index maps each trigram to a sorted list of document IDs. If trigram <code style="color:var(--accent-purple)">"htt"</code> appears in files 4, 17, and 203, its posting list is <code style="color:var(--accent-cyan)">[4, 17, 203]</code>.</p>
+          <div class="posting-demo">
+            <div class="posting-row">
+              <div class="posting-trigram">htt</div>
+              <div class="posting-files">
+                <div class="posting-file match">server.rs</div>
+                <div class="posting-file match">client.rs</div>
+                <div class="posting-file match">proxy.rs</div>
+              </div>
+            </div>
+            <div class="posting-row">
+              <div class="posting-trigram">ttp</div>
+              <div class="posting-files">
+                <div class="posting-file match">server.rs</div>
+                <div class="posting-file match">client.rs</div>
+                <div class="posting-file no-match">config.rs</div>
+                <div class="posting-file match">proxy.rs</div>
+              </div>
+            </div>
+            <div class="posting-row">
+              <div class="posting-trigram">tps</div>
+              <div class="posting-files">
+                <div class="posting-file match">server.rs</div>
+                <div class="posting-file no-match">client.rs</div>
+                <div class="posting-file match">proxy.rs</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Step 4 -->
+      <div class="pipeline-step">
+        <div class="pipeline-connector">
+          <div class="pipeline-dot purple">4</div>
+        </div>
+        <div class="pipeline-content">
+          <h3>Write Binary Index</h3>
+          <p>The in-memory index is persisted as <code style="color:var(--accent-orange)">fast.idx</code> &mdash; a custom flat binary format designed for instant <code>mmap</code> loading. No deserialization needed; posting lists are read directly from mapped memory.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ SEARCHING ═══════════════════════════════════════════ -->
+<section id="searching">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-number">04 &mdash; Query Execution</div>
+      <h2>How <span class="highlight">Search</span> Works</h2>
+      <p class="section-desc">When you search for <code style="color:var(--accent-cyan)">https</code>, TriSeek extracts its trigrams, intersects the posting lists to find candidate files, then verifies matches in parallel.</p>
+    </div>
+
+    <div class="card reveal">
+      <h3>Step-by-Step: Searching for "https"</h3>
+
+      <div style="margin:1.5rem 0">
+        <div class="trigram-label">1. Extract query trigrams</div>
+        <div class="trigram-chips" style="margin-top:0.5rem">
+          <div class="trigram-chip">htt</div>
+          <div class="trigram-chip">ttp</div>
+          <div class="trigram-chip">tps</div>
+        </div>
+      </div>
+
+      <div style="margin:1.5rem 0">
+        <div class="trigram-label">2. Look up posting lists</div>
+        <div class="posting-demo" style="margin-top:0.5rem">
+          <div class="posting-row">
+            <div class="posting-trigram">htt</div>
+            <div class="posting-files">
+              <div class="posting-file match">2</div>
+              <div class="posting-file match">7</div>
+              <div class="posting-file match">15</div>
+              <div class="posting-file match">23</div>
+              <div class="posting-file match">41</div>
+            </div>
+          </div>
+          <div class="posting-row">
+            <div class="posting-trigram">ttp</div>
+            <div class="posting-files">
+              <div class="posting-file match">2</div>
+              <div class="posting-file no-match">5</div>
+              <div class="posting-file match">7</div>
+              <div class="posting-file match">15</div>
+              <div class="posting-file match">23</div>
+              <div class="posting-file no-match">30</div>
+              <div class="posting-file match">41</div>
+            </div>
+          </div>
+          <div class="posting-row">
+            <div class="posting-trigram">tps</div>
+            <div class="posting-files">
+              <div class="posting-file match">2</div>
+              <div class="posting-file match">15</div>
+              <div class="posting-file match">23</div>
+              <div class="posting-file match">41</div>
+              <div class="posting-file no-match">50</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin:1.5rem 0">
+        <div class="trigram-label">3. Sorted intersection &mdash; O(n+m) merge</div>
+        <p style="color:var(--text-secondary); font-size:0.9rem; margin:0.5rem 0">Walk all lists simultaneously with pointers. Only advance the pointer on the smallest value. When all pointers agree, that's a candidate.</p>
+        <div class="intersection-result">
+          <div class="label">Candidates (files containing ALL trigrams)</div>
+          <div class="trigram-chips" style="margin-top:0.5rem">
+            <div class="trigram-chip" style="border-color:var(--accent-green-dim); color:var(--accent-green); background:rgba(52,211,153,0.08)">File 2</div>
+            <div class="trigram-chip" style="border-color:var(--accent-green-dim); color:var(--accent-green); background:rgba(52,211,153,0.08)">File 15</div>
+            <div class="trigram-chip" style="border-color:var(--accent-green-dim); color:var(--accent-green); background:rgba(52,211,153,0.08)">File 23</div>
+            <div class="trigram-chip" style="border-color:var(--accent-green-dim); color:var(--accent-green); background:rgba(52,211,153,0.08)">File 41</div>
+          </div>
+          <p style="color:var(--text-dim); font-size:0.8rem; margin-top:0.75rem">From 28,000 files in the repo → only 4 candidates to verify. That's a 7,000x reduction.</p>
+        </div>
+      </div>
+
+      <div style="margin:1.5rem 0">
+        <div class="trigram-label">4. Parallel verification with Rayon</div>
+        <p style="color:var(--text-secondary); font-size:0.9rem; margin:0.5rem 0">Read each candidate file and run the actual regex/literal match. This happens across all CPU cores simultaneously.</p>
+      </div>
+    </div>
+
+    <div class="code-block reveal">
+      <div class="toolbar"><div class="dots"><span></span><span></span><span></span></div> engine.rs &mdash; sorted intersection</div>
+      <pre><span class="kw">fn</span> <span class="fn">sorted_intersect</span>(a: &amp;[<span class="type">u32</span>], b: &amp;[<span class="type">u32</span>]) -> <span class="type">Vec</span>&lt;<span class="type">u32</span>&gt; {
+    <span class="kw">let</span> (<span class="kw">mut</span> i, <span class="kw">mut</span> j) = (<span class="num">0</span>, <span class="num">0</span>);
+    <span class="kw">let</span> <span class="kw">mut</span> result = <span class="type">Vec</span>::<span class="fn">new</span>();
+    <span class="kw">while</span> i &lt; a.<span class="fn">len</span>() && j &lt; b.<span class="fn">len</span>() {
+        <span class="kw">match</span> a[i].<span class="fn">cmp</span>(&amp;b[j]) {
+            <span class="type">Equal</span>   => { result.<span class="fn">push</span>(a[i]); i += <span class="num">1</span>; j += <span class="num">1</span>; }
+            <span class="type">Less</span>    => i += <span class="num">1</span>,
+            <span class="type">Greater</span> => j += <span class="num">1</span>,
+        }
+    }
+    result
+}</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ BINARY FORMAT ═══════════════════════════════════════════ -->
+<section id="binary-format">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-number">05 &mdash; The Fast Index</div>
+      <h2>Binary <span class="highlight">Format</span> Layout</h2>
+      <p class="section-desc">The <code style="color:var(--accent-orange)">fast.idx</code> file is a flat binary format designed for <code>mmap</code>. No parsing, no deserialization &mdash; the OS maps the file into memory and we read posting lists as raw <code>u32</code> slices directly from the mapped region.</p>
+    </div>
+
+    <div class="binary-layout reveal">
+      <div class="trigram-label" style="margin-bottom:1rem">fast.idx memory layout</div>
+      <div class="bl-bar">
+        <div class="bl-segment" style="flex:0.5; background:rgba(167,139,250,0.25); color:var(--accent-purple);">
+          <span class="seg-name">Header</span>
+          <span class="seg-size">96 B</span>
+        </div>
+        <div class="bl-segment" style="flex:2; background:rgba(34,211,238,0.2); color:var(--accent-cyan);">
+          <span class="seg-name">Content Trigram Table</span>
+          <span class="seg-size">12 B &times; N</span>
+        </div>
+        <div class="bl-segment" style="flex:5; background:rgba(34,211,238,0.12); color:var(--accent-cyan);">
+          <span class="seg-name">Content Postings</span>
+          <span class="seg-size">4 B &times; total</span>
+        </div>
+        <div class="bl-segment" style="flex:1.5; background:rgba(52,211,153,0.2); color:var(--accent-green);">
+          <span class="seg-name">Path Trigram Table</span>
+          <span class="seg-size">12 B &times; M</span>
+        </div>
+        <div class="bl-segment" style="flex:3; background:rgba(52,211,153,0.12); color:var(--accent-green);">
+          <span class="seg-name">Path Postings</span>
+          <span class="seg-size">4 B &times; total</span>
+        </div>
+        <div class="bl-segment" style="flex:2; background:rgba(251,146,60,0.2); color:var(--accent-orange);">
+          <span class="seg-name">Doc Table</span>
+          <span class="seg-size">46 B &times; docs</span>
+        </div>
+        <div class="bl-segment" style="flex:2; background:rgba(251,146,60,0.12); color:var(--accent-orange);">
+          <span class="seg-name">String Pool</span>
+          <span class="seg-size">variable</span>
+        </div>
+      </div>
+      <div class="bl-legend">
+        <div class="bl-legend-item"><div class="bl-legend-swatch" style="background:rgba(167,139,250,0.4)"></div> Header (magic, version, section offsets)</div>
+        <div class="bl-legend-item"><div class="bl-legend-swatch" style="background:rgba(34,211,238,0.3)"></div> Content trigrams + postings</div>
+        <div class="bl-legend-item"><div class="bl-legend-swatch" style="background:rgba(52,211,153,0.3)"></div> Path trigrams + postings</div>
+        <div class="bl-legend-item"><div class="bl-legend-swatch" style="background:rgba(251,146,60,0.3)"></div> Document metadata + strings</div>
+      </div>
+    </div>
+
+    <div class="comparison-box reveal">
+      <div class="comparison-side">
+        <div class="info-tag" style="margin-bottom:0.75rem">Before (bincode)</div>
+        <div class="big-number slow">~600ms</div>
+        <p style="color:var(--text-dim); font-size:0.8rem; margin-top:0.5rem">Index load time<br>Deserialize + allocate</p>
+      </div>
+      <div class="comparison-vs">vs</div>
+      <div class="comparison-side" style="border-color:var(--accent-cyan-dim)">
+        <div class="info-tag" style="margin-bottom:0.75rem; background:rgba(34,211,238,0.1); border-color:var(--accent-cyan-dim); color:var(--accent-cyan)">After (mmap)</div>
+        <div class="big-number fast">&lt;5ms</div>
+        <p style="color:var(--text-dim); font-size:0.8rem; margin-top:0.5rem">Index load time<br>Zero-copy mmap</p>
+      </div>
+    </div>
+
+    <div class="card reveal">
+      <div class="card-header">
+        <div class="card-icon orange">&#x26A1;</div>
+        <h3>Why mmap matters</h3>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.95rem; margin-bottom:1rem">
+        Traditional deserialization reads the entire file into memory, allocates new data structures, and copies data. With <code>mmap</code>, the operating system maps the file directly into virtual memory. Reading a posting list is just casting a pointer &mdash; the data stays on disk until accessed, and the OS manages caching.
+      </p>
+      <div class="code-block">
+        <div class="toolbar"><div class="dots"><span></span><span></span><span></span></div> fastindex.rs &mdash; zero-copy posting list read</div>
+        <pre><span class="cmt">// Posting list is a raw slice of u32 from mapped memory</span>
+<span class="kw">let</span> ptr = mmap[offset..offset + count * <span class="num">4</span>].<span class="fn">as_ptr</span>() <span class="kw">as</span> *<span class="kw">const</span> <span class="type">u32</span>;
+<span class="kw">let</span> postings = <span class="kw">unsafe</span> {
+    <span class="fn">slice::from_raw_parts</span>(ptr, count)
+};
+<span class="cmt">// No allocation. No copy. Just a pointer cast.</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ PARALLEL ═══════════════════════════════════════════ -->
+<section id="parallel">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-number">06 &mdash; Parallel Verification</div>
+      <h2><span class="highlight">Rayon</span> Parallelism</h2>
+      <p class="section-desc">After intersection narrows candidates to a handful of files, TriSeek verifies each one in parallel across all CPU cores using Rayon's work-stealing thread pool.</p>
+    </div>
+
+    <div class="parallel-viz reveal" id="parallelViz">
+      <div class="trigram-label">Parallel file verification across 8 threads</div>
+      <div class="thread-lanes" id="threadLanes">
+        <!-- filled by JS -->
+      </div>
+      <div style="display:flex; align-items:center; gap:1rem; margin-top:1rem;">
+        <button class="sw-btn" id="parallelPlay" style="padding:0.5rem 1.5rem">&#9654; Animate</button>
+        <span style="font-size:0.8rem; color:var(--text-dim)" id="parallelStatus">Click to visualize parallel verification</span>
+      </div>
+    </div>
+
+    <div class="code-block reveal">
+      <div class="toolbar"><div class="dots"><span></span><span></span><span></span></div> engine.rs &mdash; parallel verification</div>
+      <pre><span class="kw">use</span> rayon::prelude::*;
+
+candidates.<span class="fn">par_iter</span>().<span class="fn">for_each</span>(|(doc_id, path, rel)| {
+    <span class="kw">if</span> done.<span class="fn">load</span>(<span class="type">Ordering::Relaxed</span>) { <span class="kw">return</span>; }
+
+    <span class="cmt">// Read file (mmap for large, Vec for small)</span>
+    <span class="kw">let</span> bytes = <span class="fn">read_candidate</span>(&amp;path);
+
+    <span class="cmt">// Run actual pattern match</span>
+    <span class="kw">let</span> hits = <span class="fn">match_in_bytes</span>(&amp;bytes, &amp;pattern);
+
+    <span class="kw">if</span> !hits.<span class="fn">is_empty</span>() {
+        results.<span class="fn">lock</span>().<span class="fn">extend</span>(hits);
+        <span class="kw">let</span> count = total_found.<span class="fn">fetch_add</span>(
+            hits.<span class="fn">len</span>(), <span class="type">Ordering::Relaxed</span>
+        );
+        <span class="kw">if</span> count >= max_results {
+            done.<span class="fn">store</span>(<span class="kw">true</span>, <span class="type">Ordering::Relaxed</span>);
+        }
+    }
+});</pre>
+    </div>
+
+    <div class="two-col reveal">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon green">&#x1F3AF;</div>
+          <h3>Early Termination</h3>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.95rem">
+          An <code>AtomicBool</code> flag signals all threads to stop once we have enough results. This prevents unnecessary I/O when only the first N matches are needed &mdash; common in editor integrations.
+        </p>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon purple">&#x1F4CB;</div>
+          <h3>Work Stealing</h3>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.95rem">
+          Rayon's work-stealing scheduler automatically balances load. If one thread finishes its files quickly (small files), it steals work from threads with larger files. No manual balancing needed.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ BENCHMARKS ═══════════════════════════════════════════ -->
+<section id="benchmarks">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-number">07 &mdash; Results</div>
+      <h2><span class="highlight">Benchmark</span> Results</h2>
+      <p class="section-desc">Tested against ripgrep on 5 real repositories: serde (339 files), ripgrep (207 files), Kubernetes (28K files), Linux kernel (93K files), and Rust compiler (58K files). TriSeek wins 35 of 39 single-query benchmarks on medium+ repos (where indexed search is designed to win), and 8 of 10 session benchmarks across all repo sizes.</p>
+    </div>
+
+    <div class="card reveal" style="border-color:var(--accent-orange-dim); background:rgba(251,146,60,0.03)">
+      <p style="color:var(--accent-orange); font-family:'JetBrains Mono',monospace; font-size:0.8rem; margin-bottom:0.3rem">Note</p>
+      <p style="color:var(--text-secondary); font-size:0.9rem">The charts below show results for <strong style="color:var(--text-primary)">medium and large repositories only</strong> (Kubernetes, Linux, Rust). Small repos (serde, ripgrep) are excluded from the charts because TriSeek's adaptive router intentionally routes them to <code style="color:var(--accent-orange)">rg</code> &mdash; at that scale the OS page cache makes brute-force search effectively free, and index overhead adds no value. Session benchmarks include all 5 repos.</p>
+    </div>
+
+    <!-- Kubernetes -->
+    <div class="card reveal">
+      <h3 style="margin-bottom:0.25rem">Kubernetes <span style="color:var(--text-dim); font-weight:400; font-size:0.9rem">&mdash; 28,132 files, 257 MB</span></h3>
+      <div class="bench-chart" id="benchKubernetes">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <!-- Linux -->
+    <div class="card reveal">
+      <h3 style="margin-bottom:0.25rem">Linux Kernel <span style="color:var(--text-dim); font-weight:400; font-size:0.9rem">&mdash; 92,916 files, 1.5 GB</span></h3>
+      <div class="bench-chart" id="benchLinux">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <!-- Session benchmarks -->
+    <div class="card reveal">
+      <h3>Session Benchmarks <span style="color:var(--text-dim); font-weight:400; font-size:0.9rem">&mdash; 20 sequential queries (agent workload)</span></h3>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Repository</th>
+            <th>TriSeek p50</th>
+            <th>rg p50</th>
+            <th>Speedup</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>serde (small)</td>
+            <td class="winner">44 ms</td>
+            <td>103 ms</td>
+            <td><span class="speedup-badge">2.4x</span></td>
+          </tr>
+          <tr>
+            <td>kubernetes (medium)</td>
+            <td class="winner">310 ms</td>
+            <td>2,725 ms</td>
+            <td><span class="speedup-badge">8.8x</span></td>
+          </tr>
+          <tr>
+            <td>linux (large)</td>
+            <td class="winner">564 ms</td>
+            <td>9,878 ms</td>
+            <td><span class="speedup-badge">17.5x</span></td>
+          </tr>
+          <tr>
+            <td>rust (large)</td>
+            <td class="winner">330 ms</td>
+            <td>5,226 ms</td>
+            <td><span class="speedup-badge">15.8x</span></td>
+          </tr>
+          <tr>
+            <td>ripgrep (small)</td>
+            <td class="winner">43 ms</td>
+            <td>91 ms</td>
+            <td><span class="speedup-badge">2.1x</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Summary -->
+    <div class="two-col reveal">
+      <div class="card" style="text-align:center">
+        <div class="big-number fast" style="font-size:4rem">35/39</div>
+        <p style="color:var(--text-secondary); margin-top:0.5rem">medium+ repo benchmarks won</p>
+        <p style="color:var(--text-dim); font-size:0.8rem; margin-top:0.3rem">Small repos route to rg by design. Lost 4: path-only queries on Linux where rg's file walk is already fast.</p>
+      </div>
+      <div class="card" style="text-align:center">
+        <div class="big-number fast" style="font-size:4rem">17.5x</div>
+        <p style="color:var(--text-secondary); margin-top:0.5rem">peak speedup over ripgrep</p>
+        <p style="color:var(--text-dim); font-size:0.8rem; margin-top:0.3rem">Linux kernel, 20-query session workload</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="padding: 3rem 0 0;">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-number">References &amp; Prior Art</div>
+      <h2 style="font-size:1.5rem; margin-bottom:1.5rem"><span class="highlight">Standing</span> on Shoulders</h2>
+    </div>
+    <div class="card reveal">
+      <p style="color:var(--text-secondary); font-size:0.95rem; margin-bottom:1.25rem">
+        TriSeek's trigram indexing approach builds on decades of research in string matching and code search:
+      </p>
+      <div style="display:flex; flex-direction:column; gap:1.25rem;">
+
+        <div style="display:flex; gap:1rem; align-items:flex-start;">
+          <div class="card-icon purple" style="width:32px;height:32px;font-size:0.9rem;border-radius:6px;">1</div>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; margin-bottom:0.2rem">Ukkonen, "Approximate string-matching with q-grams and maximal matches" (1992)</p>
+            <p style="color:var(--text-dim); font-size:0.85rem">The theoretical foundation for q-gram (n-gram) based string matching. Established that decomposing strings into overlapping q-length substrings enables efficient approximate and exact matching through set intersection. TriSeek's trigram decomposition (q=3) directly descends from this framework.</p>
+            <p style="color:var(--text-dim); font-size:0.75rem; font-style:italic; margin-top:0.25rem">Theoretical Computer Science, Volume 92, Issue 1, pp. 191&ndash;211</p>
+            <p style="margin-top:0.3rem"><a href="https://www.sciencedirect.com/science/article/pii/0304397592901434" style="color:var(--accent-purple); font-family:'JetBrains Mono',monospace; font-size:0.8rem; text-decoration:none; border-bottom:1px dashed var(--accent-purple-dim);">sciencedirect.com/science/article/pii/0304397592901434</a></p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:1rem; align-items:flex-start;">
+          <div class="card-icon cyan" style="width:32px;height:32px;font-size:0.9rem;border-radius:6px;">2</div>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; margin-bottom:0.2rem">Manber &amp; Wu, "GLIMPSE: A Tool to Search Through Entire File Systems" (1994)</p>
+            <p style="color:var(--text-dim); font-size:0.85rem">The first practical system to use an inverted index over character n-grams for searching entire file systems. GLIMPSE demonstrated the core tradeoff TriSeek exploits: a small index enables dramatic pruning of the search space, making queries sub-linear in corpus size.</p>
+            <p style="color:var(--text-dim); font-size:0.75rem; font-style:italic; margin-top:0.25rem">USENIX Winter Technical Conference, 1994</p>
+            <p style="margin-top:0.3rem"><a href="https://www.usenix.org/conference/usenix-winter-1994-technical-conference/glimpse-tool-search-through-entire-file-systems" style="color:var(--accent-cyan); font-family:'JetBrains Mono',monospace; font-size:0.8rem; text-decoration:none; border-bottom:1px dashed var(--accent-cyan-dim);">usenix.org/.../glimpse-tool-search-through-entire-file-systems</a></p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:1rem; align-items:flex-start;">
+          <div class="card-icon green" style="width:32px;height:32px;font-size:0.9rem;border-radius:6px;">3</div>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; margin-bottom:0.2rem">Navarro &amp; Baeza-Yates, "A Practical q-Gram Index for Text Retrieval Allowing Errors" (1998)</p>
+            <p style="color:var(--text-dim); font-size:0.85rem">Extended q-gram indexing to support approximate matching and established cost models for choosing optimal q values. Their analysis of posting list intersection costs informed TriSeek's sorted-merge intersection strategy and the choice of q=3 as the selectivity sweet spot.</p>
+            <p style="color:var(--text-dim); font-size:0.75rem; font-style:italic; margin-top:0.25rem">CLEI Electronic Journal, Volume 1, Number 2, 1998</p>
+            <p style="margin-top:0.3rem"><a href="https://www.clei.org/cleiej/index.php/cleiej/article/view/379" style="color:var(--accent-green); font-family:'JetBrains Mono',monospace; font-size:0.8rem; text-decoration:none; border-bottom:1px dashed var(--accent-green-dim);">clei.org/cleiej/.../article/view/379</a></p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:1rem; align-items:flex-start;">
+          <div class="card-icon orange" style="width:32px;height:32px;font-size:0.9rem;border-radius:6px;">4</div>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; margin-bottom:0.2rem">Russ Cox, "Regular Expression Matching with a Trigram Index" (2012)</p>
+            <p style="color:var(--text-dim); font-size:0.85rem">The engineering blueprint for applying trigram indexing to code search at scale. Described how Google Code Search extracted trigram sets from regex queries, intersected posting lists to find candidate files, and verified matches with full regex evaluation. This is the direct algorithmic ancestor of TriSeek's search pipeline.</p>
+            <p style="margin-top:0.3rem"><a href="https://swtch.com/~rsc/regexp/regexp4.html" style="color:var(--accent-orange); font-family:'JetBrains Mono',monospace; font-size:0.8rem; text-decoration:none; border-bottom:1px dashed var(--accent-orange-dim);">swtch.com/~rsc/regexp/regexp4.html</a></p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:1rem; align-items:flex-start;">
+          <div class="card-icon cyan" style="width:32px;height:32px;font-size:0.9rem;border-radius:6px;">5</div>
+          <div>
+            <p style="color:var(--text-primary); font-weight:600; margin-bottom:0.2rem">GitHub, "The technology behind GitHub's new code search" (2023)</p>
+            <p style="color:var(--text-dim); font-size:0.85rem">GitHub's engineering blog describing their Blackbird code search system, which uses n-gram indexing with content-defined chunking, delta-encoded posting lists, and a Rust-based query engine. Demonstrated that trigram-style indexing remains the state of the art for code search even at the scale of 200M+ repositories.</p>
+            <p style="margin-top:0.3rem"><a href="https://github.blog/2023-02-06-the-technology-behind-githubs-new-code-search/" style="color:var(--accent-cyan); font-family:'JetBrains Mono',monospace; font-size:0.8rem; text-decoration:none; border-bottom:1px dashed var(--accent-cyan-dim);">github.blog/2023-02-06-the-technology-behind-githubs-new-code-search</a></p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>TriSeek &mdash; Trigram-Indexed Code Search Engine</p>
+    <p style="margin-top:0.3rem; color:var(--text-dim)">Built with Rust. Benchmarked against ripgrep on macOS, 16 cores.</p>
+  </div>
+</footer>
+
+<script>
+// ═══════ TRIGRAM DEMO ═══════
+const trigramInput = document.getElementById('trigramInput');
+const trigramChips = document.getElementById('trigramChips');
+const trigramCount = document.getElementById('trigramCount');
+const swChars = document.getElementById('swChars');
+const swCurrent = document.getElementById('swCurrent');
+const swPrev = document.getElementById('swPrev');
+const swNext = document.getElementById('swNext');
+const swPlay = document.getElementById('swPlay');
+
+let swPos = 0;
+let swPlaying = false;
+let swInterval = null;
+
+function extractTrigrams(text) {
+  const trigrams = [];
+  const bytes = new TextEncoder().encode(text);
+  for (let i = 0; i <= bytes.length - 3; i++) {
+    const tri = String.fromCharCode(bytes[i], bytes[i+1], bytes[i+2]);
+    if (!trigrams.includes(tri)) trigrams.push(tri);
+  }
+  return trigrams;
+}
+
+function updateTrigrams() {
+  const text = trigramInput.value;
+  const trigrams = extractTrigrams(text);
+
+  trigramChips.innerHTML = trigrams.map((t, i) =>
+    `<div class="trigram-chip" style="animation-delay:${i * 0.05}s">${t.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`
+  ).join('');
+
+  trigramCount.textContent = trigrams.length > 0 ? `(${trigrams.length})` : '';
+
+  // Update sliding window
+  const bytes = new TextEncoder().encode(text);
+  swChars.innerHTML = '';
+  for (let i = 0; i < bytes.length; i++) {
+    const ch = document.createElement('div');
+    ch.className = 'sw-char';
+    ch.textContent = String.fromCharCode(bytes[i]);
+    ch.dataset.index = i;
+    swChars.appendChild(ch);
+  }
+
+  swPos = 0;
+  updateSlidingWindow();
+}
+
+function updateSlidingWindow() {
+  const chars = swChars.querySelectorAll('.sw-char');
+  const bytes = new TextEncoder().encode(trigramInput.value);
+
+  chars.forEach((ch, i) => {
+    ch.classList.toggle('active', i >= swPos && i < swPos + 3);
+  });
+
+  if (bytes.length >= 3 && swPos <= bytes.length - 3) {
+    const tri = String.fromCharCode(bytes[swPos], bytes[swPos+1], bytes[swPos+2]);
+    swCurrent.textContent = `"${tri}"`;
+  } else {
+    swCurrent.textContent = '---';
+  }
+
+  swPrev.disabled = swPos <= 0;
+  swNext.disabled = swPos >= bytes.length - 3;
+}
+
+swPrev.addEventListener('click', () => { swPos = Math.max(0, swPos - 1); updateSlidingWindow(); });
+swNext.addEventListener('click', () => {
+  const max = new TextEncoder().encode(trigramInput.value).length - 3;
+  swPos = Math.min(max, swPos + 1);
+  updateSlidingWindow();
+});
+
+swPlay.addEventListener('click', () => {
+  if (swPlaying) {
+    clearInterval(swInterval);
+    swPlaying = false;
+    swPlay.innerHTML = '&#9654; Play';
+    return;
+  }
+  swPlaying = true;
+  swPlay.innerHTML = '&#9724; Stop';
+  swPos = 0;
+  updateSlidingWindow();
+  swInterval = setInterval(() => {
+    const max = new TextEncoder().encode(trigramInput.value).length - 3;
+    if (swPos >= max) {
+      clearInterval(swInterval);
+      swPlaying = false;
+      swPlay.innerHTML = '&#9654; Play';
+      return;
+    }
+    swPos++;
+    updateSlidingWindow();
+  }, 500);
+});
+
+trigramInput.addEventListener('input', () => {
+  if (swPlaying) { clearInterval(swInterval); swPlaying = false; swPlay.innerHTML = '&#9654; Play'; }
+  updateTrigrams();
+});
+updateTrigrams();
+
+// ═══════ SCROLL REVEAL ═══════
+const reveals = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+reveals.forEach(el => observer.observe(el));
+
+// ═══════ SIDE NAV ═══════
+const navLinks = document.querySelectorAll('.side-nav a');
+const sections = document.querySelectorAll('section, header');
+const navObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(link => link.classList.remove('active'));
+      const id = entry.target.id;
+      const activeLink = document.querySelector(`.side-nav a[href="#${id}"]`);
+      if (activeLink) activeLink.classList.add('active');
+    }
+  });
+}, { threshold: 0.3 });
+sections.forEach(s => navObserver.observe(s));
+
+// ═══════ PARALLEL ANIMATION ═══════
+const threadLanes = document.getElementById('threadLanes');
+const parallelPlay = document.getElementById('parallelPlay');
+const parallelStatus = document.getElementById('parallelStatus');
+
+const files = [
+  'server.rs', 'client.rs', 'handler.rs', 'router.rs', 'middleware.rs',
+  'auth.rs', 'db.rs', 'cache.rs', 'config.rs', 'utils.rs',
+  'models.rs', 'api.rs', 'tests.rs', 'logger.rs', 'proxy.rs',
+  'pool.rs', 'tls.rs', 'codec.rs', 'stream.rs', 'buffer.rs',
+  'parser.rs', 'worker.rs', 'queue.rs', 'metrics.rs'
+];
+const threadCount = 8;
+const colors = [
+  'rgba(34,211,238,0.6)', 'rgba(52,211,153,0.6)', 'rgba(167,139,250,0.6)',
+  'rgba(251,146,60,0.6)', 'rgba(244,114,182,0.6)', 'rgba(251,191,36,0.6)',
+  'rgba(34,211,238,0.4)', 'rgba(52,211,153,0.4)'
+];
+
+function buildThreadLanes() {
+  threadLanes.innerHTML = '';
+  for (let t = 0; t < threadCount; t++) {
+    const lane = document.createElement('div');
+    lane.className = 'thread-lane';
+    lane.innerHTML = `
+      <div class="thread-label">Thread ${t}</div>
+      <div class="thread-bar-container" id="thread-${t}"></div>
+    `;
+    threadLanes.appendChild(lane);
+  }
+}
+buildThreadLanes();
+
+let parallelAnimating = false;
+parallelPlay.addEventListener('click', () => {
+  if (parallelAnimating) return;
+  parallelAnimating = true;
+  parallelPlay.disabled = true;
+  parallelStatus.textContent = 'Distributing files across threads...';
+
+  // Clear lanes
+  for (let t = 0; t < threadCount; t++) {
+    document.getElementById(`thread-${t}`).innerHTML = '';
+  }
+
+  // Assign files to threads round-robin with varying widths
+  const assignments = [];
+  files.forEach((file, i) => {
+    const thread = i % threadCount;
+    const width = 15 + Math.random() * 35;
+    assignments.push({ file, thread, width, delay: Math.floor(i / threadCount) * 300 + Math.random() * 200 });
+  });
+
+  let completed = 0;
+  assignments.forEach(({ file, thread, width, delay }) => {
+    setTimeout(() => {
+      const container = document.getElementById(`thread-${thread}`);
+      const block = document.createElement('div');
+      block.className = 'thread-block';
+      block.style.cssText = `flex:0 0 ${width}px; background:${colors[thread]}; opacity:0; transition: opacity 0.3s;`;
+      block.textContent = file.replace('.rs','');
+      container.appendChild(block);
+      requestAnimationFrame(() => { block.style.opacity = '1'; });
+
+      // Mark as verified after a bit
+      setTimeout(() => {
+        block.classList.add('done');
+        completed++;
+        if (completed === files.length) {
+          parallelStatus.textContent = `All ${files.length} files verified in parallel. Done!`;
+          parallelAnimating = false;
+          parallelPlay.disabled = false;
+        }
+      }, 400 + Math.random() * 600);
+    }, delay);
+  });
+
+  setTimeout(() => {
+    parallelStatus.textContent = `Verifying ${files.length} candidates across ${threadCount} threads...`;
+  }, 100);
+});
+
+// ═══════ BENCHMARK CHARTS ═══════
+const kubernetesData = [
+  { label: 'literal_selective', triseek: 49.5, rg: 415.4 },
+  { label: 'literal_moderate', triseek: 50.6, rg: 458.9 },
+  { label: 'literal_high', triseek: 63.7, rg: 464.4 },
+  { label: 'regex_anchor', triseek: 60.7, rg: 500.6 },
+  { label: 'regex_weak', triseek: 679.0, rg: 1248.4 },
+  { label: 'literal_no_match', triseek: 63.7, rg: 619.9 },
+  { label: 'regex_no_match', triseek: 72.2, rg: 609.6 },
+  { label: 'multi_or', triseek: 89.9, rg: 592.6 },
+  { label: 'path_all', triseek: 52.7, rg: 88.6 },
+  { label: 'path_substring', triseek: 45.6, rg: 101.5 },
+  { label: 'path_plus_content', triseek: 66.4, rg: 315.6 },
+];
+
+const linuxData = [
+  { label: 'literal_selective', triseek: 144.0, rg: 2008.6 },
+  { label: 'literal_moderate', triseek: 189.4, rg: 2257.2 },
+  { label: 'literal_high', triseek: 230.5, rg: 2190.6 },
+  { label: 'regex_anchor', triseek: 185.7, rg: 2201.7 },
+  { label: 'regex_weak', triseek: 1879.2, rg: 3516.4 },
+  { label: 'literal_no_match', triseek: 130.2, rg: 1824.8 },
+  { label: 'regex_no_match', triseek: 146.4, rg: 1881.2 },
+  { label: 'multi_or', triseek: 185.6, rg: 1909.8 },
+  { label: 'path_substring', triseek: 137.9, rg: 144.5 },
+  { label: 'path_plus_content', triseek: 138.5, rg: 657.4 },
+];
+
+function renderBenchChart(containerId, data) {
+  const container = document.getElementById(containerId);
+  const maxVal = Math.max(...data.map(d => Math.max(d.triseek, d.rg)));
+
+  data.forEach(d => {
+    const ratio = (d.rg / d.triseek).toFixed(1);
+    const row = document.createElement('div');
+    row.className = 'bench-row';
+    row.innerHTML = `
+      <div class="bench-label">${d.label}</div>
+      <div class="bench-bars">
+        <div class="bench-bar-wrapper">
+          <div class="bench-bar triseek" data-width="${(d.triseek / maxVal * 100).toFixed(1)}"></div>
+          <span class="bench-bar-label fast">${d.triseek.toFixed(0)} ms</span>
+        </div>
+        <div class="bench-bar-wrapper">
+          <div class="bench-bar rg" data-width="${(d.rg / maxVal * 100).toFixed(1)}"></div>
+          <span class="bench-bar-label">${d.rg.toFixed(0)} ms</span>
+        </div>
+      </div>
+      <div class="speedup-badge">${ratio}x</div>
+    `;
+    container.appendChild(row);
+  });
+
+  // Animate bars on scroll
+  const benchObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.querySelectorAll('.bench-bar').forEach(bar => {
+          bar.style.width = bar.dataset.width + '%';
+        });
+        benchObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.2 });
+
+  // Set initial width to 0
+  container.querySelectorAll('.bench-bar').forEach(bar => { bar.style.width = '0%'; });
+  benchObserver.observe(container);
+}
+
+renderBenchChart('benchKubernetes', kubernetesData);
+renderBenchChart('benchLinux', linuxData);
+</script>
+</body>
+</html>
