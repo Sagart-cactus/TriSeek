@@ -1,0 +1,420 @@
+[
+  {
+    "name": "serde-rs/serde",
+    "slug": "serde-rs_serde",
+    "url": "https://github.com/serde-rs/serde.git",
+    "local_path": "/Users/trivedi/Documents/Projects/TriSeek-bench/repos/serde-rs_serde",
+    "commit_sha": "fa7da4a93567ed347ad0735c28e439fca688ef26",
+    "stats": {
+      "repo_name": "serde-rs_serde",
+      "repo_root": "/Users/trivedi/Documents/Projects/TriSeek-bench/repos/serde-rs_serde",
+      "commit_sha": "fa7da4a93567ed347ad0735c28e439fca688ef26",
+      "tracked_files": 339,
+      "searchable_files": 339,
+      "searchable_bytes": 1326149,
+      "total_disk_bytes": 1326149,
+      "skipped_binary_files": 0,
+      "skipped_hidden_files": 0,
+      "skipped_ignored_files": 0,
+      "languages": [
+        [
+          "rs",
+          208
+        ],
+        [
+          "stderr",
+          118
+        ],
+        [
+          "toml",
+          7
+        ],
+        [
+          "md",
+          4
+        ],
+        [
+          "<none>",
+          2
+        ]
+      ],
+      "category": "small"
+    }
+  },
+  {
+    "name": "BurntSushi/ripgrep",
+    "slug": "BurntSushi_ripgrep",
+    "url": "https://github.com/BurntSushi/ripgrep.git",
+    "local_path": "/Users/trivedi/Documents/Projects/TriSeek-bench/repos/BurntSushi_ripgrep",
+    "commit_sha": "4519153e5e461527f4bca45b042fff45c4ec6fb9",
+    "stats": {
+      "repo_name": "BurntSushi_ripgrep",
+      "repo_root": "/Users/trivedi/Documents/Projects/TriSeek-bench/repos/BurntSushi_ripgrep",
+      "commit_sha": "4519153e5e461527f4bca45b042fff45c4ec6fb9",
+      "tracked_files": 215,
+      "searchable_files": 208,
+      "searchable_bytes": 3109685,
+      "total_disk_bytes": 3111738,
+      "skipped_binary_files": 7,
+      "skipped_hidden_files": 0,
+      "skipped_ignored_files": 0,
+      "languages": [
+        [
+          "rs",
+          100
+        ],
+        [
+          "<none>",
+          42
+        ],
+        [
+          "md",
+          20
+        ],
+        [
+          "csv",
+          12
+        ],
+        [
+          "toml",
+          12
+        ],
+        [
+          "yml",
+          5
+        ],
+        [
+          "gitignore",
+          2
+        ],
+        [
+          "help",
+          2
+        ],
+        [
+          "lock",
+          2
+        ],
+        [
+          "setup",
+          2
+        ],
+        [
+          "sh",
+          2
+        ],
+        [
+          "1",
+          1
+        ],
+        [
+          "br",
+          1
+        ],
+        [
+          "fish",
+          1
+        ],
+        [
+          "rb",
+          1
+        ],
+        [
+          "txt",
+          1
+        ],
+        [
+          "xml",
+          1
+        ],
+        [
+          "zsh",
+          1
+        ]
+      ],
+      "category": "small"
+    }
+  },
+  {
+    "name": "kubernetes/kubernetes",
+    "slug": "kubernetes_kubernetes",
+    "url": "https://github.com/kubernetes/kubernetes.git",
+    "local_path": "/Users/trivedi/Documents/Projects/TriSeek-bench/repos/kubernetes_kubernetes",
+    "commit_sha": "c6a95ffd4c787426e9242b208a38c8ded77e5212",
+    "stats": {
+      "repo_name": "kubernetes_kubernetes",
+      "repo_root": "/Users/trivedi/Documents/Projects/TriSeek-bench/repos/kubernetes_kubernetes",
+      "commit_sha": "c6a95ffd4c787426e9242b208a38c8ded77e5212",
+      "tracked_files": 28916,
+      "searchable_files": 28132,
+      "searchable_bytes": 257586895,
+      "total_disk_bytes": 262047151,
+      "skipped_binary_files": 784,
+      "skipped_hidden_files": 0,
+      "skipped_ignored_files": 0,
+      "languages": [
+        [
+          "go",
+          16929
+        ],
+        [
+          "yaml",
+          5799
+        ],
+        [
+          "<none>",
+          2777
+        ],
+        [
+          "json",
+          1004
+        ],
+        [
+          "md",
+          537
+        ],
+        [
+          "sh",
+          309
+        ],
+        [
+          "proto",
+          134
+        ],
+        [
+          "request",
+          63
+        ],
+        [
+          "response",
+          63
+        ],
+        [
+          "s",
+          62
+        ],
+        [
+          "sum",
+          39
+        ],
+        [
+          "key",
+          38
+        ],
+        [
+          "mod",
+          38
+        ],
+        [
+          "pem",
+          37
+        ],
+        [
+          "txt",
+          34
+        ],
+        [
+          "edited",
+          31
+        ],
+        [
+          "original",
+          31
+        ],
+        [
+          "bazel",
+          29
+        ],
+        [
+          "in",
+          23
+        ],
+        [
+          "po",
+          12
+        ],
+        [
+          "yml",
+          12
+        ],
+        [
+          "crt",
+          11
+        ],
+        [
+          "kuberc",
+          10
+        ],
+        [
+          "manifest",
+          8
+        ],
+        [
+          "py",
+          7
+        ],
+        [
+          "c",
+          6
+        ],
+        [
+          "list",
+          6
+        ],
+        [
+          "log",
+          6
+        ],
+        [
+          "sed",
+          6
+        ],
+        [
+          "tmpl",
+          6
+        ],
+        [
+          "svg",
+          5
+        ],
+        [
+          "work",
+          5
+        ],
+        [
+          "psm1",
+          4
+        ],
+        [
+          "conf",
+          3
+        ],
+        [
+          "dot",
+          3
+        ],
+        [
+          "jsonl",
+          3
+        ],
+        [
+          "template",
+          3
+        ],
+        [
+          "toml",
+          3
+        ],
+        [
+          "base",
+          2
+        ],
+        [
+          "bash",
+          2
+        ],
+        [
+          "cer",
+          2
+        ],
+        [
+          "csr",
+          2
+        ],
+        [
+          "csv",
+          2
+        ],
+        [
+          "interp",
+          2
+        ],
+        [
+          "lock",
+          2
+        ],
+        [
+          "ps1",
+          2
+        ],
+        [
+          "tokens",
+          2
+        ],
+        [
+          "0",
+          1
+        ],
+        [
+          "bsd",
+          1
+        ],
+        [
+          "bzlmod",
+          1
+        ],
+        [
+          "cfg",
+          1
+        ],
+        [
+          "common",
+          1
+        ],
+        [
+          "dockerfile",
+          1
+        ],
+        [
+          "docs",
+          1
+        ],
+        [
+          "g4",
+          1
+        ],
+        [
+          "golden",
+          1
+        ],
+        [
+          "html",
+          1
+        ],
+        [
+          "kubernetes",
+          1
+        ],
+        [
+          "libyaml",
+          1
+        ],
+        [
+          "markdown",
+          1
+        ],
+        [
+          "mdown",
+          1
+        ],
+        [
+          "mit",
+          1
+        ],
+        [
+          "pb",
+          1
+        ],
+        [
+          "pot",
+          1
+        ],
+        [
+          "req",
+          1
+        ]
+      ],
+      "category": "medium"
+    }
+  }
+]

@@ -1,0 +1,15 @@
+[package]
+name = "triseek"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+search-core = { path = "../search-core" }
+search-index = { path = "../search-index" }
+time.workspace = true
