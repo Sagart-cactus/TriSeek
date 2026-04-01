@@ -1,0 +1,66 @@
+repo_slug,query_label,family,baseline_tool,correct,indexed_p50_ms,baseline_p50_ms,indexed_p95_ms,baseline_p95_ms,indexed_max_rss_kib,baseline_max_rss_kib
+serde-rs_serde,path_all,file_listing,rg --files,true,32.233,13.876,32.866,16.479,4468736,3731456
+serde-rs_serde,path_suffix,file_listing,fd,true,32.386,17.678,33.944,20.719,4481024,5857280
+serde-rs_serde,path_exact_name,file_listing,fd,true,31.753,16.751,35.695,17.845,4517888,5206016
+serde-rs_serde,path_substring,file_listing,rg --files | rg,true,31.574,27.053,33.085,29.431,4567040,4128768
+serde-rs_serde,literal_selective,literal_search,rg,true,20.966,15.341,21.845,16.488,4857856,4890624
+serde-rs_serde,literal_moderate,literal_search,rg,true,21.247,16.022,22.572,17.081,5066752,4964352
+serde-rs_serde,literal_high,literal_search,rg,true,22.280,16.133,23.850,17.589,5111808,5292032
+serde-rs_serde,regex_anchor,regex_search,rg,true,20.859,16.142,22.254,17.540,5128192,5062656
+serde-rs_serde,regex_weak,regex_search,rg,true,25.422,21.223,26.729,22.225,5476352,6459392
+serde-rs_serde,literal_no_match,literal_search,rg,true,20.528,16.149,21.766,17.123,4714496,4714496
+serde-rs_serde,regex_no_match,regex_search,rg,true,20.895,16.478,22.585,17.802,4784128,4710400
+serde-rs_serde,multi_or,mixed_search,rg,true,22.756,16.856,24.886,17.641,5120000,5464064
+serde-rs_serde,path_plus_content,mixed_search,rg,true,19.836,14.535,21.405,15.360,4730880,4755456
+kubernetes_kubernetes,path_all,file_listing,rg --files,true,42.359,79.749,43.036,82.356,20475904,8683520
+kubernetes_kubernetes,path_suffix,file_listing,fd,true,40.176,76.759,42.008,82.302,18952192,12324864
+kubernetes_kubernetes,path_exact_name,file_listing,fd,true,36.453,74.768,38.610,77.613,16826368,9994240
+kubernetes_kubernetes,path_substring,file_listing,rg --files | rg,true,38.280,100.896,41.592,105.039,17117184,9392128
+kubernetes_kubernetes,literal_selective,literal_search,rg,true,48.384,492.712,49.560,546.441,23937024,12316672
+kubernetes_kubernetes,literal_moderate,literal_search,rg,true,58.292,598.560,60.160,643.268,26075136,12476416
+kubernetes_kubernetes,literal_high,literal_search,rg,true,78.410,651.514,78.890,656.755,26902528,13537280
+kubernetes_kubernetes,regex_anchor,regex_search,rg,true,69.372,664.654,71.106,728.676,29532160,12562432
+kubernetes_kubernetes,regex_weak,regex_search,rg,false,650.310,1213.794,789.596,1285.686,12615680,16699392
+kubernetes_kubernetes,literal_no_match,literal_search,rg,true,64.290,673.482,64.861,751.741,19423232,12349440
+kubernetes_kubernetes,regex_no_match,regex_search,rg,true,72.320,728.455,73.684,748.250,20439040,12324864
+kubernetes_kubernetes,multi_or,mixed_search,rg,true,90.003,750.664,91.215,766.303,28372992,14893056
+kubernetes_kubernetes,path_plus_content,mixed_search,rg,true,72.917,405.262,73.389,421.357,21872640,9302016
+torvalds_linux,path_all,file_listing,rg --files,true,256.866,257.284,263.813,270.458,56442880,11427840
+torvalds_linux,path_suffix,file_listing,fd,true,239.699,242.953,275.042,318.104,50642944,15773696
+torvalds_linux,path_exact_name,file_listing,fd,true,207.863,218.428,209.976,221.990,46804992,13066240
+torvalds_linux,path_substring,file_listing,rg --files | rg,true,187.998,242.045,189.817,248.081,47132672,12210176
+torvalds_linux,literal_selective,literal_search,rg,true,197.129,3971.990,200.123,4441.587,52830208,13881344
+torvalds_linux,literal_moderate,literal_search,rg,true,288.942,4406.756,292.606,5348.296,54697984,13533184
+torvalds_linux,literal_high,literal_search,rg,true,511.847,5971.179,552.255,6192.121,81408000,13373440
+torvalds_linux,regex_anchor,regex_search,rg,true,406.075,5858.977,409.293,5965.303,55808000,13914112
+torvalds_linux,regex_weak,regex_search,rg,true,2760.068,4023.162,2911.993,4166.090,13860864,17166336
+torvalds_linux,literal_no_match,literal_search,rg,true,122.627,2024.604,125.961,2189.955,54034432,13676544
+torvalds_linux,regex_no_match,regex_search,rg,true,152.777,2166.471,160.326,2209.612,53956608,13938688
+torvalds_linux,multi_or,mixed_search,rg,true,195.375,2129.535,202.036,2233.919,87060480,13824000
+torvalds_linux,path_plus_content,mixed_search,rg,true,140.333,732.721,143.214,750.024,51007488,9592832
+rust-lang_rust,path_all,file_listing,rg --files,true,76.367,79.382,78.873,81.493,38551552,11153408
+rust-lang_rust,path_suffix,file_listing,fd,true,74.309,74.308,75.466,80.484,35635200,15233024
+rust-lang_rust,path_exact_name,file_listing,fd,true,67.099,72.964,68.425,74.322,31682560,12255232
+rust-lang_rust,path_substring,file_listing,rg --files | rg,true,66.107,88.978,67.692,95.806,31645696,11649024
+rust-lang_rust,literal_selective,literal_search,rg,true,73.944,1002.537,75.415,1186.536,36646912,14217216
+rust-lang_rust,literal_moderate,literal_search,rg,true,97.022,1225.084,97.875,1272.015,37695488,15421440
+rust-lang_rust,literal_high,literal_search,rg,true,123.215,1253.578,129.834,1309.688,47423488,15679488
+rust-lang_rust,regex_anchor,regex_search,rg,true,101.049,1203.499,108.017,1373.853,38391808,15396864
+rust-lang_rust,regex_weak,regex_search,rg,true,1257.682,1405.874,1418.568,1449.082,14327808,17534976
+rust-lang_rust,literal_no_match,literal_search,rg,true,98.816,1254.690,99.567,1328.188,35209216,14020608
+rust-lang_rust,regex_no_match,regex_search,rg,true,95.519,1166.351,97.018,1178.303,37052416,14086144
+rust-lang_rust,multi_or,mixed_search,rg,true,121.755,1161.950,126.817,1206.597,51183616,16318464
+rust-lang_rust,path_plus_content,mixed_search,rg,true,104.139,669.707,107.729,680.502,39784448,11264000
+BurntSushi_ripgrep,path_all,file_listing,rg --files,true,29.230,14.706,29.614,16.802,6000640,3784704
+BurntSushi_ripgrep,path_suffix,file_listing,fd,true,29.164,19.633,30.017,21.508,6008832,5885952
+BurntSushi_ripgrep,path_exact_name,file_listing,fd,true,29.109,20.421,29.913,23.557,6111232,5234688
+BurntSushi_ripgrep,path_substring,file_listing,rg --files | rg,true,29.177,25.640,29.434,30.257,6012928,4169728
+BurntSushi_ripgrep,literal_selective,literal_search,rg,true,23.313,18.421,27.017,22.167,4878336,4820992
+BurntSushi_ripgrep,literal_moderate,literal_search,rg,true,22.145,16.403,24.098,19.270,5038080,6115328
+BurntSushi_ripgrep,literal_high,literal_search,rg,true,23.108,18.741,26.338,22.502,5189632,5361664
+BurntSushi_ripgrep,regex_anchor,regex_search,rg,true,22.149,19.526,24.856,23.203,5115904,5066752
+BurntSushi_ripgrep,regex_weak,regex_search,rg,true,25.873,22.689,29.394,24.794,5439488,6701056
+BurntSushi_ripgrep,literal_no_match,literal_search,rg,true,22.120,18.708,25.814,20.356,4751360,4796416
+BurntSushi_ripgrep,regex_no_match,regex_search,rg,true,22.181,21.715,25.741,22.919,4784128,4780032
+BurntSushi_ripgrep,multi_or,mixed_search,rg,true,22.231,18.082,23.963,19.668,5111808,5836800
+BurntSushi_ripgrep,path_plus_content,mixed_search,rg,true,21.378,15.650,24.951,16.764,4755456,4673536

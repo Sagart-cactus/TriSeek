@@ -1,6 +1,6 @@
 # Benchmark Summary
 
-TriSeek was implemented as a Rust workspace with a persistent trigram content index, a delta overlay, a path/filename index, a query planner, a verification engine, a CLI, and a reproducible benchmark harness. The final timed benchmark artifacts are under `bench/results/final-run/`, while repo clones and indexes are cached outside the Git worktree under `/Users/trivedi/Documents/Projects/TriSeek-bench/`.
+The current source of truth is the fresh full rerun under `bench/results/rerun-2026-04-02-all/`. The older `bench/results/final-run/` directory is a historical pre-optimization baseline that predates the mmap / parallel-verification work and is kept only for before/after comparison.
 
 ## Environment
 
@@ -9,25 +9,25 @@ TriSeek was implemented as a Rust workspace with a persistent trigram content in
 - Architecture: `x86_64`
 - Logical cores: `16`
 - Rust toolchain installed for this task: `rustup`, `cargo`, and `rustc`
-- Benchmark artifacts: `bench/results/final-run/report.json`, `bench/results/final-run/report.csv`, `bench/results/final-run/summary.md`, and `bench/results/final-run/correctness-revalidation.md`
+- Current artifacts: `bench/results/rerun-2026-04-02-all/report.json`, `bench/results/rerun-2026-04-02-all/report.csv`, `bench/results/rerun-2026-04-02-all/summary.md`, and `bench/results/rerun-2026-04-02-all/correctness-revalidation.md`
+- Historical baseline: `bench/results/final-run/*`
 
 ## Dataset
 
-Measured candidate repositories:
+All 5 `ready` repositories from `bench/manifest/repositories.yaml` were timed in the fresh rerun:
 
-| Repo | Commit | Searchable Files | Searchable Bytes | Final Category | Timed in final run |
-|---|---|---:|---:|---|---|
-| serde-rs/serde | `fa7da4a93567` | 339 | 1,326,149 | small | yes |
-| BurntSushi/ripgrep | `4519153` | 208 | 3,109,685 | small | no |
-| kubernetes/kubernetes | `c6a95ffd4c78` | 28,132 | 257,586,895 | medium | yes |
-| torvalds/linux | `cbfffcca2bf0` | 92,916 | 1,567,893,871 | large | yes |
-| rust-lang/rust | `584d32e3ee7a` | 58,472 | 197,699,311 | large | no |
+| Repo | Commit | Searchable Files | Searchable Bytes | Measured Category |
+|---|---|---:|---:|---|
+| serde-rs/serde | `fa7da4a93567` | 339 | 1,326,149 | small |
+| BurntSushi/ripgrep | `4519153e5e46` | 207 | 3,109,499 | small |
+| kubernetes/kubernetes | `c6a95ffd4c78` | 28,131 | 254,117,420 | medium |
+| torvalds/linux | `cbfffcca2bf0` | 92,916 | 1,567,893,871 | large |
+| rust-lang/rust | `584d32e3ee7a` | 58,472 | 197,699,311 | large |
 
 Notes:
 
 - No cloned candidate crossed the handoff plan's `very_large` threshold of more than 500,000 searchable files or more than 20 GB of searchable text.
 - `torvalds/linux` and `rust-lang/rust` were both intended `very_large` candidates, but both measured as `large` under the plan's thresholds.
-- The final timed run focused on one repo per covered size band: `small`, `medium`, and `large`.
 
 ## Methodology
 
@@ -47,36 +47,43 @@ Notes:
   - multi-pattern OR
   - path-plus-content narrowing
   - repeated-session sequences
-- The raw `report.json` retains 13 stale correctness failures from a harness bug involving leading `./` path prefixes. Those cases were rerun on the final build, and all 13 passed; see `bench/results/final-run/correctness-revalidation.md`.
+- The TriSeek side used `triseek search --engine auto` and `triseek session --engine auto`; the `indexed_*` column names in the CSV are historical harness names.
+- The raw rerun report records one remaining mismatch on `kubernetes_kubernetes / regex_weak`; see `bench/results/rerun-2026-04-02-all/correctness-revalidation.md`.
 
 ## Results
 
 High-level outcome:
 
-- TriSeek lost 38 of 39 timed single-query cases on p50 latency.
-- The only p50 win was `regex_no_match` on `kubernetes/kubernetes`, where TriSeek ran at 442.794 ms versus 474.095 ms for `rg`.
-- TriSeek also lost every repeated-session benchmark. `session_20` regressed by 1.16x to 1.93x, and `session_100` regressed by 5.24x to 8.60x.
+- TriSeek won `38 / 65` single-query workloads across the full 5-repo rerun.
+- TriSeek won `38 / 39` single-query workloads on medium+ repos (`kubernetes`, `linux`, `rust`).
+- TriSeek won `8 / 10` repeated-session benchmarks overall, and `6 / 6` on medium+ repos.
+- All `26` single-query losses came from the two small repos (`serde`, `ripgrep`), which still favor shell tools for cold-start latency.
+- Peak measured speedup was `20.1x` on `torvalds/linux literal_selective`: `197.129 ms` versus `3971.990 ms`.
 
 Per-repo summary:
 
-| Repo | Median p50 Ratio (TriSeek / baseline) | `session_20` Ratio | `session_100` Ratio | Build Time | Update Time | Index Size |
-|---|---:|---:|---:|---:|---:|---:|
-| serde-rs/serde | 1.35x | 1.69x | 8.32x | 74 ms | 34.135 ms | 386,942 B |
-| kubernetes/kubernetes | 2.35x | 1.93x | 8.60x | 13.0 s | 2.279 s | 91,256,489 B |
-| torvalds/linux | 2.66x | 1.16x | 5.24x | 68.3 s | 9.939 s | 491,236,884 B |
+| Repo | Single-query wins | `session_20` | `session_100` | Build Time | Update Time | Index Size |
+|---|---:|---|---|---:|---:|---:|
+| serde-rs/serde | 0 / 13 | `34.172 ms` vs `82.135 ms` (2.4x faster) | `131.653 ms` vs `86.027 ms` (1.53x slower) | `78 ms` | `35.940 ms` | `1.24 MB` |
+| BurntSushi/ripgrep | 0 / 13 | `39.426 ms` vs `92.137 ms` (2.3x faster) | `155.990 ms` vs `101.079 ms` (1.54x slower) | `166 ms` | `36.586 ms` | `2.19 MB` |
+| kubernetes/kubernetes | 13 / 13 | `292.270 ms` vs `3575.138 ms` (12.2x faster) | `1255.185 ms` vs `3839.544 ms` (3.1x faster) | `13.971 s` | `4.018 s` | `213.5 MB` |
+| torvalds/linux | 13 / 13 | `612.810 ms` vs `10342.155 ms` (16.9x faster) | `2468.112 ms` vs `10408.510 ms` (4.2x faster) | `150.390 s` | `10.061 s` | `1.05 GB` |
+| rust-lang/rust | 12 / 13 | `374.870 ms` vs `5954.215 ms` (15.9x faster) | `1500.637 ms` vs `6062.653 ms` (4.0x faster) | `9.633 s` | `4.037 s` | `231.9 MB` |
 
-CPU and memory observations:
+Notable details:
 
-- CPU time was not the main bottleneck on the larger repos. Median total CPU time was roughly on par with baseline on `torvalds/linux` and slightly lower on `kubernetes/kubernetes`, but wall-clock latency was still worse because the indexed path spent too much time on candidate handling and verification.
-- The raw `/usr/bin/time -l` RSS field in the report behaved like byte-scale values on this machine. Interpreted that way, TriSeek peaked around 816 MiB on `kubernetes/kubernetes` and 3.1 GiB on `torvalds/linux`, while the baseline tools stayed near 16 MiB on the same runs.
+- `kubernetes` won all 13 single-query workloads in the rerun.
+- `torvalds/linux` won all 13 single-query workloads in the rerun.
+- `rust-lang/rust` won 12 of 13 single-query workloads; the only non-win was `path_suffix`, effectively tied at `74.309 ms` versus `74.308 ms`.
+- The rerun did not reproduce the extreme RSS spikes from the historical pre-optimization baseline. The large remaining cost on big repos is index build time, not query-time collapse.
 
 ## Interpretation
 
-The current implementation is functionally usable, but it does not meet the handoff goal of beating repeated `rg` invocations on medium and larger repositories. The path index is especially weak: every path workload was materially slower than the shell-tool baseline even after correctness was fixed. Repeated-session performance also failed to amortize the index build/update cost, which means the adaptive runtime policy should not switch to indexed search by default.
+The current implementation now clears the original benchmark goal on medium and large repos when run in `auto` mode against shell-tool baselines. Query-time behavior is strong once the repo is large enough, but the build/update costs are still meaningful on the largest corpus. Small repos remain a bad fit for indexed cold-start queries, and the Kubernetes `regex_weak` protobuf mismatch should stay on the follow-up list.
 
 ## Recommendation
 
-- Default content search: keep `rg`
-- Default file/path discovery: keep `fd` for suffix/exact-name lookups and `rg --files`-based paths for substring/listing flows
-- Indexed engine: keep as an opt-in prototype for further optimization, not as a production default
-- Very large repos: no activation threshold should be claimed until a real `very_large` corpus is measured
+- Medium and large repos: use `triseek --engine auto` as the default search path once an index exists.
+- Small repos: keep `rg` / `fd` for cold single queries; switch to TriSeek once a real session is underway or the index is already warm.
+- Build strategy: build in the background on first use and refresh incrementally before longer sessions.
+- Very large repos: do not claim an activation threshold until a real `very_large` corpus is benchmarked.

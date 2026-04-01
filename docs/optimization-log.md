@@ -1,6 +1,8 @@
 # TriSeek Optimization Log
 
-## Baseline (Pre-Optimization)
+## Baseline (Pre-Optimization, Historical 3-Repo Run)
+- Artifacts: `bench/results/final-run/*`
+- This run predates the optimization commits and only timed one repo per covered size band.
 - TriSeek lost 38/39 single-query cases on p50 latency (1.35x–2.66x slower than rg)
 - Lost every session benchmark (1.16x–8.60x slower)
 - Peak RSS: 816 MiB (kubernetes), 3.1 GiB (linux) vs 16 MiB for rg
@@ -8,7 +10,37 @@
 
 ---
 
-## Round 3: Correctness Hardening + Summary-Only Ripgrep Fast Path
+## Fresh Full Rerun (2026-04-02, Current)
+
+**Artifacts:**
+- `bench/results/rerun-2026-04-02-all/summary.md`
+- `bench/results/rerun-2026-04-02-all/correctness-revalidation.md`
+
+**Benchmark Results (Current):**
+
+- **38 / 65 single-query wins overall**
+- **38 / 39 single-query wins on medium+ repos**
+- **8 / 10 session wins overall**
+- **6 / 6 session wins on medium+ repos**
+- All 26 single-query losses came from the two small repos
+
+Representative wins:
+
+- `torvalds_linux literal_selective`: **197 ms vs 3972 ms** (20.1x faster)
+- `torvalds_linux session_20`: **613 ms vs 10342 ms** (16.9x faster)
+- `rust-lang_rust session_20`: **375 ms vs 5954 ms** (15.9x faster)
+- `kubernetes_kubernetes path_all`: **42 ms vs 80 ms** (1.9x faster)
+
+**Takeaway:**
+
+- The fresh full rerun reproduces and slightly improves on the optimized medium+ win story.
+- `final-run/*` should now be treated as a historical before-optimization baseline, not the current result set.
+- Small repos still favor shell tools for cold single-query latency.
+- One raw correctness mismatch remains on vendored protobuf content for `kubernetes_kubernetes / regex_weak`.
+
+---
+
+## Round 3: Correctness Hardening + Summary-Only Ripgrep Fast Path (Historical Snapshot)
 
 **Changes:**
 - Fixed fast-index open so delta overlays remain visible after incremental updates
@@ -37,7 +69,7 @@ Representative wins:
 - `rust-lang_rust session_20`: **330 ms vs 5226 ms**
 - `BurntSushi_ripgrep session_20`: **43 ms vs 91 ms**
 
-**Takeaway:**
+**Takeaway at the time:**
 
 - The indexed engine is now functionally sound on the benchmarked query families after revalidation.
 - The performance story is clearly positive for medium and large repos, especially for repeated sessions.

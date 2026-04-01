@@ -1122,15 +1122,15 @@ footer {
   <p class="hero-sub">A code search engine that indexes every 3-byte sequence in your codebase, then answers queries in milliseconds using posting list intersection and parallel verification.</p>
   <div class="hero-stats">
     <div class="hero-stat">
-      <div class="value">17.5x</div>
-      <div class="label">Faster than ripgrep</div>
+      <div class="value">20.1x</div>
+      <div class="label">Peak measured speedup</div>
     </div>
     <div class="hero-stat">
       <div class="value">&lt;5ms</div>
       <div class="label">Index open time</div>
     </div>
     <div class="hero-stat">
-      <div class="value">35/39</div>
+      <div class="value">38/39</div>
       <div class="label">Medium+ repo wins</div>
     </div>
   </div>
@@ -1716,12 +1716,12 @@ candidates.<span class="fn">par_iter</span>().<span class="fn">for_each</span>(|
     <div class="reveal">
       <div class="section-number">07 &mdash; Results</div>
       <h2><span class="highlight">Benchmark</span> Results</h2>
-      <p class="section-desc">Tested against ripgrep on 5 real repositories: serde (339 files), ripgrep (207 files), Kubernetes (28K files), Linux kernel (93K files), and Rust compiler (58K files). TriSeek wins 35 of 39 single-query benchmarks on medium+ repos (where indexed search is designed to win), and 8 of 10 session benchmarks across all repo sizes.</p>
+      <p class="section-desc">On the fresh full rerun, TriSeek auto mode wins 38 of 65 single-query benchmarks overall, or 38 of 39 after excluding the two small repos where cold shell scans remain cheaper, and 8 of 10 session benchmarks across all repo sizes.</p>
     </div>
 
     <div class="card reveal" style="border-color:var(--accent-orange-dim); background:rgba(251,146,60,0.03)">
       <p style="color:var(--accent-orange); font-family:'JetBrains Mono',monospace; font-size:0.8rem; margin-bottom:0.3rem">Note</p>
-      <p style="color:var(--text-secondary); font-size:0.9rem">The charts below show results for <strong style="color:var(--text-primary)">medium and large repositories only</strong> (Kubernetes, Linux, Rust). Small repos (serde, ripgrep) are excluded from the charts because TriSeek's adaptive router intentionally routes them to <code style="color:var(--accent-orange)">rg</code> &mdash; at that scale the OS page cache makes brute-force search effectively free, and index overhead adds no value. Session benchmarks include all 5 repos.</p>
+      <p style="color:var(--text-secondary); font-size:0.9rem">The charts below show representative results for <strong style="color:var(--text-primary)">medium and large repositories only</strong> (Kubernetes, Linux, Rust). Small repos (serde, ripgrep) are excluded from the charts because the fresh full rerun still shows shell tools ahead on cold single-query latency at that scale. Session benchmarks include all 5 repos.</p>
     </div>
 
     <!-- Kubernetes -->
@@ -1736,6 +1736,14 @@ candidates.<span class="fn">par_iter</span>().<span class="fn">for_each</span>(|
     <div class="card reveal">
       <h3 style="margin-bottom:0.25rem">Linux Kernel <span style="color:var(--text-dim); font-weight:400; font-size:0.9rem">&mdash; 92,916 files, 1.5 GB</span></h3>
       <div class="bench-chart" id="benchLinux">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <!-- Rust -->
+    <div class="card reveal">
+      <h3 style="margin-bottom:0.25rem">Rust Compiler <span style="color:var(--text-dim); font-weight:400; font-size:0.9rem">&mdash; 58,472 files, 198 MB</span></h3>
+      <div class="bench-chart" id="benchRust">
         <!-- filled by JS -->
       </div>
     </div>
@@ -1755,33 +1763,33 @@ candidates.<span class="fn">par_iter</span>().<span class="fn">for_each</span>(|
         <tbody>
           <tr>
             <td>serde (small)</td>
-            <td class="winner">44 ms</td>
-            <td>103 ms</td>
+            <td class="winner">34 ms</td>
+            <td>82 ms</td>
             <td><span class="speedup-badge">2.4x</span></td>
           </tr>
           <tr>
             <td>kubernetes (medium)</td>
-            <td class="winner">310 ms</td>
-            <td>2,725 ms</td>
-            <td><span class="speedup-badge">8.8x</span></td>
+            <td class="winner">292 ms</td>
+            <td>3,575 ms</td>
+            <td><span class="speedup-badge">12.2x</span></td>
           </tr>
           <tr>
             <td>linux (large)</td>
-            <td class="winner">564 ms</td>
-            <td>9,878 ms</td>
-            <td><span class="speedup-badge">17.5x</span></td>
+            <td class="winner">613 ms</td>
+            <td>10,342 ms</td>
+            <td><span class="speedup-badge">16.9x</span></td>
           </tr>
           <tr>
             <td>rust (large)</td>
-            <td class="winner">330 ms</td>
-            <td>5,226 ms</td>
-            <td><span class="speedup-badge">15.8x</span></td>
+            <td class="winner">375 ms</td>
+            <td>5,954 ms</td>
+            <td><span class="speedup-badge">15.9x</span></td>
           </tr>
           <tr>
             <td>ripgrep (small)</td>
-            <td class="winner">43 ms</td>
-            <td>91 ms</td>
-            <td><span class="speedup-badge">2.1x</span></td>
+            <td class="winner">39 ms</td>
+            <td>92 ms</td>
+            <td><span class="speedup-badge">2.3x</span></td>
           </tr>
         </tbody>
       </table>
@@ -1790,14 +1798,14 @@ candidates.<span class="fn">par_iter</span>().<span class="fn">for_each</span>(|
     <!-- Summary -->
     <div class="two-col reveal">
       <div class="card" style="text-align:center">
-        <div class="big-number fast" style="font-size:4rem">35/39</div>
+        <div class="big-number fast" style="font-size:4rem">38/39</div>
         <p style="color:var(--text-secondary); margin-top:0.5rem">medium+ repo benchmarks won</p>
-        <p style="color:var(--text-dim); font-size:0.8rem; margin-top:0.3rem">Small repos route to rg by design. Lost 4: path-only queries on Linux where rg's file walk is already fast.</p>
+        <p style="color:var(--text-dim); font-size:0.8rem; margin-top:0.3rem">Overall full-rerun result: 38/65 wins. All 26 losses came from the two small repos.</p>
       </div>
       <div class="card" style="text-align:center">
-        <div class="big-number fast" style="font-size:4rem">17.5x</div>
-        <p style="color:var(--text-secondary); margin-top:0.5rem">peak speedup over ripgrep</p>
-        <p style="color:var(--text-dim); font-size:0.8rem; margin-top:0.3rem">Linux kernel, 20-query session workload</p>
+        <div class="big-number fast" style="font-size:4rem">20.1x</div>
+        <p style="color:var(--text-secondary); margin-top:0.5rem">peak measured speedup</p>
+        <p style="color:var(--text-dim); font-size:0.8rem; margin-top:0.3rem">Linux kernel, <code style="color:var(--accent-orange)">literal_selective</code> single-query workload</p>
       </div>
     </div>
   </div>
@@ -2091,30 +2099,44 @@ parallelPlay.addEventListener('click', () => {
 
 // ═══════ BENCHMARK CHARTS ═══════
 const kubernetesData = [
-  { label: 'literal_selective', triseek: 49.5, rg: 415.4 },
-  { label: 'literal_moderate', triseek: 50.6, rg: 458.9 },
-  { label: 'literal_high', triseek: 63.7, rg: 464.4 },
-  { label: 'regex_anchor', triseek: 60.7, rg: 500.6 },
-  { label: 'regex_weak', triseek: 679.0, rg: 1248.4 },
-  { label: 'literal_no_match', triseek: 63.7, rg: 619.9 },
-  { label: 'regex_no_match', triseek: 72.2, rg: 609.6 },
-  { label: 'multi_or', triseek: 89.9, rg: 592.6 },
-  { label: 'path_all', triseek: 52.7, rg: 88.6 },
-  { label: 'path_substring', triseek: 45.6, rg: 101.5 },
-  { label: 'path_plus_content', triseek: 66.4, rg: 315.6 },
+  { label: 'literal_selective', triseek: 48.4, rg: 492.7 },
+  { label: 'literal_moderate', triseek: 58.3, rg: 598.6 },
+  { label: 'literal_high', triseek: 78.4, rg: 651.5 },
+  { label: 'regex_anchor', triseek: 69.4, rg: 664.7 },
+  { label: 'regex_weak', triseek: 650.3, rg: 1213.8 },
+  { label: 'literal_no_match', triseek: 64.3, rg: 673.5 },
+  { label: 'regex_no_match', triseek: 72.3, rg: 728.5 },
+  { label: 'multi_or', triseek: 90.0, rg: 750.7 },
+  { label: 'path_all', triseek: 42.4, rg: 79.7 },
+  { label: 'path_substring', triseek: 38.3, rg: 100.9 },
+  { label: 'path_plus_content', triseek: 72.9, rg: 405.3 },
 ];
 
 const linuxData = [
-  { label: 'literal_selective', triseek: 144.0, rg: 2008.6 },
-  { label: 'literal_moderate', triseek: 189.4, rg: 2257.2 },
-  { label: 'literal_high', triseek: 230.5, rg: 2190.6 },
-  { label: 'regex_anchor', triseek: 185.7, rg: 2201.7 },
-  { label: 'regex_weak', triseek: 1879.2, rg: 3516.4 },
-  { label: 'literal_no_match', triseek: 130.2, rg: 1824.8 },
-  { label: 'regex_no_match', triseek: 146.4, rg: 1881.2 },
-  { label: 'multi_or', triseek: 185.6, rg: 1909.8 },
-  { label: 'path_substring', triseek: 137.9, rg: 144.5 },
-  { label: 'path_plus_content', triseek: 138.5, rg: 657.4 },
+  { label: 'literal_selective', triseek: 197.1, rg: 3972.0 },
+  { label: 'literal_moderate', triseek: 288.9, rg: 4406.8 },
+  { label: 'literal_high', triseek: 511.8, rg: 5971.2 },
+  { label: 'regex_anchor', triseek: 406.1, rg: 5859.0 },
+  { label: 'regex_weak', triseek: 2760.1, rg: 4023.2 },
+  { label: 'literal_no_match', triseek: 122.6, rg: 2024.6 },
+  { label: 'regex_no_match', triseek: 152.8, rg: 2166.5 },
+  { label: 'multi_or', triseek: 195.4, rg: 2129.5 },
+  { label: 'path_substring', triseek: 188.0, rg: 242.0 },
+  { label: 'path_plus_content', triseek: 140.3, rg: 732.7 },
+];
+
+const rustData = [
+  { label: 'literal_selective', triseek: 73.9, rg: 1002.5 },
+  { label: 'literal_moderate', triseek: 97.0, rg: 1225.1 },
+  { label: 'literal_high', triseek: 123.2, rg: 1253.6 },
+  { label: 'regex_anchor', triseek: 101.0, rg: 1203.5 },
+  { label: 'regex_weak', triseek: 1257.7, rg: 1405.9 },
+  { label: 'literal_no_match', triseek: 98.8, rg: 1254.7 },
+  { label: 'regex_no_match', triseek: 95.5, rg: 1166.4 },
+  { label: 'multi_or', triseek: 121.8, rg: 1162.0 },
+  { label: 'path_all', triseek: 76.4, rg: 79.4 },
+  { label: 'path_substring', triseek: 66.1, rg: 89.0 },
+  { label: 'path_plus_content', triseek: 104.1, rg: 669.7 },
 ];
 
 function renderBenchChart(containerId, data) {
@@ -2161,6 +2183,7 @@ function renderBenchChart(containerId, data) {
 
 renderBenchChart('benchKubernetes', kubernetesData);
 renderBenchChart('benchLinux', linuxData);
+renderBenchChart('benchRust', rustData);
 </script>
 </body>
 </html>
