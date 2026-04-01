@@ -514,14 +514,7 @@ pub fn write_fast_index(
     Ok(total_size as u64)
 }
 
-fn merge_for_write(
-    base: &PersistedIndex,
-    delta: &DeltaSnapshot,
-) -> (
-    Vec<DocumentRecord>,
-    Vec<(u32, Vec<u32>)>,
-    Vec<(u32, Vec<u32>)>,
-) {
+fn merge_for_write(base: &PersistedIndex, delta: &DeltaSnapshot) -> MergedWriteData {
     use std::collections::HashSet;
 
     let removed: HashSet<&str> = delta.removed_paths.iter().map(String::as_str).collect();
@@ -596,6 +589,9 @@ fn merge_for_write(
         path_map.into_iter().collect(),
     )
 }
+
+type PostingTable = Vec<(u32, Vec<u32>)>;
+type MergedWriteData = (Vec<DocumentRecord>, PostingTable, PostingTable);
 
 // Helper functions for reading/writing binary data
 

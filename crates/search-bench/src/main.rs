@@ -45,7 +45,11 @@ struct RunArgs {
     manifest: PathBuf,
     #[arg(long)]
     output_dir: Option<PathBuf>,
-    #[arg(long = "triseek-bin", alias = "search-cli-bin", value_name = "TRISEEK_BIN")]
+    #[arg(
+        long = "triseek-bin",
+        alias = "search-cli-bin",
+        value_name = "TRISEEK_BIN"
+    )]
     search_cli_bin: Option<PathBuf>,
     #[arg(long)]
     repo_limit: Option<usize>,
@@ -1167,10 +1171,10 @@ fn parse_time_output(stderr: &str) -> (Option<f64>, Option<f64>, Option<u64>) {
     let mut max_rss = None;
     for line in stderr.lines() {
         let trimmed = line.trim();
-        if trimmed.ends_with("maximum resident set size") {
-            if let Some(value) = trimmed.split_whitespace().next() {
-                max_rss = value.parse::<u64>().ok();
-            }
+        if trimmed.ends_with("maximum resident set size")
+            && let Some(value) = trimmed.split_whitespace().next()
+        {
+            max_rss = value.parse::<u64>().ok();
         }
         if trimmed.contains(" user ") && trimmed.contains(" sys") && trimmed.contains(" real") {
             let parts = trimmed.split_whitespace().collect::<Vec<_>>();

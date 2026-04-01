@@ -105,29 +105,24 @@ pub fn route_query(
     };
 
     let category = repo_stats.category.unwrap_or(RepoCategory::Small);
-    let selected_engine = if !index_available {
-        if matches!(request.kind, SearchKind::Path) {
-            AdaptiveRoute::DirectScan
-        } else {
-            AdaptiveRoute::Ripgrep
-        }
-    } else if matches!(plan.strategy, SearchExecutionStrategy::DirectScan) {
-        if matches!(request.kind, SearchKind::Path) {
-            AdaptiveRoute::DirectScan
-        } else {
-            AdaptiveRoute::Ripgrep
-        }
-    } else {
-        match category {
-            RepoCategory::Small if !repeated_session => AdaptiveRoute::Ripgrep,
-            RepoCategory::Medium
-                if !repeated_session && matches!(plan.selectivity, QuerySelectivity::Low) =>
-            {
+    let selected_engine =
+        if !index_available || matches!(plan.strategy, SearchExecutionStrategy::DirectScan) {
+            if matches!(request.kind, SearchKind::Path) {
+                AdaptiveRoute::DirectScan
+            } else {
                 AdaptiveRoute::Ripgrep
             }
-            _ => AdaptiveRoute::Indexed,
-        }
-    };
+        } else {
+            match category {
+                RepoCategory::Small if !repeated_session => AdaptiveRoute::Ripgrep,
+                RepoCategory::Medium
+                    if !repeated_session && matches!(plan.selectivity, QuerySelectivity::Low) =>
+                {
+                    AdaptiveRoute::Ripgrep
+                }
+                _ => AdaptiveRoute::Indexed,
+            }
+        };
 
     AdaptiveRoutingDecision {
         requested_engine: SearchEngineKind::Auto,

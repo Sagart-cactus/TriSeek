@@ -106,10 +106,10 @@ where
         repo_stats.tracked_files += 1;
         repo_stats.total_disk_bytes += size;
 
-        if let Some(max_file_size) = options.max_file_size {
-            if size > max_file_size {
-                continue;
-            }
+        if let Some(max_file_size) = options.max_file_size
+            && size > max_file_size
+        {
+            continue;
         }
 
         let contents = fs::read(&path)?;
@@ -222,10 +222,10 @@ pub fn walk_repository_parallel(
                 s.total_disk_bytes += size;
             }
 
-            if let Some(max_file_size) = opts.max_file_size {
-                if size > max_file_size {
-                    return ignore::WalkState::Continue;
-                }
+            if let Some(max_file_size) = opts.max_file_size
+                && size > max_file_size
+            {
+                return ignore::WalkState::Continue;
             }
 
             let contents = match fs::read(&path) {

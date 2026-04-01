@@ -20,8 +20,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;
 
 enum IndexBackend {
-    Fast(FastIndex),
-    Legacy(RuntimeIndex),
+    Fast(Box<FastIndex>),
+    Legacy(Box<RuntimeIndex>),
 }
 
 pub struct SearchEngine {
@@ -64,7 +64,7 @@ impl SearchEngine {
             let repo_root = std::path::PathBuf::from(&metadata.repo_stats.repo_root);
             let fast = FastIndex::open(&fast_index_path(index_dir))?;
             return Ok(Self {
-                backend: IndexBackend::Fast(fast),
+                backend: IndexBackend::Fast(Box::new(fast)),
                 repo_root,
                 metadata,
             });
@@ -76,7 +76,7 @@ impl SearchEngine {
         let metadata = runtime.metadata.clone();
         let repo_root = runtime.repo_root.clone();
         Ok(Self {
-            backend: IndexBackend::Legacy(runtime),
+            backend: IndexBackend::Legacy(Box::new(runtime)),
             repo_root,
             metadata,
         })
