@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TriSeek Docs</title>
+<style>
+  :root {
+    --bg: #0a1020;
+    --panel: #121b32;
+    --border: #274065;
+    --text: #e7eefc;
+    --muted: #9bb0d1;
+    --accent: #63d2ff;
+    --accent-2: #7ef0c6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background:
+      radial-gradient(circle at top left, rgba(99, 210, 255, 0.16), transparent 30%),
+      radial-gradient(circle at bottom right, rgba(126, 240, 198, 0.16), transparent 30%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Inter", "Segoe UI", sans-serif;
+  }
+
+  main {
+    width: min(760px, 100%);
+    background: rgba(18, 27, 50, 0.88);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px;
+    backdrop-filter: blur(14px);
+  }
+
+  h1 {
+    margin: 0 0 12px;
+    font-size: clamp(2rem, 6vw, 3rem);
+  }
+
+  p {
+    margin: 0 0 24px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .grid {
+    display: grid;
+    gap: 16px;
+  }
+
+  a.card {
+    display: block;
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    text-decoration: none;
+    color: inherit;
+    background: linear-gradient(180deg, rgba(99, 210, 255, 0.06), rgba(126, 240, 198, 0.04));
+    transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  }
+
+  a.card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  }
+
+  .eyebrow {
+    display: inline-block;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .title {
+    margin: 0 0 6px;
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .meta {
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  footer {
+    margin-top: 24px;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  code {
+    color: var(--accent-2);
+    font-family: "SFMono-Regular", "Menlo", monospace;
+  }
+</style>
+</head>
+<body>
+<main>
+  <span class="eyebrow">GitHub Pages</span>
+  <h1>TriSeek Docs</h1>
+  <p>Published documentation for the current TriSeek branch. Start with the high-level explainer or go straight to the codebase architecture walkthrough.</p>
+
+  <div class="grid">
+    <a class="card" href="triseek-explained.html">
+      <div class="title">How TriSeek Works</div>
+      <div class="meta">Conceptual overview of trigram indexing, search flow, and benchmark framing.</div>
+    </a>
+
+    <a class="card" href="triseek-architecture.html">
+      <div class="title">TriSeek Architecture</div>
+      <div class="meta">Code-oriented walkthrough of the workspace, crates, data flow, and runtime components.</div>
+    </a>
+  </div>
+
+  <footer>
+    Served from <code>/docs</code> via GitHub Actions and GitHub Pages.
+  </footer>
+</main>
+</body>
+</html>
