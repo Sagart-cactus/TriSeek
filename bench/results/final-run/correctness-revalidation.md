@@ -4,8 +4,8 @@ The raw `report.json` from `final-run/` was produced before the last harness fix
 
 Revalidation method:
 
-- Path workloads were rerun with `search-cli search --engine auto` and compared against `search-cli search --engine scan`.
-- The `torvalds/linux literal_high` workload was rerun with `search-cli search --engine auto` and compared against `rg --fixed-strings`.
+- Path workloads were rerun with `triseek search --engine auto` and compared against `triseek search --engine scan`.
+- The `torvalds/linux literal_high` workload was rerun with `triseek search --engine auto` and compared against `rg --fixed-strings`.
 - Comparisons normalized a leading `./` prefix on paths before diffing the result sets.
 
 Validated cases:

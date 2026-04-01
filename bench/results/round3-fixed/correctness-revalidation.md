@@ -13,7 +13,7 @@ Follow-up validation on the current release binary:
   - `kubernetes_kubernetes`
   - `rust-lang_rust`
 - Replayed each previously failed case with:
-  - `search-cli search --engine auto --json`
+  - `triseek search --engine auto --json`
   - baseline `rg --json`
 - Normalized:
   - leading `./` in paths

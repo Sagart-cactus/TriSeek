@@ -19,7 +19,7 @@ use std::time::Instant;
 use time::OffsetDateTime;
 
 #[derive(Parser)]
-#[command(name = "search-cli")]
+#[command(name = "triseek")]
 #[command(about = "TriSeek indexed local code search")]
 struct Cli {
     #[command(subcommand)]

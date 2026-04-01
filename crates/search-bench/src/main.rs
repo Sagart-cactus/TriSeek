@@ -45,7 +45,7 @@ struct RunArgs {
     manifest: PathBuf,
     #[arg(long)]
     output_dir: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long = "triseek-bin", alias = "search-cli-bin", value_name = "TRISEEK_BIN")]
     search_cli_bin: Option<PathBuf>,
     #[arg(long)]
     repo_limit: Option<usize>,
@@ -1445,12 +1445,12 @@ fn resolve_search_cli_bin(explicit: Option<PathBuf>) -> Result<PathBuf> {
         return Ok(fs::canonicalize(path)?);
     }
     let exe = std::env::current_exe()?;
-    let sibling = exe.with_file_name("search-cli");
+    let sibling = exe.with_file_name("triseek");
     if sibling.exists() {
         return Ok(fs::canonicalize(sibling)?);
     }
     bail!(
-        "search-cli binary not found; build with `cargo build --release --bin search-cli --bin search-bench` or pass --search-cli-bin"
+        "triseek binary not found; build with `cargo build --release --bin triseek --bin search-bench` or pass --triseek-bin"
     )
 }
 

@@ -332,7 +332,7 @@ footer {
         <span class="arch-layer-label" style="color: var(--accent-pink);">Entry Points</span>
         <div class="arch-boxes">
           <div class="arch-box">
-            <div class="name" style="color:var(--accent-pink)">search-cli</div>
+            <div class="name" style="color:var(--accent-pink)">triseek</div>
             <div class="desc">CLI binary. Parses args, routes commands (build, search, session, update, stats), formats output as JSON.</div>
           </div>
           <div class="arch-box">
@@ -433,7 +433,7 @@ footer {
       <span class="fn">walker.rs</span>                   <span class="cmt"># walk_repository_parallel(), binary detection</span>
       <span class="fn">model.rs</span>                    <span class="cmt"># PersistedIndex, RuntimeIndex, DeltaSnapshot</span>
       <span class="fn">storage.rs</span>                  <span class="cmt"># file I/O: base.bin, delta.bin, fast.idx</span>
-    <span class="str">search-cli/src/</span>
+    <span class="str">crates/search-cli/src/</span>
       <span class="fn">main.rs</span>                     <span class="cmt"># CLI entry: build, search, session, update, stats</span>
     <span class="str">search-bench/src/</span>
       <span class="fn">main.rs</span>                     <span class="cmt"># benchmark harness with cold/warm trials</span>
@@ -459,7 +459,7 @@ footer {
           <tr><td style="color:var(--accent-cyan)">regex / regex-syntax</td><td>Pattern matching + AST parsing</td><td>engine.rs &mdash; verification, planner.rs &mdash; literal extraction</td></tr>
           <tr><td style="color:var(--accent-cyan)">bincode 2.0</td><td>Binary serialization</td><td>storage.rs &mdash; base.bin / delta.bin format</td></tr>
           <tr><td style="color:var(--accent-cyan)">xxhash-rust</td><td>Fast 64-bit hashing</td><td>walker.rs &mdash; file fingerprinting for delta detection</td></tr>
-          <tr><td style="color:var(--accent-cyan)">clap 4.5</td><td>CLI argument parsing</td><td>search-cli main.rs</td></tr>
+          <tr><td style="color:var(--accent-cyan)">clap 4.5</td><td>CLI argument parsing</td><td>triseek main.rs</td></tr>
           <tr><td style="color:var(--accent-cyan)">globset 0.4</td><td>Glob pattern matching</td><td>engine.rs &mdash; --glob path filters</td></tr>
         </tbody>
       </table>
@@ -1300,7 +1300,7 @@ footer {
     <div class="card reveal">
       <div class="card-head">
         <div class="card-ico pk">C</div>
-        <h3>CLI Commands <span class="tag pk">search-cli/main.rs</span></h3>
+        <h3>CLI Commands <span class="tag pk">crates/search-cli/src/main.rs</span></h3>
       </div>
       <table class="dtable">
         <thead><tr><th>Command</th><th>Handler</th><th>What It Does</th></tr></thead>

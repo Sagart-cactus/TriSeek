@@ -548,19 +548,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "search-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "search-core",
- "search-index",
- "serde",
- "serde_json",
- "time",
-]
-
-[[package]]
 name = "search-core"
 version = "0.1.0"
 dependencies = [
@@ -782,6 +769,19 @@ name = "toml_writer"
 version = "1.1.0+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d282ade6016312faf3e41e57ebbba0c073e4056dab1232ab1cb624199648f8ed"
+
+[[package]]
+name = "triseek"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "search-core",
+ "search-index",
+ "serde",
+ "serde_json",
+ "time",
+]
 
 [[package]]
 name = "unicode-ident"
