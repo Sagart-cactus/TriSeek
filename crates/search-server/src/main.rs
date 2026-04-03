@@ -3,12 +3,12 @@ use clap::Parser;
 #[cfg(unix)]
 use libc;
 use search_core::{
-    plan_query, route_query, DaemonStatus, FrecencySelectParams, QueryRequest, RpcRequest,
-    RpcResponse, SearchEngineKind, SearchHit, SearchKind, SearchResponse, DAEMON_HOST,
-    DAEMON_PID_FILE, DAEMON_PORT_FILE,
+    DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonStatus, FrecencySelectParams,
+    QueryRequest, RpcRequest, RpcResponse, SearchEngineKind, SearchHit, SearchKind, SearchResponse,
+    plan_query, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
-use search_index::{start_watcher, BuildConfig, SearchEngine};
+use search_index::{BuildConfig, SearchEngine, start_watcher};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;

@@ -241,7 +241,10 @@ mod tests {
         store.record_select(&["b".to_string()]);
         let sa = store.score_for("a");
         let sb = store.score_for("b");
-        assert!(sb > sa, "select weight should exceed result weight: a={sa} b={sb}");
+        assert!(
+            sb > sa,
+            "select weight should exceed result weight: a={sa} b={sb}"
+        );
     }
 
     #[test]

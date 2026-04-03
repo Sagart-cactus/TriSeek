@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to package and publish (for example v0.1.0)
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -18,46 +24,58 @@ jobs:
         include:
           - name: linux-x86_64
             os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
             archive_ext: tar.gz
             binary_name: triseek
+            server_binary_name: triseek-server
           - name: macos-x86_64
-            os: macos-13
+            os: macos-14
+            target: x86_64-apple-darwin
             archive_ext: tar.gz
             binary_name: triseek
+            server_binary_name: triseek-server
           - name: macos-aarch64
             os: macos-14
+            target: aarch64-apple-darwin
             archive_ext: tar.gz
             binary_name: triseek
+            server_binary_name: triseek-server
           - name: windows-x86_64
             os: windows-latest
+            target: x86_64-pc-windows-msvc
             archive_ext: zip
             binary_name: triseek.exe
+            server_binary_name: triseek-server.exe
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
       - name: Build release binary
-        run: cargo build --release --locked --bin triseek --bin triseek-server
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin triseek --bin triseek-server
 
       - name: Package archive (Unix)
         if: runner.os != 'Windows'
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
           archive="triseek-${RELEASE_TAG}-${{ matrix.name }}.${{ matrix.archive_ext }}"
           stable_archive="triseek-${{ matrix.name }}.${{ matrix.archive_ext }}"
           staging="dist/triseek-${RELEASE_TAG}-${{ matrix.name }}"
           mkdir -p "$staging"
-          cp "target/release/${{ matrix.binary_name }}" "$staging/triseek"
-          cp "target/release/triseek-server" "$staging/triseek-server"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "$staging/triseek"
+          cp "target/${{ matrix.target }}/release/${{ matrix.server_binary_name }}" "$staging/triseek-server"
           cp README.md LICENSE "$staging/"
           tar -C dist -czf "dist/$archive" "$(basename "$staging")"
           cp "dist/$archive" "dist/$stable_archive"
@@ -68,14 +86,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           $archive = "triseek-$env:RELEASE_TAG-${{ matrix.name }}.${{ matrix.archive_ext }}"
           $stableArchive = "triseek-${{ matrix.name }}.${{ matrix.archive_ext }}"
           $staging = Join-Path "dist" "triseek-$env:RELEASE_TAG-${{ matrix.name }}"
           New-Item -ItemType Directory -Force -Path $staging | Out-Null
-          Copy-Item "target/release/${{ matrix.binary_name }}" -Destination (Join-Path $staging "triseek.exe")
-          Copy-Item "target/release/triseek-server.exe" -Destination (Join-Path $staging "triseek-server.exe")
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" -Destination (Join-Path $staging "triseek.exe")
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.server_binary_name }}" -Destination (Join-Path $staging "triseek-server.exe")
           Copy-Item "README.md","LICENSE" -Destination $staging
           Compress-Archive -Path (Join-Path $staging '*') -DestinationPath (Join-Path 'dist' $archive) -Force
           Copy-Item (Join-Path 'dist' $archive) -Destination (Join-Path 'dist' $stableArchive) -Force
@@ -97,6 +115,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Download packaged artifacts
         uses: actions/download-artifact@v5
@@ -108,5 +128,6 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          body_path: docs/releases/${{ github.ref_name }}.md
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          body_path: docs/releases/${{ inputs.tag || github.ref_name }}.md
           files: release-artifacts/*

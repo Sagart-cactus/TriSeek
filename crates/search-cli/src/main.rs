@@ -1,17 +1,17 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 #[cfg(unix)]
 use libc;
 use search_core::{
-    plan_query, route_query, AdaptiveRoute, AdaptiveRoutingDecision, CaseMode, ProcessMetrics,
-    QueryRequest, RpcRequest, RpcResponse, SearchEngineKind, SearchHit, SearchKind, SearchMetrics,
-    SearchResponse, SearchSummary, SessionMetrics, SessionQuery, DAEMON_HOST, DAEMON_PID_FILE,
-    DAEMON_PORT_FILE,
+    AdaptiveRoute, AdaptiveRoutingDecision, CaseMode, DAEMON_HOST, DAEMON_PID_FILE,
+    DAEMON_PORT_FILE, ProcessMetrics, QueryRequest, RpcRequest, RpcResponse, SearchEngineKind,
+    SearchHit, SearchKind, SearchMetrics, SearchResponse, SearchSummary, SessionMetrics,
+    SessionQuery, plan_query, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
 use search_index::{
-    default_index_dir, index_exists, measure_repository, read_index_metadata, BuildConfig,
-    SearchEngine, SearchExecution,
+    BuildConfig, SearchEngine, SearchExecution, default_index_dir, index_exists,
+    measure_repository, read_index_metadata,
 };
 use serde::Serialize;
 use serde_json::Value;

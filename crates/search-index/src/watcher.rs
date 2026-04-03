@@ -6,9 +6,9 @@ use notify::event::{EventKind, ModifyKind, RenameMode};
 use notify::{RecursiveMode, Watcher};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -67,12 +67,8 @@ pub fn start_watcher(
 ) -> Result<WatcherHandle, SearchIndexError> {
     // Canonicalize so path comparisons work even when symlinks are involved
     // (e.g. /tmp → /private/tmp on macOS).
-    let repo_root = repo_root
-        .canonicalize()
-        .unwrap_or(repo_root);
-    let index_dir = index_dir
-        .canonicalize()
-        .unwrap_or(index_dir);
+    let repo_root = repo_root.canonicalize().unwrap_or(repo_root);
+    let index_dir = index_dir.canonicalize().unwrap_or(index_dir);
     let (event_tx, event_rx) = mpsc::channel::<notify::Event>();
     let (shutdown_tx, shutdown_rx) = mpsc::sync_channel::<()>(1);
     let generation = Arc::new(AtomicU64::new(0));
@@ -295,9 +291,7 @@ fn apply_event(pending: &mut HashMap<PathBuf, ChangeKind>, event: notify::Event)
         }
         EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
             for path in event.paths {
-                pending
-                    .entry(path)
-                    .or_insert(ChangeKind::CreatedOrModified);
+                pending.entry(path).or_insert(ChangeKind::CreatedOrModified);
             }
         }
         _ => {}
