@@ -59,4 +59,4 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build triseek release binary
-        run: cargo build --release --locked --bin triseek
+        run: cargo build --release --locked --bin triseek --bin triseek-server

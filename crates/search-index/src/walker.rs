@@ -310,7 +310,7 @@ fn git_head(repo_root: &Path) -> Result<String, SearchIndexError> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-fn normalize_relative(repo_root: &Path, path: &Path) -> String {
+pub(crate) fn normalize_relative(repo_root: &Path, path: &Path) -> String {
     path.strip_prefix(repo_root)
         .unwrap_or(path)
         .components()
@@ -319,7 +319,7 @@ fn normalize_relative(repo_root: &Path, path: &Path) -> String {
         .join("/")
 }
 
-fn looks_binary(contents: &[u8]) -> bool {
+pub(crate) fn looks_binary(contents: &[u8]) -> bool {
     if contents.iter().take(4096).any(|byte| *byte == 0) {
         return true;
     }
@@ -340,4 +340,51 @@ fn looks_binary(contents: &[u8]) -> bool {
     suspicious_controls * 200 >= sample.len().max(1)
         || (suspicious_controls > 0 && ratio < 0.95)
         || ratio < 0.85
+}
+
+/// Scan a single file relative to `repo_root`.
+/// Returns `None` if the file doesn't exist, exceeds `max_file_size`, or should be skipped (binary).
+pub(crate) fn scan_single_file(
+    repo_root: &Path,
+    abs_path: &Path,
+    opts: &ScanOptions,
+) -> Result<Option<ScannedFile>, SearchIndexError> {
+    let metadata = match fs::metadata(abs_path) {
+        Ok(m) if m.is_file() => m,
+        _ => return Ok(None),
+    };
+    let size = metadata.len();
+    if let Some(max_size) = opts.max_file_size {
+        if size > max_size {
+            return Ok(None);
+        }
+    }
+    let contents = fs::read(abs_path)?;
+    if !opts.include_binary && looks_binary(&contents) {
+        return Ok(None);
+    }
+    let relative_path = normalize_relative(repo_root, abs_path);
+    let file_name = abs_path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let extension = abs_path
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase());
+    let modified_unix_secs = metadata
+        .modified()
+        .ok()
+        .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    Ok(Some(ScannedFile {
+        absolute_path: abs_path.to_path_buf(),
+        relative_path,
+        file_name,
+        extension,
+        file_size: size,
+        modified_unix_secs,
+        content_hash: xxh3_64(&contents),
+        contents,
+    }))
 }

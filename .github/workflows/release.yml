@@ -43,7 +43,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build release binary
-        run: cargo build --release --locked --bin triseek
+        run: cargo build --release --locked --bin triseek --bin triseek-server
 
       - name: Package archive (Unix)
         if: runner.os != 'Windows'
@@ -53,12 +53,16 @@ jobs:
         run: |
           set -euo pipefail
           archive="triseek-${RELEASE_TAG}-${{ matrix.name }}.${{ matrix.archive_ext }}"
+          stable_archive="triseek-${{ matrix.name }}.${{ matrix.archive_ext }}"
           staging="dist/triseek-${RELEASE_TAG}-${{ matrix.name }}"
           mkdir -p "$staging"
           cp "target/release/${{ matrix.binary_name }}" "$staging/triseek"
+          cp "target/release/triseek-server" "$staging/triseek-server"
           cp README.md LICENSE "$staging/"
           tar -C dist -czf "dist/$archive" "$(basename "$staging")"
+          cp "dist/$archive" "dist/$stable_archive"
           shasum -a 256 "dist/$archive" > "dist/$archive.sha256"
+          shasum -a 256 "dist/$stable_archive" > "dist/$stable_archive.sha256"
 
       - name: Package archive (Windows)
         if: runner.os == 'Windows'
@@ -67,13 +71,18 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           $archive = "triseek-$env:RELEASE_TAG-${{ matrix.name }}.${{ matrix.archive_ext }}"
+          $stableArchive = "triseek-${{ matrix.name }}.${{ matrix.archive_ext }}"
           $staging = Join-Path "dist" "triseek-$env:RELEASE_TAG-${{ matrix.name }}"
           New-Item -ItemType Directory -Force -Path $staging | Out-Null
           Copy-Item "target/release/${{ matrix.binary_name }}" -Destination (Join-Path $staging "triseek.exe")
+          Copy-Item "target/release/triseek-server.exe" -Destination (Join-Path $staging "triseek-server.exe")
           Copy-Item "README.md","LICENSE" -Destination $staging
           Compress-Archive -Path (Join-Path $staging '*') -DestinationPath (Join-Path 'dist' $archive) -Force
+          Copy-Item (Join-Path 'dist' $archive) -Destination (Join-Path 'dist' $stableArchive) -Force
           $hash = (Get-FileHash -Algorithm SHA256 (Join-Path 'dist' $archive)).Hash.ToLower()
           "$hash  $archive" | Set-Content (Join-Path 'dist' "$archive.sha256")
+          $stableHash = (Get-FileHash -Algorithm SHA256 (Join-Path 'dist' $stableArchive)).Hash.ToLower()
+          "$stableHash  $stableArchive" | Set-Content (Join-Path 'dist' "$stableArchive.sha256")
 
       - name: Upload packaged artifacts
         uses: actions/upload-artifact@v4

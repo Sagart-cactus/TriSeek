@@ -1,8 +1,10 @@
 use search_core::{CaseMode, QueryRequest, SearchEngineKind, SearchKind};
-use search_index::{BuildConfig, SearchEngine};
+use search_index::{BuildConfig, SearchEngine, start_watcher};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 use tempfile::TempDir;
 
 #[test]
@@ -286,4 +288,60 @@ fn run(path: &Path, args: &[&str]) {
         .status()
         .expect("command runs");
     assert!(status.success());
+}
+
+/// Verify that the background watcher detects a file modification and increments the generation.
+#[test]
+fn watcher_detects_file_modification() {
+    let fixture = FixtureRepo::new();
+    // Canonicalize to resolve macOS /tmp → /private/tmp symlinks.
+    let repo_root = fixture.root.path().canonicalize().expect("canonicalize");
+    let index_dir = repo_root.join(".triseek-index");
+    let config = BuildConfig::default();
+
+    // Build an initial index.
+    SearchEngine::build(&repo_root, Some(&index_dir), &config).expect("build");
+
+    // Start the watcher.
+    let handle = start_watcher(repo_root.clone(), index_dir.clone(), config.clone())
+        .expect("watcher starts");
+
+    let gen_before = handle.generation.load(Ordering::SeqCst);
+
+    // Modify a tracked file.
+    std::thread::sleep(Duration::from_millis(100)); // let the watcher settle
+    let target = repo_root.join("src/lib.rs");
+    let original = fs::read_to_string(&target).expect("read original");
+    fs::write(&target, format!("{original}// watcher_test_marker\n")).expect("write");
+
+    // Wait for the watcher to pick up the change (debounce = 500ms + processing time).
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        std::thread::sleep(Duration::from_millis(100));
+        if handle.generation.load(Ordering::SeqCst) > gen_before {
+            break;
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("watcher did not update the index within 5s");
+        }
+    }
+
+    // Reload the engine and verify the new content is searchable.
+    let engine = SearchEngine::open(&index_dir).expect("reopen");
+    let results = engine
+        .search(&QueryRequest {
+            kind: SearchKind::Literal,
+            engine: SearchEngineKind::Indexed,
+            pattern: "watcher_test_marker".to_string(),
+            case_mode: CaseMode::Sensitive,
+            ..QueryRequest::default()
+        })
+        .expect("search");
+
+    handle.stop();
+
+    assert!(
+        results.summary.files_with_matches > 0,
+        "watcher_test_marker should be searchable after watcher update"
+    );
 }

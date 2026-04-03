@@ -178,6 +178,111 @@ pub fn update_index(
     })
 }
 
+/// Apply a pre-computed set of changes to the index without a full repository scan.
+/// Used by the background watcher to avoid re-scanning unchanged files.
+///
+/// `added_or_modified`: files that were created or changed (already scanned).
+/// `removed_relative_paths`: repo-relative paths of deleted files.
+pub fn apply_incremental_changes(
+    repo_root: &Path,
+    index_dir: &Path,
+    added_or_modified: Vec<ScannedFile>,
+    removed_relative_paths: Vec<String>,
+    config: &BuildConfig,
+) -> Result<UpdateOutcome, SearchIndexError> {
+    let base = load_base(index_dir)?;
+
+    // For changed files, also remove the old version from the base.
+    let base_paths: std::collections::HashSet<&str> =
+        base.docs.iter().map(|d| d.relative_path.as_str()).collect();
+    let mut removed_paths = removed_relative_paths;
+    let mut delta_files = Vec::new();
+
+    for file in added_or_modified {
+        // If the file already exists in base, remove the old version.
+        if base_paths.contains(file.relative_path.as_str()) {
+            removed_paths.push(file.relative_path.clone());
+        }
+        delta_files.push(file);
+    }
+
+    let delta_ratio = if base.docs.is_empty() {
+        1.0
+    } else {
+        (delta_files.len() + removed_paths.len()) as f32 / base.docs.len() as f32
+    };
+
+    if delta_ratio >= config.merge_threshold_ratio {
+        let metadata = build_index(repo_root, index_dir, config)?;
+        return Ok(UpdateOutcome {
+            metadata,
+            rebuilt_full: true,
+        });
+    }
+
+    if delta_files.is_empty() && removed_paths.is_empty() {
+        // Nothing actually changed; return the existing base metadata.
+        let metadata = IndexMetadata {
+            schema_version: SCHEMA_VERSION,
+            repo_stats: base.repo_stats.clone(),
+            build_stats: base.build_stats.clone(),
+            delta_docs: 0,
+            delta_removed_paths: 0,
+        };
+        return Ok(UpdateOutcome {
+            metadata,
+            rebuilt_full: false,
+        });
+    }
+
+    let next_doc_id = base.docs.iter().map(|doc| doc.doc_id).max().unwrap_or(0) + 1;
+    let build_stats = BuildStats {
+        completed_at: BuildStats::completed_now(),
+        docs_indexed: delta_files.len() as u64,
+        files_skipped: 0,
+        total_postings: 0,
+        index_bytes: 0,
+        build_millis: 0,
+        update_millis: Some(0),
+    };
+
+    // Reuse existing repo_stats from the base — watcher doesn't do a full scan.
+    let fake_scan = ScanSummary {
+        repo_stats: base.repo_stats.clone(),
+        files: vec![],
+    };
+    let mut delta = build_delta_snapshot(
+        repo_root,
+        fake_scan,
+        delta_files,
+        removed_paths,
+        next_doc_id,
+        build_stats,
+    );
+    let delta_size = persist_delta(index_dir, &delta)?;
+    delta.build_stats.index_bytes = delta_size;
+    let delta_size = persist_delta(index_dir, &delta)?;
+    let metadata = IndexMetadata {
+        schema_version: SCHEMA_VERSION,
+        repo_stats: delta.repo_stats.clone(),
+        build_stats: delta.build_stats.clone(),
+        delta_docs: delta.docs.len() as u64,
+        delta_removed_paths: delta.removed_paths.len() as u64,
+    };
+    persist_metadata(index_dir, &metadata)?;
+
+    Ok(UpdateOutcome {
+        metadata: IndexMetadata {
+            build_stats: BuildStats {
+                index_bytes: delta_size,
+                ..metadata.build_stats
+            },
+            ..metadata
+        },
+        rebuilt_full: false,
+    })
+}
+
 fn persist_full_index(
     index_dir: &Path,
     mut persisted: PersistedIndex,

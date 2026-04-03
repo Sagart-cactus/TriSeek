@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TriSeek Install Guide</title>
+<style>
+  :root {
+    --bg: #09111f;
+    --panel: rgba(14, 24, 42, 0.9);
+    --panel-2: rgba(19, 32, 56, 0.92);
+    --border: #244168;
+    --text: #e8eefc;
+    --muted: #9eb3d6;
+    --accent: #63d2ff;
+    --accent-2: #7ef0c6;
+    --accent-3: #ffd27a;
+    --code-bg: #08101d;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    color: var(--text);
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(99, 210, 255, 0.14), transparent 28%),
+      radial-gradient(circle at top right, rgba(126, 240, 198, 0.12), transparent 24%),
+      linear-gradient(180deg, #060c17 0%, #09111f 100%);
+  }
+
+  a { color: var(--accent); }
+
+  .shell {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 32px 20px 64px;
+  }
+
+  .hero {
+    padding: 28px;
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(14, 24, 42, 0.96), rgba(10, 17, 31, 0.96));
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  }
+
+  .eyebrow {
+    display: inline-block;
+    margin-bottom: 10px;
+    color: var(--accent);
+    font-size: 0.82rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0 0 12px;
+    font-size: clamp(2.4rem, 5vw, 4rem);
+    line-height: 1.05;
+  }
+
+  .lead {
+    margin: 0;
+    max-width: 760px;
+    color: var(--muted);
+    font-size: 1.08rem;
+    line-height: 1.7;
+  }
+
+  .grid {
+    display: grid;
+    gap: 18px;
+    margin-top: 24px;
+  }
+
+  @media (min-width: 920px) {
+    .grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .card {
+    padding: 22px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--panel);
+  }
+
+  .card.alt {
+    background: var(--panel-2);
+  }
+
+  h2 {
+    margin: 0 0 10px;
+    font-size: 1.4rem;
+  }
+
+  h3 {
+    margin: 0 0 10px;
+    font-size: 1.08rem;
+  }
+
+  p, li {
+    color: var(--muted);
+    line-height: 1.65;
+  }
+
+  ul {
+    margin: 10px 0 0;
+    padding-left: 18px;
+  }
+
+  pre {
+    margin: 14px 0 0;
+    padding: 14px 16px;
+    overflow-x: auto;
+    border: 1px solid #17304f;
+    border-radius: 14px;
+    background: var(--code-bg);
+    color: var(--text);
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+
+  code {
+    color: var(--accent-2);
+    font-family: "SFMono-Regular", "Menlo", monospace;
+  }
+
+  .steps {
+    display: grid;
+    gap: 14px;
+    margin-top: 18px;
+  }
+
+  .step {
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: rgba(8, 16, 29, 0.76);
+  }
+
+  .step .num {
+    display: inline-block;
+    margin-bottom: 8px;
+    color: var(--accent-3);
+    font-family: "SFMono-Regular", "Menlo", monospace;
+    font-size: 0.88rem;
+  }
+
+  .footer {
+    margin-top: 28px;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+</style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <span class="eyebrow">TriSeek Setup</span>
+      <h1>Install TriSeek with one command</h1>
+      <p class="lead">The recommended path is a prebuilt GitHub Release archive. Use the shell installer on macOS or Linux, the PowerShell installer on Windows, and keep Cargo as the fallback when you already have Rust installed.</p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>macOS and Linux</h2>
+        <p>This downloads the latest release archive and installs <code>triseek</code> and <code>triseek-server</code> into <code>~/.local/bin</code>. If a matching release is not published yet, the script falls back to <code>cargo install</code> when Rust is available.</p>
+        <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh</code></pre>
+        <p>Pin a specific version:</p>
+        <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.1.0</code></pre>
+        <p>Install into a different directory:</p>
+        <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --install-dir /usr/local/bin</code></pre>
+      </article>
+
+      <article class="card alt">
+        <h2>Windows PowerShell</h2>
+        <p>This downloads the latest Windows release archive, installs <code>triseek.exe</code> and <code>triseek-server.exe</code>, and updates the user <code>PATH</code> unless you opt out with <code>-SkipPathUpdate</code>. If no matching release exists, it falls back to <code>cargo install</code> when Rust is available.</p>
+        <pre><code>powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.ps1 | iex"</code></pre>
+        <p>Install a pinned version after saving the script locally:</p>
+        <pre><code>.\install.ps1 -Version v0.1.0</code></pre>
+      </article>
+
+      <article class="card">
+        <h2>Cargo Fallback</h2>
+        <p>If Rust is already installed, you can install TriSeek directly from GitHub.</p>
+        <pre><code>cargo install --git https://github.com/Sagart-cactus/TriSeek.git triseek --locked
+cargo install --git https://github.com/Sagart-cactus/TriSeek.git search-server --locked</code></pre>
+        <p>From a local checkout:</p>
+        <pre><code>cargo install --path crates/search-cli --locked
+cargo install --path crates/search-server --locked</code></pre>
+      </article>
+
+      <article class="card alt">
+        <h2>Supported Release Targets</h2>
+        <ul>
+          <li><code>linux-x86_64</code></li>
+          <li><code>macos-x86_64</code></li>
+          <li><code>macos-aarch64</code></li>
+          <li><code>windows-x86_64</code></li>
+        </ul>
+        <p>If your platform is not in that list, use the Cargo install path instead.</p>
+      </article>
+    </section>
+
+    <section class="steps">
+      <div class="step">
+        <span class="num">01</span>
+        <h3>Verify the install</h3>
+        <pre><code>triseek help</code></pre>
+      </div>
+
+      <div class="step">
+        <span class="num">02</span>
+        <h3>Build your first index</h3>
+        <pre><code>triseek build --repo /path/to/repo</code></pre>
+      </div>
+
+      <div class="step">
+        <span class="num">03</span>
+        <h3>Run a search</h3>
+        <pre><code>triseek search --repo /path/to/repo "QueryRequest"</code></pre>
+      </div>
+
+      <div class="step">
+        <span class="num">04</span>
+        <h3>Keep the index fresh</h3>
+        <pre><code>triseek update --repo /path/to/repo
+triseek daemon start --repo /path/to/repo</code></pre>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Upgrade</h2>
+        <p>Rerun the same installer command. The latest installer always replaces the old binary in place.</p>
+      </article>
+
+      <article class="card alt">
+        <h2>Uninstall</h2>
+        <p>Delete the installed binary and remove any local index directories you no longer want.</p>
+        <pre><code>rm -f ~/.local/bin/triseek ~/.local/bin/triseek-server</code></pre>
+        <pre><code>Remove-Item "$HOME\AppData\Local\Programs\TriSeek\bin\triseek.exe","$HOME\AppData\Local\Programs\TriSeek\bin\triseek-server.exe"</code></pre>
+      </article>
+    </section>
+
+    <p class="footer">TriSeek installers prefer published GitHub Releases. Before the first tagged release exists, they fall back to Cargo when Rust is installed.</p>
+  </main>
+</body>
+</html>

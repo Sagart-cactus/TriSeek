@@ -5,8 +5,12 @@ pub mod fastindex;
 mod model;
 mod storage;
 mod walker;
+pub mod watcher;
 
-pub use build::{BuildConfig, UpdateOutcome, build_index, measure_repository, update_index};
+pub use build::{
+    BuildConfig, UpdateOutcome, apply_incremental_changes, build_index, measure_repository,
+    update_index,
+};
 pub use engine::SearchEngine;
 pub use error::SearchIndexError;
 pub use model::{
@@ -15,3 +19,4 @@ pub use model::{
 };
 pub use storage::{default_index_dir, index_exists, read_index_metadata};
 pub use walker::{ScanOptions, ScanSummary, ScannedFile, scan_repository, walk_repository};
+pub use watcher::{GenerationCounter, WatcherHandle, start_watcher};
