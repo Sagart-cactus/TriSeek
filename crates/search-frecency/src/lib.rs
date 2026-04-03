@@ -90,10 +90,9 @@ impl FrecencyStore {
         let now = now_secs();
         for hit in hits {
             self.touch(hit_path(hit), RESULT_WEIGHT, now);
-            self.data
-                .entries
-                .get_mut(hit_path(hit))
-                .map(|e| e.result_count += 1);
+            if let Some(entry) = self.data.entries.get_mut(hit_path(hit)) {
+                entry.result_count += 1;
+            }
         }
     }
 
@@ -102,10 +101,9 @@ impl FrecencyStore {
         let now = now_secs();
         for path in paths {
             self.touch(path, SELECT_WEIGHT, now);
-            self.data
-                .entries
-                .get_mut(path.as_str())
-                .map(|e| e.select_count += 1);
+            if let Some(entry) = self.data.entries.get_mut(path.as_str()) {
+                entry.select_count += 1;
+            }
         }
     }
 
@@ -118,7 +116,7 @@ impl FrecencyStore {
     }
 
     /// Re-rank `hits` in-place: frecency-scored files first (descending), unscored maintain order.
-    pub fn rerank_hits(&self, hits: &mut Vec<SearchHit>) {
+    pub fn rerank_hits(&self, hits: &mut [SearchHit]) {
         let now = now_secs();
         hits.sort_by(|a, b| {
             let sa = self.score_at(hit_path(a), now);
@@ -132,8 +130,7 @@ impl FrecencyStore {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let bytes = serde_json::to_vec_pretty(&self.data)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let bytes = serde_json::to_vec_pretty(&self.data).map_err(std::io::Error::other)?;
         let tmp = self.path.with_extension("json.tmp");
         std::fs::write(&tmp, &bytes)?;
         std::fs::rename(&tmp, &self.path)?;

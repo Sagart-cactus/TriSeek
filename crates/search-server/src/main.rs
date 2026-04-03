@@ -1,7 +1,5 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-#[cfg(unix)]
-use libc;
 use search_core::{
     DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonStatus, FrecencySelectParams,
     QueryRequest, RpcRequest, RpcResponse, SearchEngineKind, SearchHit, SearchKind, SearchResponse,
@@ -100,11 +98,11 @@ fn main() -> Result<()> {
             break;
         }
 
-        if let Some(timeout) = idle_timeout {
-            if last_request.elapsed() > timeout {
-                eprintln!("triseek-server: idle timeout reached, shutting down");
-                break;
-            }
+        if let Some(timeout) = idle_timeout
+            && last_request.elapsed() > timeout
+        {
+            eprintln!("triseek-server: idle timeout reached, shutting down");
+            break;
         }
 
         let current_gen = watcher_gen.load(Ordering::SeqCst);

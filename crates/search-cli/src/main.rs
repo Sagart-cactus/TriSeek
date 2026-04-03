@@ -1,7 +1,5 @@
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-#[cfg(unix)]
-use libc;
 use search_core::{
     AdaptiveRoute, AdaptiveRoutingDecision, CaseMode, DAEMON_HOST, DAEMON_PID_FILE,
     DAEMON_PORT_FILE, ProcessMetrics, QueryRequest, RpcRequest, RpcResponse, SearchEngineKind,
@@ -328,15 +326,15 @@ fn handle_search(args: SearchArgs) -> Result<SearchResponse> {
         .unwrap_or_else(|| default_index_dir(&repo_root));
 
     // Transparent daemon forwarding: if a daemon is running, route there first.
-    if !args.no_daemon {
-        if let Some(response) = try_daemon_search(&index_dir, &request) {
-            if args.json {
-                print_json(&response)?;
-            } else {
-                print_human_search(&response);
-            }
-            return Ok(response);
+    if !args.no_daemon
+        && let Some(response) = try_daemon_search(&index_dir, &request)
+    {
+        if args.json {
+            print_json(&response)?;
+        } else {
+            print_human_search(&response);
         }
+        return Ok(response);
     }
     let index_available = index_exists(&index_dir);
     let index_metadata = if index_available {
@@ -927,10 +925,10 @@ fn rpc_call(
 fn wait_for_daemon(index_dir: &Path, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        if let Some(mut stream) = connect_to_daemon(index_dir) {
-            if rpc_call(&mut stream, "status", serde_json::Value::Null).is_ok() {
-                return true;
-            }
+        if let Some(mut stream) = connect_to_daemon(index_dir)
+            && rpc_call(&mut stream, "status", serde_json::Value::Null).is_ok()
+        {
+            return true;
         }
         std::thread::sleep(Duration::from_millis(100));
     }
@@ -945,11 +943,11 @@ fn handle_daemon_start(args: DaemonStartArgs) -> Result<()> {
     let index_dir = args.index_dir.unwrap_or_else(|| default_index_dir(&repo));
 
     // Check if daemon is already running.
-    if let Some(mut stream) = connect_to_daemon(&index_dir) {
-        if rpc_call(&mut stream, "status", serde_json::Value::Null).is_ok() {
-            eprintln!("triseek: daemon already running for {}", repo.display());
-            return Ok(());
-        }
+    if let Some(mut stream) = connect_to_daemon(&index_dir)
+        && rpc_call(&mut stream, "status", serde_json::Value::Null).is_ok()
+    {
+        eprintln!("triseek: daemon already running for {}", repo.display());
+        return Ok(());
     }
 
     // Find the triseek-server binary next to the current executable.

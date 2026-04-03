@@ -354,10 +354,10 @@ pub(crate) fn scan_single_file(
         _ => return Ok(None),
     };
     let size = metadata.len();
-    if let Some(max_size) = opts.max_file_size {
-        if size > max_size {
-            return Ok(None);
-        }
+    if let Some(max_size) = opts.max_file_size
+        && size > max_size
+    {
+        return Ok(None);
     }
     let contents = fs::read(abs_path)?;
     if !opts.include_binary && looks_binary(&contents) {
