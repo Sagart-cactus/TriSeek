@@ -1,0 +1,94 @@
+//! Codex installer: registers TriSeek as an MCP server inside the Codex CLI.
+
+use anyhow::{Context, Result};
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
+
+use crate::install::{current_triseek_binary, shared};
+
+pub fn install() -> Result<()> {
+    let binary = current_triseek_binary()?;
+    let binary_str = binary.to_string_lossy().into_owned();
+
+    // Try `codex mcp add` first. If the subcommand exists and succeeds, we're done.
+    if let Some(codex) = locate_codex() {
+        let output = Command::new(&codex)
+            .arg("mcp")
+            .arg("add")
+            .arg("triseek")
+            .arg("--")
+            .arg(&binary_str)
+            .arg("mcp")
+            .arg("serve")
+            .output();
+        match output {
+            Ok(out) if out.status.success() => {
+                println!(
+                    "triseek: registered with Codex via `codex mcp add`. Verify with `codex mcp list`."
+                );
+                return Ok(());
+            }
+            Ok(out) => {
+                eprintln!(
+                    "triseek: `codex mcp add` failed ({}); falling back to config.toml edit",
+                    String::from_utf8_lossy(&out.stderr).trim()
+                );
+            }
+            Err(err) => {
+                eprintln!(
+                    "triseek: could not invoke `codex mcp add` ({err}); falling back to config.toml edit"
+                );
+            }
+        }
+    }
+
+    // Fall back to editing ~/.codex/config.toml.
+    let path = shared::codex_config_path()?;
+    let existing = fs::read_to_string(&path).ok();
+    let merged = shared::upsert_codex_config(existing.as_deref(), &binary_str, &["mcp", "serve"])
+        .context("failed to merge triseek into Codex config.toml")?;
+    shared::atomic_write(&path, &merged)
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    println!(
+        "triseek: wrote [mcp_servers.triseek] to {}. Restart Codex and run `codex mcp list` to verify.",
+        path.display()
+    );
+    Ok(())
+}
+
+pub fn uninstall() -> Result<()> {
+    if let Some(codex) = locate_codex() {
+        let output = Command::new(&codex)
+            .arg("mcp")
+            .arg("remove")
+            .arg("triseek")
+            .output();
+        if let Ok(out) = output
+            && out.status.success()
+        {
+            println!("triseek: removed from Codex via `codex mcp remove`.");
+            return Ok(());
+        }
+    }
+    let path = shared::codex_config_path()?;
+    let Ok(existing) = fs::read_to_string(&path) else {
+        println!(
+            "triseek: no Codex config at {} (nothing to remove)",
+            path.display()
+        );
+        return Ok(());
+    };
+    match shared::remove_codex_config(&existing)? {
+        Some(updated) => {
+            shared::atomic_write(&path, &updated)?;
+            println!("triseek: removed triseek entry from {}", path.display());
+        }
+        None => println!("triseek: no triseek entry in {}", path.display()),
+    }
+    Ok(())
+}
+
+pub fn locate_codex() -> Option<PathBuf> {
+    which::which("codex").ok()
+}

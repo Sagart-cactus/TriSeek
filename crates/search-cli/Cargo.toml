@@ -14,4 +14,12 @@ serde_json.workspace = true
 search-core = { path = "../search-core" }
 search-frecency = { path = "../search-frecency" }
 search-index = { path = "../search-index" }
+tempfile.workspace = true
 time.workspace = true
+toml_edit.workspace = true
+which.workspace = true
+
+[dev-dependencies]
+search-index = { path = "../search-index" }
+serde_json.workspace = true
+tempfile.workspace = true
