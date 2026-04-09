@@ -185,7 +185,10 @@ fn index_status(state: &McpState, _arguments: &Value) -> ToolOutcome {
         match read_index_metadata(&index_dir) {
             Ok(meta) => {
                 payload.insert("index_fresh".into(), json!(meta.delta_docs == 0));
-                payload.insert("indexed_files".into(), json!(meta.build_stats.docs_indexed));
+                payload.insert(
+                    "indexed_files".into(),
+                    json!(meta.repo_stats.searchable_files),
+                );
                 payload.insert("index_bytes".into(), json!(meta.build_stats.index_bytes));
                 payload.insert("last_updated".into(), json!(meta.build_stats.completed_at));
                 payload.insert(
@@ -233,6 +236,7 @@ fn reindex(state: &McpState, arguments: &Value) -> ToolOutcome {
     let repo_root = state.repo_root();
     let index_dir = state.index_dir();
     let config = BuildConfig::default();
+    let index_present = index_exists(&index_dir);
 
     let started = std::time::Instant::now();
     let (metadata, rebuilt_full) = match mode {
@@ -244,15 +248,30 @@ fn reindex(state: &McpState, arguments: &Value) -> ToolOutcome {
                 )));
             }
         },
-        _ => match SearchEngine::update(&repo_root, Some(&index_dir), &config) {
-            Ok(outcome) => (outcome.metadata, outcome.rebuilt_full),
-            Err(err) => {
-                return ToolOutcome::Error(McpToolError::backend_failure(format!(
-                    "incremental update failed: {err}"
-                )));
+        _ => {
+            if !index_present {
+                match SearchEngine::build(&repo_root, Some(&index_dir), &config) {
+                    Ok(meta) => (meta, true),
+                    Err(err) => {
+                        return ToolOutcome::Error(McpToolError::backend_failure(format!(
+                            "incremental reindex fallback build failed: {err}"
+                        )));
+                    }
+                }
+            } else {
+                match SearchEngine::update(&repo_root, Some(&index_dir), &config) {
+                    Ok(outcome) => (outcome.metadata, outcome.rebuilt_full),
+                    Err(err) => {
+                        return ToolOutcome::Error(McpToolError::backend_failure(format!(
+                            "incremental update failed: {err}"
+                        )));
+                    }
+                }
             }
-        },
+        }
     };
+
+    state.invalidate_cached_engine();
 
     ToolOutcome::Success(json!({
         "version": ENVELOPE_VERSION,
@@ -294,7 +313,7 @@ fn parse_mode(mode: Option<&str>) -> Result<SearchKind, McpToolError> {
     }
 }
 
-type ResultMapper = fn(&SearchHit, &mut usize) -> Option<Value>;
+type ResultMapper = fn(&SearchHit, &mut usize, usize) -> Option<Value>;
 
 fn run_and_envelope(
     state: &McpState,
@@ -305,10 +324,16 @@ fn run_and_envelope(
     let repo_root = state.repo_root();
     let index_dir = state.index_dir();
 
-    let executed = match search_runner::execute_search(
-        &repo_root, &index_dir, request, /* repeated_session_hint */ true,
-        /* summary_only */ false,
-    ) {
+    let executed = match state.with_cached_engine(|indexed_engine| {
+        search_runner::execute_search_with_engine(
+            &repo_root,
+            &index_dir,
+            request,
+            /* repeated_session_hint */ true,
+            /* summary_only */ false,
+            indexed_engine,
+        )
+    }) {
         Ok(v) => v,
         Err(err) => {
             return ToolOutcome::Error(McpToolError::backend_failure(format!(
@@ -339,7 +364,7 @@ fn build_envelope(
         if produced >= limit {
             break;
         }
-        if let Some(mapped) = mapper(hit, &mut produced) {
+        if let Some(mapped) = mapper(hit, &mut produced, limit) {
             results.push(mapped);
             if produced >= limit {
                 break 'outer;
@@ -373,7 +398,7 @@ fn strategy_label(engine: SearchEngineKind) -> &'static str {
     }
 }
 
-fn path_result_mapper(hit: &SearchHit, produced: &mut usize) -> Option<Value> {
+fn path_result_mapper(hit: &SearchHit, produced: &mut usize, _limit: usize) -> Option<Value> {
     let path = match hit {
         SearchHit::Path { path } => path.clone(),
         SearchHit::Content { path, .. } => path.clone(),
@@ -385,13 +410,16 @@ fn path_result_mapper(hit: &SearchHit, produced: &mut usize) -> Option<Value> {
     }))
 }
 
-fn content_result_mapper(hit: &SearchHit, produced: &mut usize) -> Option<Value> {
+fn content_result_mapper(hit: &SearchHit, produced: &mut usize, limit: usize) -> Option<Value> {
     match hit {
         SearchHit::Content { path, lines } => {
             // Dedupe by (path, line number) and truncate previews.
             let mut seen = HashSet::<usize>::new();
             let mut out_lines = Vec::new();
             for line in lines {
+                if *produced >= limit {
+                    break;
+                }
                 if !seen.insert(line.line_number) {
                     continue;
                 }

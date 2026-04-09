@@ -37,6 +37,24 @@ pub fn execute_search(
     repeated_session_hint: bool,
     summary_only: bool,
 ) -> Result<ExecutedSearch> {
+    execute_search_with_engine(
+        repo_root,
+        index_dir,
+        request,
+        repeated_session_hint,
+        summary_only,
+        None,
+    )
+}
+
+pub fn execute_search_with_engine(
+    repo_root: &Path,
+    index_dir: &Path,
+    request: &QueryRequest,
+    repeated_session_hint: bool,
+    summary_only: bool,
+    indexed_engine: Option<&SearchEngine>,
+) -> Result<ExecutedSearch> {
     let index_available = index_exists(index_dir);
     let index_metadata = if index_available {
         Some(read_index_metadata(index_dir).with_context(|| {
@@ -63,7 +81,14 @@ pub fn execute_search(
         };
     }
 
-    let execution = dispatch(selected_route, repo_root, index_dir, request, summary_only)?;
+    let execution = dispatch(
+        selected_route,
+        repo_root,
+        index_dir,
+        request,
+        summary_only,
+        indexed_engine,
+    )?;
 
     let response = SearchResponse {
         request: request.clone(),
@@ -89,12 +114,17 @@ fn dispatch(
     index_dir: &Path,
     request: &QueryRequest,
     summary_only: bool,
+    indexed_engine: Option<&SearchEngine>,
 ) -> Result<SearchExecution> {
     match selected_route {
         AdaptiveRoute::Indexed => {
-            let engine = SearchEngine::open(index_dir)
-                .with_context(|| format!("failed to open index at {}", index_dir.display()))?;
-            Ok(engine.search(request)?)
+            if let Some(engine) = indexed_engine {
+                Ok(engine.search(request)?)
+            } else {
+                let engine = SearchEngine::open(index_dir)
+                    .with_context(|| format!("failed to open index at {}", index_dir.display()))?;
+                Ok(engine.search(request)?)
+            }
         }
         AdaptiveRoute::DirectScan => Ok(SearchEngine::search_direct(
             repo_root,

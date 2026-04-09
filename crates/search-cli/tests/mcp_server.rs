@@ -61,6 +61,41 @@ fn build_fixture_repo() -> tempfile::TempDir {
     tmp
 }
 
+fn build_unindexed_fixture_repo() -> tempfile::TempDir {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let root = tmp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::write(
+        root.join("src/fallback.rs"),
+        "pub fn fallback() {\n    let value = \"McpState\";\n}\n",
+    )
+    .unwrap();
+    tmp
+}
+
+fn build_repeated_match_repo(line_matches: usize) -> tempfile::TempDir {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let root = tmp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+
+    let mut contents = String::from("pub fn sample() {\n");
+    for idx in 0..line_matches {
+        contents.push_str(&format!("    let needle_{idx} = \"McpState\";\n"));
+    }
+    contents.push_str("}\n");
+    std::fs::write(root.join("src/many.rs"), contents).unwrap();
+
+    let index_dir = root.join(".triseek-index");
+    search_index::SearchEngine::build(
+        root,
+        Some(&index_dir),
+        &search_index::BuildConfig::default(),
+    )
+    .expect("build index");
+
+    tmp
+}
+
 struct McpClient {
     child: Child,
     stdin: ChildStdin,
@@ -288,6 +323,42 @@ fn search_content_finds_literal_match() {
 }
 
 #[test]
+fn search_content_respects_limit_with_many_matches_in_one_file() {
+    let fixture = build_repeated_match_repo(20);
+    let mut client = McpClient::spawn(fixture.path());
+    let _ = client.call(
+        "initialize",
+        json!({"protocolVersion": "2025-06-18", "clientInfo": {"name":"t","version":"0"}, "capabilities": {}}),
+    );
+    client.notify("notifications/initialized", json!({}));
+
+    let envelope = call_tool(
+        &mut client,
+        "search_content",
+        json!({ "query": "needle_[0-9]+", "mode": "regex", "limit": 5 }),
+    );
+    let returned_matches: usize = envelope
+        .get("results")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|result| {
+            result
+                .get("matches")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len)
+        })
+        .sum();
+    assert_eq!(
+        returned_matches, 5,
+        "result envelope must respect requested limit"
+    );
+    assert_eq!(envelope.get("truncated"), Some(&json!(true)));
+
+    client.shutdown();
+}
+
+#[test]
 fn search_path_and_content_respects_glob() {
     let fixture = build_fixture_repo();
     let mut client = McpClient::spawn(fixture.path());
@@ -327,7 +398,7 @@ fn index_status_reports_present_index() {
     let envelope = call_tool(&mut client, "index_status", json!({}));
     assert_eq!(envelope.get("version"), Some(&json!("1")));
     assert_eq!(envelope.get("index_present"), Some(&json!(true)));
-    assert!(envelope.get("indexed_files").is_some());
+    assert_eq!(envelope.get("indexed_files"), Some(&json!(3)));
 
     client.shutdown();
 }
@@ -347,6 +418,91 @@ fn reindex_incremental_completes() {
     assert_eq!(envelope.get("completed"), Some(&json!(true)));
     assert_eq!(envelope.get("mode"), Some(&json!("incremental")));
     assert!(envelope.get("elapsed_ms").is_some());
+
+    client.shutdown();
+}
+
+#[test]
+fn reindex_incremental_bootstraps_missing_index() {
+    let fixture = build_unindexed_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
+    let _ = client.call(
+        "initialize",
+        json!({"protocolVersion": "2025-06-18", "clientInfo": {"name":"t","version":"0"}, "capabilities": {}}),
+    );
+    client.notify("notifications/initialized", json!({}));
+
+    let envelope = call_tool(&mut client, "reindex", json!({ "mode": "incremental" }));
+    assert_eq!(envelope.get("version"), Some(&json!("1")));
+    assert_eq!(envelope.get("completed"), Some(&json!(true)));
+    assert_eq!(envelope.get("mode"), Some(&json!("incremental")));
+    assert_eq!(envelope.get("rebuilt_full"), Some(&json!(true)));
+
+    let status = call_tool(&mut client, "index_status", json!({}));
+    assert_eq!(status.get("index_present"), Some(&json!(true)));
+    assert_eq!(status.get("index_fresh"), Some(&json!(true)));
+
+    client.shutdown();
+}
+
+#[test]
+fn reindex_invalidates_cached_engine() {
+    let fixture = build_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
+    let _ = client.call(
+        "initialize",
+        json!({"protocolVersion": "2025-06-18", "clientInfo": {"name":"t","version":"0"}, "capabilities": {}}),
+    );
+    client.notify("notifications/initialized", json!({}));
+
+    let warm = call_tool(
+        &mut client,
+        "search_content",
+        json!({ "query": "route_auth", "mode": "literal", "limit": 5 }),
+    );
+    assert_eq!(warm.get("files_with_matches"), Some(&json!(1)));
+
+    std::fs::write(
+        fixture.path().join("src/auth/router.rs"),
+        "pub fn route_auth() {\n    let fresh_symbol = true;\n}\n",
+    )
+    .unwrap();
+
+    let reindex = call_tool(&mut client, "reindex", json!({ "mode": "incremental" }));
+    assert_eq!(reindex.get("completed"), Some(&json!(true)));
+
+    let fresh = call_tool(
+        &mut client,
+        "search_content",
+        json!({ "query": "fresh_symbol", "mode": "literal", "limit": 5 }),
+    );
+    assert_eq!(fresh.get("files_with_matches"), Some(&json!(1)));
+
+    client.shutdown();
+}
+
+#[test]
+fn index_status_reports_repo_searchable_files_after_incremental_update() {
+    let fixture = build_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
+    let _ = client.call(
+        "initialize",
+        json!({"protocolVersion": "2025-06-18", "clientInfo": {"name":"t","version":"0"}, "capabilities": {}}),
+    );
+    client.notify("notifications/initialized", json!({}));
+
+    std::fs::write(
+        fixture.path().join("src/auth/router.rs"),
+        "pub fn route_auth() {\n    let changed = true;\n}\n",
+    )
+    .unwrap();
+
+    let reindex = call_tool(&mut client, "reindex", json!({ "mode": "incremental" }));
+    assert_eq!(reindex.get("completed"), Some(&json!(true)));
+
+    let status = call_tool(&mut client, "index_status", json!({}));
+    assert_eq!(status.get("index_present"), Some(&json!(true)));
+    assert_eq!(status.get("indexed_files"), Some(&json!(3)));
 
     client.shutdown();
 }

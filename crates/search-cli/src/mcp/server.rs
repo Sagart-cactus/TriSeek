@@ -7,12 +7,15 @@
 //! stderr only; stdout is reserved for framed messages.
 
 use anyhow::{Context, Result};
-use search_index::default_index_dir;
+use search_index::{SearchEngine, default_index_dir, index_exists};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, StdinLock, StdoutLock, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{
+    Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 
 use crate::mcp::schema::{TOOLS, ToolDescriptor};
 use crate::mcp::tools::{ToolOutcome, dispatch};
@@ -24,6 +27,7 @@ const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct McpState {
     repo_root: PathBuf,
     index_dir: PathBuf,
+    cached_engine: Mutex<Option<SearchEngine>>,
 }
 
 impl McpState {
@@ -32,6 +36,7 @@ impl McpState {
         Self {
             repo_root,
             index_dir,
+            cached_engine: Mutex::new(None),
         }
     }
 
@@ -41,6 +46,28 @@ impl McpState {
 
     pub fn index_dir(&self) -> PathBuf {
         self.index_dir.clone()
+    }
+
+    pub fn with_cached_engine<T>(
+        &self,
+        f: impl FnOnce(Option<&SearchEngine>) -> Result<T>,
+    ) -> Result<T> {
+        let mut guard = self
+            .cached_engine
+            .lock()
+            .expect("MCP cached engine mutex poisoned");
+        if guard.is_none() && index_exists(&self.index_dir) {
+            let engine = SearchEngine::open(&self.index_dir)
+                .with_context(|| format!("failed to open index at {}", self.index_dir.display()))?;
+            *guard = Some(engine);
+        }
+        f(guard.as_ref())
+    }
+
+    pub fn invalidate_cached_engine(&self) {
+        if let Ok(mut guard) = self.cached_engine.lock() {
+            *guard = None;
+        }
     }
 }
 
