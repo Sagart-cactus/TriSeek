@@ -1,24 +1,29 @@
+mod install;
+mod mcp;
+mod rg;
+mod search_runner;
+
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use search_core::{
     AdaptiveRoute, AdaptiveRoutingDecision, CaseMode, DAEMON_HOST, DAEMON_PID_FILE,
     DAEMON_PORT_FILE, ProcessMetrics, QueryRequest, RpcRequest, RpcResponse, SearchEngineKind,
-    SearchHit, SearchKind, SearchMetrics, SearchResponse, SearchSummary, SessionMetrics,
-    SessionQuery, plan_query, route_query,
+    SearchHit, SearchKind, SearchResponse, SessionMetrics, SessionQuery, plan_query, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
 use search_index::{
-    BuildConfig, SearchEngine, SearchExecution, default_index_dir, index_exists,
-    measure_repository, read_index_metadata,
+    BuildConfig, SearchEngine, default_index_dir, index_exists, measure_repository,
+    read_index_metadata,
 };
+use search_runner::adjust_route_for_filters;
 use serde::Serialize;
-use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs;
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
+#[cfg(windows)]
 use std::process::Command;
 use std::time::{Duration, Instant};
 use time::OffsetDateTime;
@@ -41,6 +46,14 @@ enum Commands {
     Stats(StatsArgs),
     FrecencySelect(FrecencySelectArgs),
     Daemon(DaemonArgs),
+    /// MCP (Model Context Protocol) server for Claude Code, Codex, and other agent clients.
+    Mcp(McpArgs),
+    /// Install TriSeek as an MCP server inside an agent client.
+    Install(InstallArgs),
+    /// Uninstall TriSeek from an agent client.
+    Uninstall(InstallArgs),
+    /// Run diagnostic checks for the MCP install flow.
+    Doctor,
 }
 
 #[derive(Args)]
@@ -223,6 +236,76 @@ struct FrecencySelectArgs {
     paths: Vec<String>,
 }
 
+// ---------------------------------------------------------------------------
+// MCP subcommands
+// ---------------------------------------------------------------------------
+
+#[derive(Args)]
+struct McpArgs {
+    #[command(subcommand)]
+    command: McpCommands,
+}
+
+#[derive(Subcommand)]
+enum McpCommands {
+    /// Run TriSeek as an MCP server over stdio.
+    Serve(McpServeArgs),
+}
+
+#[derive(Args)]
+struct McpServeArgs {
+    /// Repository root to search. Defaults to walking up from CWD for a `.git` marker.
+    #[arg(long)]
+    repo: Option<PathBuf>,
+    /// Index directory. Defaults to the TriSeek default for the resolved repo.
+    #[arg(long)]
+    index_dir: Option<PathBuf>,
+}
+
+// ---------------------------------------------------------------------------
+// Install subcommands
+// ---------------------------------------------------------------------------
+
+#[derive(Args)]
+struct InstallArgs {
+    #[command(subcommand)]
+    client: InstallClient,
+}
+
+#[derive(Subcommand)]
+enum InstallClient {
+    /// Register TriSeek with the Claude Code CLI.
+    ClaudeCode(ClaudeCodeInstallArgs),
+    /// Register TriSeek with the Codex CLI.
+    Codex,
+}
+
+#[derive(Args)]
+struct ClaudeCodeInstallArgs {
+    /// Installation scope. `local` is per-user on this machine, `project` edits
+    /// `.mcp.json` in the current directory and is intended to be committed,
+    /// `user` installs globally for the current Claude Code user profile.
+    #[arg(long, value_enum, default_value_t = CliClaudeScope::Local)]
+    scope: CliClaudeScope,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum CliClaudeScope {
+    Local,
+    Project,
+    User,
+}
+
+impl From<CliClaudeScope> for install::Scope {
+    fn from(value: CliClaudeScope) -> Self {
+        match value {
+            CliClaudeScope::Local => install::Scope::Local,
+            CliClaudeScope::Project => install::Scope::Project,
+            CliClaudeScope::User => install::Scope::User,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct BuildOutput {
     action: &'static str,
@@ -270,6 +353,18 @@ fn main() -> Result<()> {
             DaemonCommands::Stop(args) => handle_daemon_stop(args),
             DaemonCommands::Status(args) => handle_daemon_status(args),
         },
+        Commands::Mcp(args) => match args.command {
+            McpCommands::Serve(args) => mcp::serve(args.repo.as_deref(), args.index_dir.as_deref()),
+        },
+        Commands::Install(args) => match args.client {
+            InstallClient::ClaudeCode(a) => install::claude_code::install(a.scope.into()),
+            InstallClient::Codex => install::codex::install(),
+        },
+        Commands::Uninstall(args) => match args.client {
+            InstallClient::ClaudeCode(a) => install::claude_code::uninstall(a.scope.into()),
+            InstallClient::Codex => install::codex::uninstall(),
+        },
+        Commands::Doctor => install::doctor::run(),
     }
 }
 
@@ -336,54 +431,15 @@ fn handle_search(args: SearchArgs) -> Result<SearchResponse> {
         }
         return Ok(response);
     }
-    let index_available = index_exists(&index_dir);
-    let index_metadata = if index_available {
-        Some(read_index_metadata(&index_dir).with_context(|| {
-            format!("failed to read index metadata from {}", index_dir.display())
-        })?)
-    } else {
-        None
-    };
 
-    let plan = plan_query(&request);
-    let mut routing = route_query(
+    let executed = search_runner::execute_search(
+        &repo_root,
+        &index_dir,
         &request,
-        index_metadata.as_ref().map(|metadata| &metadata.repo_stats),
-        &plan,
-        index_available,
         args.repeated_session_hint,
-    );
-    let selected_route = adjust_route_for_filters(routing.selected_engine, &request);
-    if selected_route != routing.selected_engine {
-        routing = AdaptiveRoutingDecision {
-            reason: format!("{};filter_adjustment=true", routing.reason),
-            selected_engine: selected_route,
-            ..routing
-        };
-    }
-
-    let execution = match selected_route {
-        AdaptiveRoute::Indexed => {
-            let engine = SearchEngine::open(&index_dir)
-                .with_context(|| format!("failed to open index at {}", index_dir.display()))?;
-            engine.search(&request)?
-        }
-        AdaptiveRoute::DirectScan => {
-            SearchEngine::search_direct(&repo_root, &request, &BuildConfig::default())?
-        }
-        AdaptiveRoute::Ripgrep => run_rg_search(&repo_root, &request, args.summary_only)?,
-    };
-
-    let mut response = SearchResponse {
-        request: request.clone(),
-        effective_kind: effective_search_kind(args.kind),
-        engine: route_to_engine(selected_route),
-        routing,
-        plan,
-        hits: execution.hits,
-        summary: execution.summary,
-        metrics: execution.metrics,
-    };
+        args.summary_only,
+    )?;
+    let mut response = executed.response;
     if args.summary_only {
         response.hits.clear();
     }
@@ -484,18 +540,23 @@ fn handle_session(args: SessionArgs) -> Result<SessionOutput> {
             AdaptiveRoute::DirectScan => {
                 SearchEngine::search_direct(&repo_root, &request, &BuildConfig::default())?
             }
-            AdaptiveRoute::Ripgrep => run_rg_search(&repo_root, &request, args.summary_only)?,
+            AdaptiveRoute::Ripgrep => {
+                crate::rg::run_rg_search(&repo_root, &request, args.summary_only)?
+            }
         };
 
         total_matches += execution.summary.total_line_matches;
         *engine_counts
-            .entry(format!("{:?}", route_to_engine(selected_route)).to_ascii_lowercase())
+            .entry(
+                format!("{:?}", search_runner::route_to_engine(selected_route))
+                    .to_ascii_lowercase(),
+            )
             .or_default() += 1;
 
         let mut response = SearchResponse {
             request,
             effective_kind: effective_search_kind(CliSearchKind::Auto),
-            engine: route_to_engine(selected_route),
+            engine: search_runner::route_to_engine(selected_route),
             routing,
             plan,
             hits: execution.hits,
@@ -605,191 +666,11 @@ fn resolve_repo_root(repo: Option<&Path>, index_dir: Option<&Path>) -> Result<Pa
     bail!("repo root is required when index metadata cannot supply it")
 }
 
-fn run_rg_search(
-    repo_root: &Path,
-    request: &QueryRequest,
-    summary_only: bool,
-) -> Result<SearchExecution> {
-    if matches!(request.kind, SearchKind::Path) {
-        bail!("path queries should not route to ripgrep execution");
-    }
-    let started = Instant::now();
-    let mut command = Command::new("rg");
-    command.current_dir(repo_root);
-    command.arg("--color").arg("never");
-    command.arg("--no-heading");
-
-    if summary_only {
-        command.arg("--count");
-    } else {
-        command.arg("--json");
-        command.arg("--line-number");
-    }
-
-    if request.include_hidden {
-        command.arg("--hidden");
-    }
-    if request.include_binary {
-        command.arg("--text");
-    }
-    if matches!(request.case_mode, CaseMode::Insensitive) {
-        command.arg("--ignore-case");
-    }
-    if matches!(request.kind, SearchKind::Literal | SearchKind::Auto) {
-        command.arg("--fixed-strings");
-    }
-    for extension in request.normalized_extensions() {
-        command.arg("-g").arg(format!("*.{extension}"));
-    }
-    for glob in &request.globs {
-        command.arg("-g").arg(glob);
-    }
-    for prefix in &request.path_prefixes {
-        let mut normalized = prefix.trim_end_matches('/').to_string();
-        normalized.push_str("/**");
-        command.arg("-g").arg(normalized);
-    }
-    for name in &request.exact_names {
-        command.arg("-g").arg(format!("**/{name}"));
-    }
-    for path in &request.exact_paths {
-        command.arg("-g").arg(path);
-    }
-    if let Some(max_results) = request.max_results {
-        command.arg("--max-count").arg(max_results.to_string());
-    }
-    command.arg(&request.pattern);
-    command.arg(".");
-
-    let output = command.output().context("failed to execute rg")?;
-    if !output.status.success() && output.status.code() != Some(1) {
-        bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
-    }
-
-    if summary_only {
-        let mut files_with_matches = 0_usize;
-        let mut total_line_matches = 0_usize;
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            let Some((_, count)) = line.rsplit_once(':') else {
-                continue;
-            };
-            let count = count.trim().parse::<usize>().unwrap_or_default();
-            if count > 0 {
-                files_with_matches += 1;
-                total_line_matches += count;
-            }
-        }
-        return Ok(SearchExecution {
-            summary: SearchSummary {
-                files_with_matches,
-                total_line_matches,
-            },
-            metrics: SearchMetrics {
-                process: ProcessMetrics {
-                    wall_millis: started.elapsed().as_secs_f64() * 1_000.0,
-                    user_cpu_millis: None,
-                    system_cpu_millis: None,
-                    max_rss_kib: None,
-                },
-                candidate_docs: 0,
-                verified_docs: 0,
-                matches_returned: total_line_matches,
-                bytes_scanned: 0,
-                index_bytes_read: None,
-            },
-            ..SearchExecution::default()
-        });
-    }
-
-    let mut grouped = BTreeMap::<String, Vec<search_core::SearchLineMatch>>::new();
-    for line in String::from_utf8_lossy(&output.stdout).lines() {
-        let value: Value = serde_json::from_str(line)?;
-        if value.get("type").and_then(Value::as_str) != Some("match") {
-            continue;
-        }
-        let data = &value["data"];
-        let path = data["path"]["text"]
-            .as_str()
-            .or_else(|| data["path"]["bytes"].as_str())
-            .unwrap_or_default()
-            .to_string();
-        let line_text = data["lines"]["text"]
-            .as_str()
-            .map(|value| value.trim_end_matches(['\n', '\r']).to_string())
-            .unwrap_or_default();
-        let line_number = data["line_number"].as_u64().unwrap_or_default() as usize;
-        let column = data["submatches"]
-            .get(0)
-            .and_then(|submatch| submatch.get("start"))
-            .and_then(Value::as_u64)
-            .map(|value| value as usize + 1)
-            .unwrap_or(1);
-        grouped
-            .entry(path)
-            .or_default()
-            .push(search_core::SearchLineMatch {
-                line_number,
-                column,
-                line_text,
-            });
-    }
-
-    let mut hits = Vec::with_capacity(grouped.len());
-    let mut total_line_matches = 0_usize;
-    for (path, lines) in grouped {
-        total_line_matches += lines.len();
-        hits.push(SearchHit::Content { path, lines });
-    }
-
-    Ok(SearchExecution {
-        summary: SearchSummary {
-            files_with_matches: hits.len(),
-            total_line_matches,
-        },
-        metrics: SearchMetrics {
-            process: ProcessMetrics {
-                wall_millis: started.elapsed().as_secs_f64() * 1_000.0,
-                user_cpu_millis: None,
-                system_cpu_millis: None,
-                max_rss_kib: None,
-            },
-            candidate_docs: 0,
-            verified_docs: 0,
-            matches_returned: total_line_matches,
-            bytes_scanned: 0,
-            index_bytes_read: None,
-        },
-        hits,
-    })
-}
-
-fn adjust_route_for_filters(route: AdaptiveRoute, request: &QueryRequest) -> AdaptiveRoute {
-    if matches!(request.kind, SearchKind::Path) {
-        return if matches!(route, AdaptiveRoute::Indexed) {
-            AdaptiveRoute::Indexed
-        } else {
-            AdaptiveRoute::DirectScan
-        };
-    }
-    if !request.path_substrings.is_empty() || !request.exact_paths.is_empty() {
-        return AdaptiveRoute::DirectScan;
-    }
-    route
-}
-
 fn effective_search_kind(kind: CliSearchKind) -> SearchKind {
     match kind {
         CliSearchKind::Auto | CliSearchKind::Literal => SearchKind::Literal,
         CliSearchKind::Regex => SearchKind::Regex,
         CliSearchKind::Path => SearchKind::Path,
-    }
-}
-
-fn route_to_engine(route: AdaptiveRoute) -> SearchEngineKind {
-    match route {
-        AdaptiveRoute::Indexed => SearchEngineKind::Indexed,
-        AdaptiveRoute::DirectScan => SearchEngineKind::DirectScan,
-        AdaptiveRoute::Ripgrep => SearchEngineKind::Ripgrep,
     }
 }
 

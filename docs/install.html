@@ -171,7 +171,7 @@
         <p>This downloads the latest release archive and installs <code>triseek</code> and <code>triseek-server</code> into <code>~/.local/bin</code>. If a matching release is not published yet, the script falls back to <code>cargo install</code> when Rust is available.</p>
         <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh</code></pre>
         <p>Pin a specific version:</p>
-        <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.1.0</code></pre>
+        <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.2.0</code></pre>
         <p>Install into a different directory:</p>
         <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --install-dir /usr/local/bin</code></pre>
       </article>
@@ -181,7 +181,7 @@
         <p>This downloads the latest Windows release archive, installs <code>triseek.exe</code> and <code>triseek-server.exe</code>, and updates the user <code>PATH</code> unless you opt out with <code>-SkipPathUpdate</code>. If no matching release exists, it falls back to <code>cargo install</code> when Rust is available.</p>
         <pre><code>powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.ps1 | iex"</code></pre>
         <p>Install a pinned version after saving the script locally:</p>
-        <pre><code>.\install.ps1 -Version v0.1.0</code></pre>
+        <pre><code>.\install.ps1 -Version v0.2.0</code></pre>
       </article>
 
       <article class="card">

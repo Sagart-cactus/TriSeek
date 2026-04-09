@@ -11,7 +11,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "0.1.0"
+version = "0.2.0"
 license = "MIT"
 authors = ["Codex"]
 
@@ -34,6 +34,8 @@ tempfile = "3.23.0"
 thiserror = "2.0.17"
 time = { version = "0.3.44", features = ["formatting", "macros", "parsing", "serde"] }
 toml = "0.9.7"
+toml_edit = "0.22"
+which = "7"
 rayon = "1.10.0"
 xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
 notify = "7"
