@@ -3,139 +3,422 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TriSeek Docs</title>
+<title>TriSeek — Fast Local Code Search</title>
 <style>
-  :root {
-    --bg: #0a1020;
-    --panel: #121b32;
-    --border: #274065;
-    --text: #e7eefc;
-    --muted: #9bb0d1;
-    --accent: #63d2ff;
-    --accent-2: #7ef0c6;
-  }
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
-  * { box-sizing: border-box; }
+:root {
+  --bg-deep: #0a0e17;
+  --bg-panel: #0f1520;
+  --bg-card: #141c2b;
+  --bg-elevated: #1a2436;
+  --bg-input: #0d1219;
+  --border: #1e2d42;
+  --border-bright: #2a4060;
+  --text-primary: #e2e8f0;
+  --text-secondary: #8899b0;
+  --text-dim: #4a5c74;
+  --accent-cyan: #22d3ee;
+  --accent-cyan-dim: #0e7490;
+  --accent-green: #34d399;
+  --accent-green-dim: #065f46;
+  --accent-orange: #fb923c;
+  --accent-orange-dim: #9a3412;
+  --accent-purple: #a78bfa;
+  --accent-purple-dim: #5b21b6;
+  --accent-red: #f87171;
+  --accent-yellow: #fbbf24;
+  --accent-pink: #f472b6;
+  --glow-cyan: 0 0 30px rgba(34, 211, 238, 0.15);
+  --glow-green: 0 0 30px rgba(52, 211, 153, 0.15);
+}
 
-  body {
-    margin: 0;
-    min-height: 100vh;
-    display: grid;
-    place-items: center;
-    padding: 24px;
-    background:
-      radial-gradient(circle at top left, rgba(99, 210, 255, 0.16), transparent 30%),
-      radial-gradient(circle at bottom right, rgba(126, 240, 198, 0.16), transparent 30%),
-      var(--bg);
-    color: var(--text);
-    font-family: "Inter", "Segoe UI", sans-serif;
-  }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--border-bright) var(--bg-deep); }
+body { background: var(--bg-deep); color: var(--text-primary); font-family: 'Space Grotesk', sans-serif; line-height: 1.7; overflow-x: hidden; }
+::selection { background: var(--accent-cyan); color: var(--bg-deep); }
 
-  main {
-    width: min(760px, 100%);
-    background: rgba(18, 27, 50, 0.88);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 32px;
-    backdrop-filter: blur(14px);
-  }
+body::before {
+  content: '';
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  pointer-events: none; z-index: 9999;
+}
 
-  h1 {
-    margin: 0 0 12px;
-    font-size: clamp(2rem, 6vw, 3rem);
-  }
+.grid-bg {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background-image:
+    linear-gradient(rgba(34,211,238,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34,211,238,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none; z-index: 0;
+}
 
-  p {
-    margin: 0 0 24px;
-    color: var(--muted);
-    line-height: 1.6;
-  }
+.container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; position: relative; z-index: 1; }
 
-  .grid {
-    display: grid;
-    gap: 16px;
-  }
+/* NAV */
+.top-nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: rgba(10,14,23,0.85); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  z-index: 100; padding: 0.6rem 2rem;
+  display: flex; align-items: center; gap: 2rem;
+}
+.top-nav .logo {
+  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.9rem;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  text-decoration: none;
+}
+.top-nav .nav-links { display: flex; align-items: center; gap: 1.75rem; margin-left: auto; }
+.top-nav a {
+  color: var(--text-dim); text-decoration: none; font-size: 0.8rem;
+  transition: color 0.2s; font-family: 'JetBrains Mono', monospace;
+}
+.top-nav a:hover { color: var(--accent-cyan); }
+.top-nav a.active { color: var(--accent-cyan); }
 
-  a.card {
-    display: block;
-    padding: 20px;
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    text-decoration: none;
-    color: inherit;
-    background: linear-gradient(180deg, rgba(99, 210, 255, 0.06), rgba(126, 240, 198, 0.04));
-    transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
-  }
+/* HERO */
+.hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  text-align: center; padding: 8rem 2rem 5rem; position: relative;
+}
 
-  a.card:hover {
-    transform: translateY(-2px);
-    border-color: var(--accent);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
-  }
+.hero-glow {
+  position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
+  width: 700px; height: 400px;
+  background: radial-gradient(ellipse, rgba(34,211,238,0.07) 0%, rgba(52,211,153,0.04) 40%, transparent 70%);
+  pointer-events: none;
+}
 
-  .eyebrow {
-    display: inline-block;
-    margin-bottom: 8px;
-    font-size: 0.85rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--accent);
-  }
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.35rem 1.1rem;
+  border: 1px solid var(--accent-cyan-dim); border-radius: 100px;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+  color: var(--accent-cyan); letter-spacing: 0.12em; text-transform: uppercase;
+  margin-bottom: 1.75rem;
+  animation: fadeUp 0.5s ease both;
+}
+.hero-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-cyan); animation: pulse 2s infinite; }
 
-  .title {
-    margin: 0 0 6px;
-    font-size: 1.25rem;
-    font-weight: 700;
-  }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-  .meta {
-    color: var(--muted);
-    font-size: 0.95rem;
-  }
+.hero h1 {
+  font-size: clamp(3rem, 8vw, 6.5rem); font-weight: 700;
+  letter-spacing: -0.04em; line-height: 1.0; margin-bottom: 1.25rem;
+  animation: fadeUp 0.5s 0.08s ease both;
+}
+.hero h1 .hl {
+  background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-green) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
 
-  footer {
-    margin-top: 24px;
-    color: var(--muted);
-    font-size: 0.9rem;
-  }
+.hero-sub {
+  color: var(--text-secondary); font-size: 1.1rem; max-width: 560px;
+  margin: 0 auto 2.5rem; line-height: 1.7;
+  animation: fadeUp 0.5s 0.16s ease both;
+}
 
-  code {
-    color: var(--accent-2);
-    font-family: "SFMono-Regular", "Menlo", monospace;
-  }
+.hero-ctas {
+  display: flex; align-items: center; gap: 0.875rem; flex-wrap: wrap; justify-content: center;
+  margin-bottom: 4rem;
+  animation: fadeUp 0.5s 0.24s ease both;
+}
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.72rem 1.6rem;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
+  color: var(--bg-deep); text-decoration: none; border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.83rem; font-weight: 700;
+  transition: opacity 0.2s, transform 0.2s;
+  letter-spacing: 0.02em;
+}
+.btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+.btn-secondary {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.72rem 1.6rem;
+  background: transparent; border: 1px solid var(--border-bright);
+  color: var(--text-secondary); text-decoration: none; border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.83rem;
+  transition: border-color 0.2s, color 0.2s;
+}
+.btn-secondary:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+/* TERMINAL */
+.terminal-demo {
+  width: 100%; max-width: 700px; margin: 0 auto;
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(34,211,238,0.05);
+  animation: fadeUp 0.5s 0.32s ease both;
+}
+.terminal-tb {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+}
+.terminal-dots { display: flex; gap: 5px; }
+.terminal-dots span { width: 10px; height: 10px; border-radius: 50%; }
+.terminal-dots span:nth-child(1) { background: #ff5f57; }
+.terminal-dots span:nth-child(2) { background: #ffbd2e; }
+.terminal-dots span:nth-child(3) { background: #28c840; }
+.terminal-title { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--text-dim); margin: 0 auto; }
+.terminal-body {
+  padding: 1.25rem 1.5rem;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; line-height: 1.9; text-align: left;
+}
+.t-prompt { color: var(--accent-green); }
+.t-cmd { color: var(--text-primary); }
+.t-path { color: var(--accent-purple); }
+.t-file { color: var(--accent-cyan); }
+.t-match { color: var(--accent-yellow); font-weight: 600; }
+.t-num { color: var(--accent-orange); }
+.t-dim { color: var(--text-dim); }
+.t-ok { color: var(--accent-green); }
+.t-strategy { color: var(--accent-cyan-dim); }
+
+/* STATS */
+.stats-row {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+  margin: 5rem 0; background: var(--border); border-radius: 12px; overflow: hidden;
+  border: 1px solid var(--border);
+}
+.stat-item {
+  background: var(--bg-card); padding: 2rem 1.5rem; text-align: center;
+}
+.stat-val {
+  font-family: 'JetBrains Mono', monospace; font-size: 2.4rem; font-weight: 700;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  line-height: 1.1; margin-bottom: 0.5rem;
+}
+.stat-label { color: var(--text-dim); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; font-family: 'JetBrains Mono', monospace; }
+
+/* SECTIONS */
+section { padding: 4rem 0; }
+.section-num {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.68rem;
+  color: var(--accent-cyan-dim); letter-spacing: 0.2em; text-transform: uppercase;
+  margin-bottom: 0.4rem;
+}
+h2 { font-size: clamp(1.8rem, 3.5vw, 2.5rem); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.75rem; }
+h2 .hl { color: var(--accent-cyan); }
+.section-desc { color: var(--text-secondary); font-size: 1rem; max-width: 680px; margin-bottom: 2.5rem; }
+
+/* DOC CARDS */
+.doc-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;
+}
+@media (max-width: 680px) { .doc-grid { grid-template-columns: 1fr; } .stats-row { grid-template-columns: 1fr; } }
+
+.doc-card {
+  display: block; text-decoration: none; color: inherit;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.75rem; transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+  position: relative; overflow: hidden;
+}
+.doc-card::after {
+  content: ''; position: absolute; top: 0; right: 0;
+  width: 120px; height: 120px;
+  background: radial-gradient(circle, rgba(34,211,238,0.05), transparent 70%);
+  opacity: 0; transition: opacity 0.3s;
+}
+.doc-card:hover { border-color: var(--border-bright); box-shadow: var(--glow-cyan); transform: translateY(-2px); }
+.doc-card:hover::after { opacity: 1; }
+
+.doc-card-ico {
+  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+  margin-bottom: 1rem;
+}
+.doc-card-ico.cy { background: rgba(34,211,238,0.1); color: var(--accent-cyan); }
+.doc-card-ico.gn { background: rgba(52,211,153,0.1); color: var(--accent-green); }
+.doc-card-ico.or { background: rgba(251,146,60,0.1); color: var(--accent-orange); }
+.doc-card-ico.pu { background: rgba(167,139,250,0.1); color: var(--accent-purple); }
+
+.doc-card h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.4rem; }
+.doc-card p { color: var(--text-secondary); font-size: 0.88rem; line-height: 1.6; }
+.doc-card-arrow {
+  margin-top: 1.25rem;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.73rem;
+  color: var(--text-dim); display: flex; align-items: center; gap: 0.4rem;
+  transition: color 0.2s, gap 0.2s;
+}
+.doc-card:hover .doc-card-arrow { color: var(--accent-cyan); gap: 0.65rem; }
+
+/* FEATURES */
+.features-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 2.5rem;
+}
+@media (max-width: 900px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .features-grid { grid-template-columns: 1fr; } }
+
+.feature-item {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1.4rem; transition: border-color 0.3s, transform 0.2s;
+}
+.feature-item:hover { border-color: var(--border-bright); transform: translateY(-1px); }
+.feature-icon { font-size: 1.25rem; margin-bottom: 0.65rem; }
+.feature-title { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.3rem; }
+.feature-desc { color: var(--text-dim); font-size: 0.82rem; line-height: 1.55; }
+
+/* FOOTER */
+.site-footer {
+  border-top: 1px solid var(--border); padding: 2rem 0; margin-top: 2rem;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
+  color: var(--text-dim); font-size: 0.78rem; font-family: 'JetBrains Mono', monospace;
+}
+.site-footer a { color: var(--text-dim); text-decoration: none; transition: color 0.2s; }
+.site-footer a:hover { color: var(--accent-cyan); }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 </style>
 </head>
 <body>
-<main>
-  <span class="eyebrow">GitHub Pages</span>
-  <h1>TriSeek Docs</h1>
-  <p>Published documentation for TriSeek. Start with install and standalone CLI usage, then jump into MCP integration or the deeper architecture walkthroughs.</p>
+<div class="grid-bg"></div>
 
-  <div class="grid">
-    <a class="card" href="install.html">
-      <div class="title">Install TriSeek</div>
-      <div class="meta">One-command setup for macOS, Linux, and Windows, plus upgrade and uninstall notes.</div>
-    </a>
+<nav class="top-nav">
+  <a class="logo" href="index.html">▲ TriSeek</a>
+  <div class="nav-links">
+    <a href="index.html" class="active">home</a>
+    <a href="install.html">install</a>
+    <a href="mcp.html">mcp</a>
+    <a href="triseek-explained.html">how it works</a>
+    <a href="triseek-architecture.html">architecture</a>
+  </div>
+</nav>
 
-    <a class="card" href="mcp.html">
-      <div class="title">MCP Server Reference</div>
-      <div class="meta">How to install, run, and troubleshoot the local TriSeek MCP server for Claude Code and Codex.</div>
-    </a>
+<div class="hero">
+  <div class="hero-glow"></div>
+  <div class="container">
+    <div class="hero-badge">
+      <div class="hero-badge-dot"></div>
+      trigram-indexed · local · mcp-native
+    </div>
+    <h1>Search code at<br><span class="hl">index speed</span></h1>
+    <p class="hero-sub">Published documentation for TriSeek. Start with install and standalone CLI usage, then jump into MCP integration or the deeper architecture walkthroughs.</p>
+    <div class="hero-ctas">
+      <a href="install.html" class="btn-primary">⬇ Install TriSeek</a>
+      <a href="mcp.html" class="btn-secondary">⬡ MCP Reference</a>
+    </div>
 
-    <a class="card" href="triseek-explained.html">
-      <div class="title">How TriSeek Works</div>
-      <div class="meta">Conceptual overview of trigram indexing, search flow, and benchmark framing.</div>
-    </a>
+    <div class="terminal-demo">
+      <div class="terminal-tb">
+        <div class="terminal-dots"><span></span><span></span><span></span></div>
+        <span class="terminal-title">zsh — /path/to/repo</span>
+      </div>
+      <div class="terminal-body">
+        <div><span class="t-prompt">❯</span> <span class="t-cmd">triseek "AuthConfig" </span><span class="t-path">/path/to/repo</span></div>
+        <div class="t-dim">  Searching via trigram index…</div>
+        <div><span class="t-file">src/auth/config.rs</span><span class="t-dim">:</span><span class="t-num">12</span>  <span class="t-match">AuthConfig</span> { timeout: 30, … }</div>
+        <div><span class="t-file">src/middleware/auth.rs</span><span class="t-dim">:</span><span class="t-num">47</span>  fn load(<span class="t-match">AuthConfig</span>) → Result&lt;…&gt;</div>
+        <div><span class="t-file">tests/auth_test.rs</span><span class="t-dim">:</span><span class="t-num">8</span>   let cfg = <span class="t-match">AuthConfig</span>::default();</div>
+        <div class="t-dim">  ─────────────────────────────────────────</div>
+        <div><span class="t-ok">✓</span> <span class="t-dim">3 matches · </span><span class="t-strategy">strategy: triseek_indexed</span><span class="t-dim"> · 12ms</span></div>
+      </div>
+    </div>
+  </div>
+</div>
 
-    <a class="card" href="triseek-architecture.html">
-      <div class="title">TriSeek Architecture</div>
-      <div class="meta">Code-oriented walkthrough of the workspace, crates, data flow, and runtime components.</div>
-    </a>
+<div class="container">
+  <div class="stats-row">
+    <div class="stat-item">
+      <div class="stat-val">&lt;50ms</div>
+      <div class="stat-label">indexed queries</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val">30/39</div>
+      <div class="stat-label">benchmarks beat rg</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val">mmap</div>
+      <div class="stat-label">zero-copy index reads</div>
+    </div>
   </div>
 
-  <footer>
-    Served from <code>/docs</code> via GitHub Actions and GitHub Pages.
+  <section>
+    <div class="section-num">// documentation</div>
+    <h2>Where to <span class="hl">start</span></h2>
+    <p class="section-desc">Served from <code style="color:var(--accent-cyan);font-family:'JetBrains Mono',monospace;font-size:0.88em">/docs</code> via GitHub Actions and GitHub Pages.</p>
+
+    <div class="doc-grid">
+      <a class="doc-card" href="install.html">
+        <div class="doc-card-ico cy">⬇</div>
+        <h3>Install TriSeek</h3>
+        <p>One-command setup for macOS, Linux, and Windows, plus upgrade and uninstall notes.</p>
+        <div class="doc-card-arrow">read guide →</div>
+      </a>
+
+      <a class="doc-card" href="mcp.html">
+        <div class="doc-card-ico gn">⬡</div>
+        <h3>MCP Server Reference</h3>
+        <p>How to install, run, and troubleshoot the local TriSeek MCP server for Claude Code and Codex.</p>
+        <div class="doc-card-arrow">read guide →</div>
+      </a>
+
+      <a class="doc-card" href="triseek-explained.html">
+        <div class="doc-card-ico or">◎</div>
+        <h3>How TriSeek Works</h3>
+        <p>Conceptual overview of trigram indexing, search flow, and benchmark framing.</p>
+        <div class="doc-card-arrow">read guide →</div>
+      </a>
+
+      <a class="doc-card" href="triseek-architecture.html">
+        <div class="doc-card-ico pu">⬡</div>
+        <h3>TriSeek Architecture</h3>
+        <p>Code-oriented walkthrough of the workspace, crates, data flow, and runtime components.</p>
+        <div class="doc-card-arrow">read guide →</div>
+      </a>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-num">// why triseek</div>
+    <h2>Built for <span class="hl">AI-assisted</span> workflows</h2>
+    <p class="section-desc">TriSeek is designed to give LLM agents fast, bounded, local code search — without shell access or raw file bodies.</p>
+
+    <div class="features-grid">
+      <div class="feature-item">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-title">Trigram Index</div>
+        <div class="feature-desc">Pre-built index enables sub-50ms responses for most queries, even on large repos.</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">🔒</div>
+        <div class="feature-title">Local Only</div>
+        <div class="feature-desc">No network, no telemetry, no OAuth. Runs entirely on your machine via stdio.</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">⬡</div>
+        <div class="feature-title">MCP Native</div>
+        <div class="feature-desc">Drop-in stdio MCP server for Claude Code, Codex, and any MCP-capable client.</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">↘</div>
+        <div class="feature-title">Graceful Fallback</div>
+        <div class="feature-desc">Falls back to direct scan or ripgrep when index is absent, with routing signals in every response.</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">▣</div>
+        <div class="feature-title">Bounded Output</div>
+        <div class="feature-desc">Clipped responses, deduped matches, line preview truncation — safe for MCP budgets.</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">◈</div>
+        <div class="feature-title">Cross-Platform</div>
+        <div class="feature-desc">Pre-built releases for Linux x86_64, macOS x86_64 + aarch64, and Windows x86_64.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <span>TriSeek — fast local code search</span>
+    <a href="https://github.com/Sagart-cactus/TriSeek">github.com/Sagart-cactus/TriSeek →</a>
   </footer>
-</main>
+</div>
 </body>
 </html>

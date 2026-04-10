@@ -3,253 +3,413 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TriSeek Install Guide</title>
+<title>TriSeek — Install Guide</title>
 <style>
-  :root {
-    --bg: #09111f;
-    --panel: rgba(14, 24, 42, 0.9);
-    --panel-2: rgba(19, 32, 56, 0.92);
-    --border: #244168;
-    --text: #e8eefc;
-    --muted: #9eb3d6;
-    --accent: #63d2ff;
-    --accent-2: #7ef0c6;
-    --accent-3: #ffd27a;
-    --code-bg: #08101d;
-  }
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
-  * { box-sizing: border-box; }
+:root {
+  --bg-deep: #0a0e17;
+  --bg-panel: #0f1520;
+  --bg-card: #141c2b;
+  --bg-elevated: #1a2436;
+  --bg-input: #0d1219;
+  --border: #1e2d42;
+  --border-bright: #2a4060;
+  --text-primary: #e2e8f0;
+  --text-secondary: #8899b0;
+  --text-dim: #4a5c74;
+  --accent-cyan: #22d3ee;
+  --accent-cyan-dim: #0e7490;
+  --accent-green: #34d399;
+  --accent-green-dim: #065f46;
+  --accent-orange: #fb923c;
+  --accent-orange-dim: #9a3412;
+  --accent-purple: #a78bfa;
+  --accent-purple-dim: #5b21b6;
+  --accent-red: #f87171;
+  --accent-yellow: #fbbf24;
+  --accent-pink: #f472b6;
+  --glow-cyan: 0 0 30px rgba(34, 211, 238, 0.15);
+}
 
-  body {
-    margin: 0;
-    color: var(--text);
-    font-family: "Space Grotesk", "Segoe UI", sans-serif;
-    background:
-      radial-gradient(circle at top left, rgba(99, 210, 255, 0.14), transparent 28%),
-      radial-gradient(circle at top right, rgba(126, 240, 198, 0.12), transparent 24%),
-      linear-gradient(180deg, #060c17 0%, #09111f 100%);
-  }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--border-bright) var(--bg-deep); }
+body { background: var(--bg-deep); color: var(--text-primary); font-family: 'Space Grotesk', sans-serif; line-height: 1.7; overflow-x: hidden; }
+::selection { background: var(--accent-cyan); color: var(--bg-deep); }
 
-  a { color: var(--accent); }
+body::before {
+  content: '';
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  pointer-events: none; z-index: 9999;
+}
 
-  .shell {
-    max-width: 1080px;
-    margin: 0 auto;
-    padding: 32px 20px 64px;
-  }
+.grid-bg {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background-image:
+    linear-gradient(rgba(34,211,238,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34,211,238,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none; z-index: 0;
+}
 
-  .hero {
-    padding: 28px;
-    border: 1px solid var(--border);
-    border-radius: 24px;
-    background: linear-gradient(180deg, rgba(14, 24, 42, 0.96), rgba(10, 17, 31, 0.96));
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
-  }
+.container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; position: relative; z-index: 1; }
 
-  .eyebrow {
-    display: inline-block;
-    margin-bottom: 10px;
-    color: var(--accent);
-    font-size: 0.82rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
+/* NAV */
+.top-nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: rgba(10,14,23,0.85); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  z-index: 100; padding: 0.6rem 2rem;
+  display: flex; align-items: center; gap: 2rem;
+}
+.top-nav .logo {
+  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.9rem;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  text-decoration: none;
+}
+.top-nav .nav-links { display: flex; align-items: center; gap: 1.75rem; margin-left: auto; }
+.top-nav a {
+  color: var(--text-dim); text-decoration: none; font-size: 0.8rem;
+  transition: color 0.2s; font-family: 'JetBrains Mono', monospace;
+}
+.top-nav a:hover { color: var(--accent-cyan); }
+.top-nav a.active { color: var(--accent-cyan); }
 
-  h1 {
-    margin: 0 0 12px;
-    font-size: clamp(2.4rem, 5vw, 4rem);
-    line-height: 1.05;
-  }
+/* HERO */
+.hero { padding: 7rem 0 1.5rem; }
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.35rem 1.1rem;
+  border: 1px solid var(--accent-cyan-dim); border-radius: 100px;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+  color: var(--accent-cyan); letter-spacing: 0.12em; text-transform: uppercase;
+  margin-bottom: 1.5rem;
+}
+.hero h1 {
+  font-size: clamp(2.5rem, 5vw, 4rem); font-weight: 700;
+  letter-spacing: -0.03em; line-height: 1.05; margin-bottom: 1rem;
+}
+.hero h1 .hl { color: var(--accent-cyan); }
+.hero-sub {
+  color: var(--text-secondary); font-size: 1.08rem; max-width: 680px; line-height: 1.7;
+  margin-bottom: 0.5rem;
+}
 
-  .lead {
-    margin: 0;
-    max-width: 760px;
-    color: var(--muted);
-    font-size: 1.08rem;
-    line-height: 1.7;
-  }
+/* SECTIONS */
+section { padding: 2.25rem 0; }
+.section-num {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.68rem;
+  color: var(--accent-cyan-dim); letter-spacing: 0.2em; text-transform: uppercase;
+  margin-bottom: 0.4rem;
+}
+h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.75rem; }
+h2 .hl { color: var(--accent-cyan); }
+h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
+.section-desc { color: var(--text-secondary); font-size: 0.95rem; max-width: 700px; margin-bottom: 2rem; }
 
-  .grid {
-    display: grid;
-    gap: 18px;
-    margin-top: 24px;
-  }
+/* CARD */
+.card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.75rem; min-width: 0; transition: border-color 0.3s, box-shadow 0.3s;
+}
+.card:hover { border-color: var(--border-bright); box-shadow: var(--glow-cyan); }
+.card-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.1rem; }
+.card-ico {
+  width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 0.95rem;
+}
+.card-ico.cy { background: rgba(34,211,238,0.1); color: var(--accent-cyan); }
+.card-ico.gn { background: rgba(52,211,153,0.1); color: var(--accent-green); }
+.card-ico.or { background: rgba(251,146,60,0.1); color: var(--accent-orange); }
+.card-ico.pu { background: rgba(167,139,250,0.1); color: var(--accent-purple); }
+.card-ico.yw { background: rgba(251,191,36,0.1); color: var(--accent-yellow); }
 
-  @media (min-width: 920px) {
-    .grid {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
+p { color: var(--text-secondary); line-height: 1.65; }
+p + p { margin-top: 0.75rem; }
 
-  .card {
-    padding: 22px;
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    background: var(--panel);
-  }
+ul { margin: 0.75rem 0 0 1rem; }
+li { color: var(--text-secondary); line-height: 1.7; margin-bottom: 0.2rem; }
+li code { color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace; font-size: 0.85em; }
 
-  .card.alt {
-    background: var(--panel-2);
-  }
+/* CODE BLOCKS */
+.code-block { background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 1rem 0; }
+.code-block + .code-block { margin-top: 0.75rem; }
+.code-block .tb {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--text-dim);
+}
+.code-block .tb .dots { display: flex; gap: 5px; }
+.code-block .tb .dots span { width: 10px; height: 10px; border-radius: 50%; }
+.code-block .tb .dots span:nth-child(1) { background: #ff5f57; }
+.code-block .tb .dots span:nth-child(2) { background: #ffbd2e; }
+.code-block .tb .dots span:nth-child(3) { background: #28c840; }
+.code-block .tb .label { margin-left: 0.35rem; }
+.code-block pre {
+  padding: 1rem 1.25rem; overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; line-height: 1.7; color: var(--text-primary);
+}
+code { color: var(--accent-green); font-family: 'JetBrains Mono', monospace; font-size: 0.88em; }
 
-  h2 {
-    margin: 0 0 10px;
-    font-size: 1.4rem;
-  }
+/* GRID LAYOUTS */
+.two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+@media (max-width: 820px) { .two-col { grid-template-columns: 1fr; } }
 
-  h3 {
-    margin: 0 0 10px;
-    font-size: 1.08rem;
-  }
+/* STEPS */
+.steps { display: grid; gap: 1rem; margin-top: 2rem; }
+.step {
+  display: grid; grid-template-columns: 3rem 1fr; gap: 1.25rem; align-items: start;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.5rem; transition: border-color 0.3s;
+}
+.step:hover { border-color: var(--border-bright); }
+.step-num {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: rgba(34,211,238,0.08); border: 1px solid var(--accent-cyan-dim);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 600;
+  color: var(--accent-cyan); flex-shrink: 0;
+}
+.step-body { min-width: 0; }
+.step-body h3 { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
 
-  p, li {
-    color: var(--muted);
-    line-height: 1.65;
-  }
+/* TAGS */
+.tag {
+  display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.55rem;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+.tag.cy { background: rgba(34,211,238,0.1); border: 1px solid var(--accent-cyan-dim); color: var(--accent-cyan); }
+.tag.gn { background: rgba(52,211,153,0.1); border: 1px solid var(--accent-green-dim); color: var(--accent-green); }
+.tag.or { background: rgba(251,146,60,0.1); border: 1px solid var(--accent-orange-dim); color: var(--accent-orange); }
 
-  ul {
-    margin: 10px 0 0;
-    padding-left: 18px;
-  }
+/* TARGETS TABLE */
+.targets-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.75rem;
+}
+.target-item {
+  display: flex; align-items: center; gap: 0.6rem;
+  background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--text-secondary);
+}
+.target-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); flex-shrink: 0; }
 
-  pre {
-    margin: 14px 0 0;
-    padding: 14px 16px;
-    overflow-x: auto;
-    border: 1px solid #17304f;
-    border-radius: 14px;
-    background: var(--code-bg);
-    color: var(--text);
-    font-size: 0.92rem;
-    line-height: 1.55;
-  }
-
-  code {
-    color: var(--accent-2);
-    font-family: "SFMono-Regular", "Menlo", monospace;
-  }
-
-  .steps {
-    display: grid;
-    gap: 14px;
-    margin-top: 18px;
-  }
-
-  .step {
-    padding: 18px;
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    background: rgba(8, 16, 29, 0.76);
-  }
-
-  .step .num {
-    display: inline-block;
-    margin-bottom: 8px;
-    color: var(--accent-3);
-    font-family: "SFMono-Regular", "Menlo", monospace;
-    font-size: 0.88rem;
-  }
-
-  .footer {
-    margin-top: 28px;
-    color: var(--muted);
-    font-size: 0.95rem;
-  }
+/* FOOTER */
+.site-footer {
+  border-top: 1px solid var(--border); padding: 2rem 0; margin-top: 2rem;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
+  color: var(--text-dim); font-size: 0.78rem; font-family: 'JetBrains Mono', monospace;
+}
+.site-footer a { color: var(--text-dim); text-decoration: none; transition: color 0.2s; }
+.site-footer a:hover { color: var(--accent-cyan); }
 </style>
 </head>
 <body>
-  <main class="shell">
-    <section class="hero">
-      <span class="eyebrow">TriSeek Setup</span>
-      <h1>Install TriSeek with one command</h1>
-      <p class="lead">The recommended path is a prebuilt GitHub Release archive. Use the shell installer on macOS or Linux, the PowerShell installer on Windows, and keep Cargo as the fallback when you already have Rust installed.</p>
-    </section>
+<div class="grid-bg"></div>
 
-    <section class="grid">
-      <article class="card">
-        <h2>macOS and Linux</h2>
+<nav class="top-nav">
+  <a class="logo" href="index.html">▲ TriSeek</a>
+  <div class="nav-links">
+    <a href="index.html">home</a>
+    <a href="install.html" class="active">install</a>
+    <a href="mcp.html">mcp</a>
+    <a href="triseek-explained.html">how it works</a>
+    <a href="triseek-architecture.html">architecture</a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="hero">
+    <div class="hero-badge">◈ TriSeek Setup</div>
+    <h1>Install TriSeek with<br><span class="hl">one command</span></h1>
+    <p class="hero-sub">The recommended path is a prebuilt GitHub Release archive. Use the shell installer on macOS or Linux, the PowerShell installer on Windows, and keep Cargo as the fallback when you already have Rust installed.</p>
+  </div>
+
+  <section>
+    <div class="section-num">// 01 — platform installers</div>
+    <h2>Choose your <span class="hl">platform</span></h2>
+    <div class="two-col" style="margin-top: 2rem;">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico cy">⌘</div>
+          <h3>macOS and Linux</h3>
+        </div>
         <p>This downloads the latest release archive and installs <code>triseek</code> and <code>triseek-server</code> into <code>~/.local/bin</code>. If a matching release is not published yet, the script falls back to <code>cargo install</code> when Rust is available.</p>
-        <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh</code></pre>
+
+        <div class="code-block">
+          <div class="tb">
+            <div class="dots"><span></span><span></span><span></span></div>
+            <span class="label">shell · recommended</span>
+          </div>
+          <pre>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh</pre>
+        </div>
+
         <p>Pin a specific version:</p>
-        <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.2.1</code></pre>
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell · pinned version</span></div>
+          <pre>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.2.1</pre>
+        </div>
+
         <p>Install into a different directory:</p>
-        <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --install-dir /usr/local/bin</code></pre>
-      </article>
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell · custom install dir</span></div>
+          <pre>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --install-dir /usr/local/bin</pre>
+        </div>
+      </div>
 
-      <article class="card alt">
-        <h2>Windows PowerShell</h2>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico pu">⊞</div>
+          <h3>Windows PowerShell</h3>
+        </div>
         <p>This downloads the latest Windows release archive, installs <code>triseek.exe</code> and <code>triseek-server.exe</code>, and updates the user <code>PATH</code> unless you opt out with <code>-SkipPathUpdate</code>. If no matching release exists, it falls back to <code>cargo install</code> when Rust is available.</p>
-        <pre><code>powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.ps1 | iex"</code></pre>
+
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">powershell · recommended</span></div>
+          <pre>powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.ps1 | iex"</pre>
+        </div>
+
         <p>Install a pinned version after saving the script locally:</p>
-        <pre><code>.\install.ps1 -Version v0.2.1</code></pre>
-      </article>
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">powershell · pinned version</span></div>
+          <pre>.\install.ps1 -Version v0.2.1</pre>
+        </div>
+      </div>
 
-      <article class="card">
-        <h2>Cargo Fallback</h2>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico or">⚙</div>
+          <h3>Cargo Fallback</h3>
+        </div>
         <p>If Rust is already installed, you can install TriSeek directly from GitHub.</p>
-        <pre><code>cargo install --git https://github.com/Sagart-cactus/TriSeek.git triseek --locked
-cargo install --git https://github.com/Sagart-cactus/TriSeek.git search-server --locked</code></pre>
+
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">cargo · from github</span></div>
+          <pre>cargo install --git https://github.com/Sagart-cactus/TriSeek.git triseek --locked
+cargo install --git https://github.com/Sagart-cactus/TriSeek.git search-server --locked</pre>
+        </div>
+
         <p>From a local checkout:</p>
-        <pre><code>cargo install --path crates/search-cli --locked
-cargo install --path crates/search-server --locked</code></pre>
-      </article>
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">cargo · local checkout</span></div>
+          <pre>cargo install --path crates/search-cli --locked
+cargo install --path crates/search-server --locked</pre>
+        </div>
+      </div>
 
-      <article class="card alt">
-        <h2>Supported Release Targets</h2>
-        <ul>
-          <li><code>linux-x86_64</code></li>
-          <li><code>macos-x86_64</code></li>
-          <li><code>macos-aarch64</code></li>
-          <li><code>windows-x86_64</code></li>
-        </ul>
-        <p>If your platform is not in that list, use the Cargo install path instead.</p>
-      </article>
-    </section>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico gn">◈</div>
+          <h3>Supported Release Targets</h3>
+        </div>
+        <p>Pre-built archives are published for the following targets. If your platform is not in this list, use the Cargo install path instead.</p>
+        <div class="targets-grid">
+          <div class="target-item"><span class="target-dot"></span>linux-x86_64</div>
+          <div class="target-item"><span class="target-dot"></span>macos-x86_64</div>
+          <div class="target-item"><span class="target-dot"></span>macos-aarch64</div>
+          <div class="target-item"><span class="target-dot"></span>windows-x86_64</div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-    <section class="steps">
+  <section>
+    <div class="section-num">// 02 — first steps</div>
+    <h2>Get <span class="hl">running</span></h2>
+    <p class="section-desc">After installation, verify the binary is reachable and run your first search.</p>
+
+    <div class="steps">
       <div class="step">
-        <span class="num">01</span>
-        <h3>Verify the install</h3>
-        <pre><code>triseek help</code></pre>
+        <div class="step-num">01</div>
+        <div class="step-body">
+          <h3>Verify the install</h3>
+          <div class="code-block">
+            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
+            <pre>triseek help</pre>
+          </div>
+        </div>
       </div>
 
       <div class="step">
-        <span class="num">02</span>
-        <h3>Search immediately</h3>
-        <pre><code>triseek "AuthConfig" /path/to/repo</code></pre>
+        <div class="step-num">02</div>
+        <div class="step-body">
+          <h3>Search immediately</h3>
+          <div class="code-block">
+            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
+            <pre>triseek "AuthConfig" /path/to/repo</pre>
+          </div>
+        </div>
       </div>
 
       <div class="step">
-        <span class="num">03</span>
-        <h3>Index for repeated speed</h3>
-        <pre><code>triseek build /path/to/repo
-triseek "AuthConfig" /path/to/repo</code></pre>
+        <div class="step-num">03</div>
+        <div class="step-body">
+          <h3>Index for repeated speed</h3>
+          <div class="code-block">
+            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
+            <pre>triseek build /path/to/repo
+triseek "AuthConfig" /path/to/repo</pre>
+          </div>
+        </div>
       </div>
 
       <div class="step">
-        <span class="num">04</span>
-        <h3>Keep the index fresh</h3>
-        <pre><code>triseek update /path/to/repo
-triseek daemon start</code></pre>
-        <p>Default TriSeek state lives under <code>~/.triseek</code>, not in the searched repo root.</p>
+        <div class="step-num">04</div>
+        <div class="step-body">
+          <h3>Keep the index fresh</h3>
+          <div class="code-block">
+            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
+            <pre>triseek update /path/to/repo
+triseek daemon start</pre>
+          </div>
+          <p style="margin-top: 0.75rem;">Default TriSeek state lives under <code>~/.triseek</code>, not in the searched repo root.</p>
+        </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="grid">
-      <article class="card">
-        <h2>Upgrade</h2>
+  <section>
+    <div class="section-num">// 03 — maintenance</div>
+    <h2>Upgrade &amp; <span class="hl">Uninstall</span></h2>
+    <div class="two-col" style="margin-top: 2rem;">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico cy">↑</div>
+          <h3>Upgrade</h3>
+        </div>
         <p>Rerun the same installer command. The latest installer always replaces the old binary in place.</p>
-      </article>
+      </div>
 
-      <article class="card alt">
-        <h2>Uninstall</h2>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico or">✕</div>
+          <h3>Uninstall</h3>
+        </div>
         <p>Delete the installed binary and remove <code>~/.triseek</code> if you also want to remove local index data.</p>
-        <pre><code>rm -f ~/.local/bin/triseek ~/.local/bin/triseek-server</code></pre>
-        <pre><code>Remove-Item "$HOME\AppData\Local\Programs\TriSeek\bin\triseek.exe","$HOME\AppData\Local\Programs\TriSeek\bin\triseek-server.exe"</code></pre>
-      </article>
-    </section>
 
-    <p class="footer">TriSeek installers prefer published GitHub Releases. Before the first tagged release exists, they fall back to Cargo when Rust is installed.</p>
-  </main>
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">macOS / Linux</span></div>
+          <pre>rm -f ~/.local/bin/triseek ~/.local/bin/triseek-server</pre>
+        </div>
+
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">Windows PowerShell</span></div>
+          <pre>Remove-Item "$HOME\AppData\Local\Programs\TriSeek\bin\triseek.exe","$HOME\AppData\Local\Programs\TriSeek\bin\triseek-server.exe"</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <span>TriSeek installers prefer published GitHub Releases. Before the first tagged release exists, they fall back to Cargo when Rust is installed.</span>
+    <div style="display:flex;gap:1.25rem;">
+      <a href="index.html">← home</a>
+      <a href="mcp.html">mcp →</a>
+    </div>
+  </footer>
+</div>
 </body>
 </html>
