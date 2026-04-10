@@ -103,7 +103,7 @@ jobs:
           "$stableHash  $stableArchive" | Set-Content (Join-Path 'dist' "$stableArchive.sha256")
 
       - name: Upload packaged artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-${{ matrix.name }}
           path: dist/*
@@ -119,7 +119,7 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Download packaged artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           pattern: release-*
           merge-multiple: true
