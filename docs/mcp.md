@@ -201,7 +201,7 @@ Tool execution failures return a successful JSON-RPC response with
     "code": "INDEX_UNAVAILABLE",
     "message": "TriSeek index is unavailable for this repository",
     "retryable": true,
-    "suggested_action": "Call the `reindex` tool or run `triseek build --repo <PATH>`"
+    "suggested_action": "Call the `reindex` tool or run `triseek build <PATH>`"
   }
 }
 ```
@@ -235,7 +235,7 @@ Error codes:
 - **Codex doesn't see TriSeek** — run `triseek install codex`, restart
   Codex, then `codex mcp list`. Inspect `~/.codex/config.toml` for a
   `[mcp_servers.triseek]` block if verification fails.
-- **`INDEX_UNAVAILABLE`** — run `triseek build --repo <PATH>` or call
+- **`INDEX_UNAVAILABLE`** — run `triseek build <PATH>` or call
   the `reindex` tool.
 - **Stdout corruption** — TriSeek routes all logs to stderr. If a client
   reports framing errors, check that nothing in the wrapper script writes

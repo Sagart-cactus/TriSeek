@@ -171,7 +171,7 @@
         <p>This downloads the latest release archive and installs <code>triseek</code> and <code>triseek-server</code> into <code>~/.local/bin</code>. If a matching release is not published yet, the script falls back to <code>cargo install</code> when Rust is available.</p>
         <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh</code></pre>
         <p>Pin a specific version:</p>
-        <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.2.0</code></pre>
+        <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.2.1</code></pre>
         <p>Install into a different directory:</p>
         <pre><code>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --install-dir /usr/local/bin</code></pre>
       </article>
@@ -181,7 +181,7 @@
         <p>This downloads the latest Windows release archive, installs <code>triseek.exe</code> and <code>triseek-server.exe</code>, and updates the user <code>PATH</code> unless you opt out with <code>-SkipPathUpdate</code>. If no matching release exists, it falls back to <code>cargo install</code> when Rust is available.</p>
         <pre><code>powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.ps1 | iex"</code></pre>
         <p>Install a pinned version after saving the script locally:</p>
-        <pre><code>.\install.ps1 -Version v0.2.0</code></pre>
+        <pre><code>.\install.ps1 -Version v0.2.1</code></pre>
       </article>
 
       <article class="card">
@@ -216,20 +216,20 @@ cargo install --path crates/search-server --locked</code></pre>
       <div class="step">
         <span class="num">02</span>
         <h3>Build your first index</h3>
-        <pre><code>triseek build --repo /path/to/repo</code></pre>
+        <pre><code>triseek build /path/to/repo</code></pre>
       </div>
 
       <div class="step">
         <span class="num">03</span>
         <h3>Run a search</h3>
-        <pre><code>triseek search --repo /path/to/repo "QueryRequest"</code></pre>
+        <pre><code>triseek "QueryRequest" /path/to/repo</code></pre>
       </div>
 
       <div class="step">
         <span class="num">04</span>
         <h3>Keep the index fresh</h3>
-        <pre><code>triseek update --repo /path/to/repo
-triseek daemon start --repo /path/to/repo</code></pre>
+        <pre><code>triseek update /path/to/repo
+triseek daemon start</code></pre>
       </div>
     </section>
 
@@ -241,7 +241,7 @@ triseek daemon start --repo /path/to/repo</code></pre>
 
       <article class="card alt">
         <h2>Uninstall</h2>
-        <p>Delete the installed binary and remove any local index directories you no longer want.</p>
+        <p>Delete the installed binary and remove <code>~/.triseek</code> if you also want to remove local index data.</p>
         <pre><code>rm -f ~/.local/bin/triseek ~/.local/bin/triseek-server</code></pre>
         <pre><code>Remove-Item "$HOME\AppData\Local\Programs\TriSeek\bin\triseek.exe","$HOME\AppData\Local\Programs\TriSeek\bin\triseek-server.exe"</code></pre>
       </article>

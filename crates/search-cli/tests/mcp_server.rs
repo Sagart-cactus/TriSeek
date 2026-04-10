@@ -106,6 +106,7 @@ struct McpClient {
 impl McpClient {
     fn spawn(repo: &Path) -> Self {
         let binary = triseek_binary();
+        let index_dir = repo.join(".triseek-index");
         assert!(
             binary.exists(),
             "triseek binary not found at {}; cargo test should build it",
@@ -116,6 +117,8 @@ impl McpClient {
             .arg("serve")
             .arg("--repo")
             .arg(repo)
+            .arg("--index-dir")
+            .arg(&index_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

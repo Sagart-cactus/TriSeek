@@ -68,7 +68,7 @@ impl McpToolError {
             McpErrorCode::IndexUnavailable,
             "TriSeek index is unavailable for this repository",
             true,
-            "Call the `reindex` tool or run `triseek build --repo <PATH>`",
+            "Call the `reindex` tool or run `triseek build <PATH>`",
         )
     }
 
