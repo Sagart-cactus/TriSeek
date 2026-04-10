@@ -28,10 +28,17 @@ triseek doctor
 Run the server manually for debugging:
 
 ```sh
+cd /path/to/repo
+triseek mcp serve
+```
+
+Or override the root explicitly:
+
+```sh
 triseek mcp serve --repo /path/to/repo
 ```
 
-All logs go to stderr; stdout carries JSON-RPC frames only.
+All logs go to stderr; stdout carries JSON-RPC frames only. The MCP server is currently scoped to one root per process.
 
 ## Protocol
 

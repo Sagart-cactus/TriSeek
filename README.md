@@ -1,6 +1,22 @@
 # TriSeek
 
-TriSeek is a high-performance local code search CLI written in Rust. It combines a trigram index with shell-tool fallback so repeated searches stay fast on medium and large repositories without giving up flexible query behavior.
+TriSeek is a fast local code search CLI for people who like `rg`, but want repeated searches on medium and large codebases to stay fast too.
+
+You can use it like a normal search command:
+
+```sh
+triseek "AuthConfig" .
+```
+
+And when you want speed across repeated searches, TriSeek keeps per-root index state under `~/.triseek` instead of scattering files into your repo.
+
+Why it feels better than a repo-local search wrapper:
+
+- search works immediately with `triseek "needle" [path]`
+- indexing is optional, but speeds up repeated searches
+- default state lives under `~/.triseek`, not in the repo root
+- one global daemon can serve multiple roots
+- MCP support is available for Claude Code, Codex, and other MCP clients
 
 ## Install
 
@@ -11,6 +27,8 @@ curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/
 ```
 
 By default this installs `triseek` and `triseek-server` into `~/.local/bin`. It prefers prebuilt GitHub Release archives and falls back to `cargo install` when a matching release is not available but Rust is installed locally.
+
+`triseek` is the main CLI. `triseek-server` is the background daemon binary used by `triseek daemon`.
 
 Pin a version:
 
@@ -50,36 +68,44 @@ cargo install --path crates/search-server --locked
 
 ## Quick Start
 
-Build an index for a repository:
+Search immediately:
 
 ```sh
-triseek build /path/to/repo
+triseek "AuthConfig" .
+triseek "AuthConfig" ./crates/search-cli
 ```
 
-Run a search:
+`triseek search "AuthConfig" .` remains supported as a compatibility alias.
+
+Build an index when you want repeated searches to stay fast:
 
 ```sh
-triseek "QueryRequest" /path/to/repo
+triseek build .
+triseek "AuthConfig" .
+triseek update .
 ```
 
-`triseek search "QueryRequest" /path/to/repo` remains supported as a compatibility alias.
-
-Update an existing index after repo changes:
-
-```sh
-triseek update /path/to/repo
-```
-
-Start the background daemon for repeated searches:
+Run the background daemon for repeated searches across active roots:
 
 ```sh
 triseek daemon start
+triseek daemon status .
 ```
 
-Check the install:
+TriSeek stores default state here:
+
+```text
+~/.triseek/indexes/<root-key>/
+~/.triseek/daemon/
+```
+
+Nothing is written into the searched repo root by default.
+
+Check the install or inspect the command surface:
 
 ```sh
 triseek help
+triseek doctor
 ```
 
 ## Use TriSeek from Claude Code and Codex (MCP)
@@ -118,10 +144,17 @@ preserving any existing entries and comments.
 ### Run the MCP server manually
 
 ```sh
+cd /path/to/repo
+triseek mcp serve
+```
+
+Or, from anywhere:
+
+```sh
 triseek mcp serve --repo /path/to/repo
 ```
 
-All logs go to stderr; stdout carries framed JSON-RPC messages only.
+All logs go to stderr; stdout carries framed JSON-RPC messages only. The MCP server is currently scoped to one root per process.
 
 ### Verify the install
 
@@ -143,7 +176,7 @@ index is present for the current repo.
 | `index_status` | Report TriSeek index health |
 | `reindex` | Rebuild or incrementally update the index |
 
-Full input/output schemas and error codes live in [docs/mcp.md](docs/mcp.md).
+Full input/output schemas and error codes live in the [published MCP reference](https://sagart-cactus.github.io/TriSeek/mcp.html).
 
 ### How routing works
 
@@ -180,9 +213,11 @@ TriSeek stores indexes under `~/.triseek` by default. Remove that directory if y
 
 ## Docs
 
-- [Installation Guide](docs/install.md)
-- [How TriSeek Works](docs/triseek-explained.html)
-- [TriSeek Architecture](docs/triseek-architecture.html)
+- [Docs Home](https://sagart-cactus.github.io/TriSeek/)
+- [Installation Guide](https://sagart-cactus.github.io/TriSeek/install.html)
+- [MCP Server Reference](https://sagart-cactus.github.io/TriSeek/mcp.html)
+- [How TriSeek Works](https://sagart-cactus.github.io/TriSeek/triseek-explained.html)
+- [TriSeek Architecture](https://sagart-cactus.github.io/TriSeek/triseek-architecture.html)
 
 ## Release Automation
 

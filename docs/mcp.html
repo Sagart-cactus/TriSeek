@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TriSeek MCP Server Reference</title>
+<style>
+  :root {
+    --bg: #09111f;
+    --panel: rgba(14, 24, 42, 0.9);
+    --panel-2: rgba(19, 32, 56, 0.92);
+    --border: #244168;
+    --text: #e8eefc;
+    --muted: #9eb3d6;
+    --accent: #63d2ff;
+    --accent-2: #7ef0c6;
+    --accent-3: #ffd27a;
+    --code-bg: #08101d;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    color: var(--text);
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(99, 210, 255, 0.14), transparent 28%),
+      radial-gradient(circle at top right, rgba(126, 240, 198, 0.12), transparent 24%),
+      linear-gradient(180deg, #060c17 0%, #09111f 100%);
+  }
+
+  a { color: var(--accent); }
+
+  .shell {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 32px 20px 64px;
+  }
+
+  .hero {
+    padding: 28px;
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(14, 24, 42, 0.96), rgba(10, 17, 31, 0.96));
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  }
+
+  .eyebrow {
+    display: inline-block;
+    margin-bottom: 10px;
+    color: var(--accent);
+    font-size: 0.82rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0 0 12px;
+    font-size: clamp(2.4rem, 5vw, 4rem);
+    line-height: 1.05;
+  }
+
+  h2 {
+    margin: 0 0 10px;
+    font-size: 1.4rem;
+  }
+
+  h3 {
+    margin: 0 0 10px;
+    font-size: 1.05rem;
+  }
+
+  .lead {
+    margin: 0;
+    max-width: 760px;
+    color: var(--muted);
+    font-size: 1.08rem;
+    line-height: 1.7;
+  }
+
+  .grid {
+    display: grid;
+    gap: 18px;
+    margin-top: 24px;
+  }
+
+  @media (min-width: 920px) {
+    .grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .card {
+    padding: 22px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--panel);
+  }
+
+  .card.alt {
+    background: var(--panel-2);
+  }
+
+  p, li {
+    color: var(--muted);
+    line-height: 1.65;
+  }
+
+  ul {
+    margin: 10px 0 0;
+    padding-left: 18px;
+  }
+
+  pre {
+    margin: 14px 0 0;
+    padding: 14px 16px;
+    overflow-x: auto;
+    border: 1px solid #17304f;
+    border-radius: 14px;
+    background: var(--code-bg);
+    color: var(--text);
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+
+  code {
+    color: var(--accent-2);
+    font-family: "SFMono-Regular", "Menlo", monospace;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    vertical-align: top;
+  }
+
+  th {
+    color: var(--text);
+  }
+
+  .footer {
+    margin-top: 28px;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+</style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <span class="eyebrow">TriSeek MCP</span>
+      <h1>Use TriSeek as a local MCP search server</h1>
+      <p class="lead">TriSeek exposes a local stdio MCP server for Claude Code, Codex, and other MCP-capable clients. It is local-only, search-only, and routes each query through TriSeek's indexed, direct-scan, or ripgrep fallback path as needed.</p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Quickstart</h2>
+        <pre><code># Claude Code (project-shareable)
+triseek install claude-code --scope project
+
+# Codex
+triseek install codex
+
+# Verify
+triseek doctor</code></pre>
+        <p>Run the server manually from the target root:</p>
+        <pre><code>cd /path/to/repo
+triseek mcp serve</code></pre>
+        <p>Or override the root explicitly:</p>
+        <pre><code>triseek mcp serve --repo /path/to/repo</code></pre>
+      </article>
+
+      <article class="card alt">
+        <h2>Transport and Scope</h2>
+        <ul>
+          <li><strong>local-only</strong> — no network, no telemetry, no OAuth</li>
+          <li><strong>stdio transport</strong> — one child process per client session</li>
+          <li><strong>search-only</strong> — no shell or file-editing tools</li>
+          <li><strong>repo-scoped</strong> — one root per MCP server process</li>
+          <li><strong>bounded output</strong> — stable envelopes, clipped responses</li>
+        </ul>
+        <p>All logs go to stderr. Stdout carries JSON-RPC frames only.</p>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Protocol</h2>
+        <ul>
+          <li>newline-delimited JSON-RPC 2.0</li>
+          <li>supported methods: <code>initialize</code>, <code>notifications/initialized</code>, <code>tools/list</code>, <code>tools/call</code>, <code>ping</code>, <code>shutdown</code></li>
+          <li><code>protocolVersion</code>: <code>2025-06-18</code></li>
+          <li><code>serverInfo.name</code>: <code>triseek</code></li>
+        </ul>
+      </article>
+
+      <article class="card alt">
+        <h2>Routing Signals</h2>
+        <p>Every successful search result includes:</p>
+        <ul>
+          <li><code>strategy</code> — <code>triseek_indexed</code>, <code>triseek_direct_scan</code>, or <code>ripgrep_fallback</code></li>
+          <li><code>fallback_used</code> — whether a non-index backend was selected</li>
+          <li><code>routing_reason</code> — short machine-readable reason string</li>
+          <li><code>truncated</code> — whether the result limit clipped output</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Tools</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>find_files</code></td>
+              <td>Path and filename substring search</td>
+            </tr>
+            <tr>
+              <td><code>search_content</code></td>
+              <td>Literal or regex content search</td>
+            </tr>
+            <tr>
+              <td><code>search_path_and_content</code></td>
+              <td>Narrow by glob, then search file content</td>
+            </tr>
+            <tr>
+              <td><code>index_status</code></td>
+              <td>Report whether a TriSeek index exists and is healthy for the current root</td>
+            </tr>
+            <tr>
+              <td><code>reindex</code></td>
+              <td>Run incremental update or full rebuild</td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card alt">
+        <h2>Example Tool Inputs</h2>
+        <pre><code>{
+  "query": "parse_arguments",
+  "mode": "literal",
+  "limit": 20
+}</code></pre>
+        <pre><code>{
+  "path_query": "src/**/*.rs",
+  "content_query": "Result&lt;",
+  "mode": "literal",
+  "limit": 20
+}</code></pre>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Errors</h2>
+        <p>Tool execution failures return a successful JSON-RPC response with <code>CallToolResult.isError = true</code> and a structured error body.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>INDEX_UNAVAILABLE</code></td><td>No index exists for this root</td></tr>
+            <tr><td><code>INDEX_STALE</code></td><td>Index is out of date; call <code>reindex</code></td></tr>
+            <tr><td><code>INVALID_QUERY</code></td><td>Missing or invalid arguments</td></tr>
+            <tr><td><code>REPO_NOT_DETECTED</code></td><td>Could not resolve a repo root</td></tr>
+            <tr><td><code>BACKEND_FAILURE</code></td><td>Search backend failed internally</td></tr>
+            <tr><td><code>FALLBACK_FAILURE</code></td><td>ripgrep or direct scan failed</td></tr>
+            <tr><td><code>CONFIG_WRITE_FAILED</code></td><td>Install or uninstall config update failed</td></tr>
+            <tr><td><code>CLIENT_NOT_INSTALLED</code></td><td>Required client CLI is missing from <code>PATH</code></td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card alt">
+        <h2>Output Discipline</h2>
+        <ul>
+          <li>default limit <code>20</code>, hard cap <code>100</code></li>
+          <li>line previews truncated to 200 characters</li>
+          <li>duplicate line matches deduped by <code>(path, line)</code></li>
+          <li>responses never include raw file bodies</li>
+        </ul>
+        <p>This keeps responses well within normal MCP output budgets.</p>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Troubleshooting</h2>
+        <ul>
+          <li><strong>Claude Code does not see TriSeek</strong> — rerun <code>triseek install claude-code --scope &lt;scope&gt;</code>, reload the workspace, then run <code>claude mcp list</code>.</li>
+          <li><strong>Codex does not see TriSeek</strong> — rerun <code>triseek install codex</code>, restart Codex, then run <code>codex mcp list</code>.</li>
+          <li><strong><code>INDEX_UNAVAILABLE</code></strong> — run <code>triseek build &lt;PATH&gt;</code> or call <code>reindex</code>.</li>
+          <li><strong>Framing errors</strong> — check that nothing in a wrapper script writes to stdout ahead of <code>triseek mcp serve</code>.</li>
+        </ul>
+      </article>
+
+      <article class="card alt">
+        <h2>Related Docs</h2>
+        <ul>
+          <li><a href="index.html">Docs Home</a></li>
+          <li><a href="install.html">Install TriSeek</a></li>
+          <li><a href="triseek-explained.html">How TriSeek Works</a></li>
+          <li><a href="triseek-architecture.html">TriSeek Architecture</a></li>
+        </ul>
+      </article>
+    </section>
+
+    <p class="footer">The MCP server is the client-facing integration layer. The background TriSeek daemon is separate and is used by the standalone CLI for repeated searches.</p>
+  </main>
+</body>
+</html>

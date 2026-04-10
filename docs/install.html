@@ -215,14 +215,15 @@ cargo install --path crates/search-server --locked</code></pre>
 
       <div class="step">
         <span class="num">02</span>
-        <h3>Build your first index</h3>
-        <pre><code>triseek build /path/to/repo</code></pre>
+        <h3>Search immediately</h3>
+        <pre><code>triseek "AuthConfig" /path/to/repo</code></pre>
       </div>
 
       <div class="step">
         <span class="num">03</span>
-        <h3>Run a search</h3>
-        <pre><code>triseek "QueryRequest" /path/to/repo</code></pre>
+        <h3>Index for repeated speed</h3>
+        <pre><code>triseek build /path/to/repo
+triseek "AuthConfig" /path/to/repo</code></pre>
       </div>
 
       <div class="step">
@@ -230,6 +231,7 @@ cargo install --path crates/search-server --locked</code></pre>
         <h3>Keep the index fresh</h3>
         <pre><code>triseek update /path/to/repo
 triseek daemon start</code></pre>
+        <p>Default TriSeek state lives under <code>~/.triseek</code>, not in the searched repo root.</p>
       </div>
     </section>
 
