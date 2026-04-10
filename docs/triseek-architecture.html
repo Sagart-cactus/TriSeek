@@ -67,12 +67,20 @@ body::before {
   font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.9rem;
   background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  text-decoration: none; flex-shrink: 0;
+}
+.top-nav .section-links { display: flex; align-items: center; gap: 1.5rem; }
+.top-nav .nav-links {
+  display: flex; align-items: center; gap: 1.5rem;
+  margin-left: auto; padding-left: 1.5rem;
+  border-left: 1px solid var(--border);
 }
 .top-nav a {
   color: var(--text-dim); text-decoration: none; font-size: 0.8rem;
   transition: color 0.2s; font-family: 'JetBrains Mono', monospace;
 }
 .top-nav a:hover { color: var(--accent-cyan); }
+.top-nav a.active { color: var(--accent-cyan); }
 
 /* HERO */
 .hero {
@@ -299,15 +307,24 @@ footer {
 <div class="grid-bg"></div>
 
 <nav class="top-nav">
-  <span class="logo">TriSeek Architecture</span>
-  <a href="#workspace">Workspace</a>
-  <a href="#crates">Crates</a>
-  <a href="#data-types">Types</a>
-  <a href="#index-build">Build</a>
-  <a href="#search-flow">Search</a>
-  <a href="#routing">Routing</a>
-  <a href="#engine">Engine</a>
-  <a href="#fastindex">FastIndex</a>
+  <a class="logo" href="index.html">▲ TriSeek</a>
+  <div class="section-links">
+    <a href="#workspace">workspace</a>
+    <a href="#crates">crates</a>
+    <a href="#data-types">types</a>
+    <a href="#index-build">build</a>
+    <a href="#search-flow">search</a>
+    <a href="#routing">routing</a>
+    <a href="#engine">engine</a>
+    <a href="#fastindex">fastindex</a>
+  </div>
+  <div class="nav-links">
+    <a href="index.html">home</a>
+    <a href="install.html">install</a>
+    <a href="mcp.html">mcp</a>
+    <a href="triseek-explained.html">how it works</a>
+    <a href="triseek-architecture.html" class="active">architecture</a>
+  </div>
 </nav>
 
 <!-- ═══════ HERO ═══════ -->
