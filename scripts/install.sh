@@ -14,7 +14,7 @@ Usage:
 
 Examples:
   install.sh
-  install.sh --version v0.2.0
+  install.sh --version v0.2.1
   install.sh --install-dir /usr/local/bin
 
 Environment overrides:

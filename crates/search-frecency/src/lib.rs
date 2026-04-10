@@ -53,7 +53,7 @@ impl Default for FrecencyData {
     }
 }
 
-/// Persistent frecency store backed by `.triseek-index/frecency.json`.
+/// Persistent frecency store backed by `<index_dir>/frecency.json`.
 pub struct FrecencyStore {
     path: PathBuf,
     data: FrecencyData,

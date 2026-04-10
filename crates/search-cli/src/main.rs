@@ -7,22 +7,24 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use search_core::{
     AdaptiveRoute, AdaptiveRoutingDecision, CaseMode, DAEMON_HOST, DAEMON_PID_FILE,
-    DAEMON_PORT_FILE, ProcessMetrics, QueryRequest, RpcRequest, RpcResponse, SearchEngineKind,
-    SearchHit, SearchKind, SearchResponse, SessionMetrics, SessionQuery, plan_query, route_query,
+    DAEMON_PORT_FILE, DaemonSearchParams, DaemonStatusParams, ProcessMetrics, QueryRequest,
+    RpcRequest, RpcResponse, SearchEngineKind, SearchHit, SearchKind, SearchResponse,
+    SessionMetrics, SessionQuery, plan_query, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
 use search_index::{
-    BuildConfig, SearchEngine, default_index_dir, index_exists, measure_repository,
+    BuildConfig, SearchEngine, daemon_dir, default_index_dir, index_exists, measure_repository,
     read_index_metadata,
 };
 use search_runner::adjust_route_for_filters;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fs;
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 #[cfg(windows)]
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -58,8 +60,10 @@ enum Commands {
 
 #[derive(Args)]
 struct CommonIndexArgs {
-    #[arg(long)]
-    repo: PathBuf,
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+    #[arg(long, hide = true)]
+    repo: Option<PathBuf>,
     #[arg(long)]
     index_dir: Option<PathBuf>,
     #[arg(long)]
@@ -86,8 +90,10 @@ struct UpdateArgs {
 
 #[derive(Args)]
 struct MeasureArgs {
-    #[arg(long)]
-    repo: PathBuf,
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+    #[arg(long, hide = true)]
+    repo: Option<PathBuf>,
     #[arg(long)]
     include_hidden: bool,
     #[arg(long)]
@@ -120,7 +126,7 @@ enum CliCaseMode {
 
 #[derive(Args)]
 struct SearchArgs {
-    #[arg(long)]
+    #[arg(long, hide = true)]
     repo: Option<PathBuf>,
     #[arg(long)]
     index_dir: Option<PathBuf>,
@@ -160,12 +166,17 @@ struct SearchArgs {
     /// Bypass the running daemon and execute search locally.
     #[arg(long)]
     no_daemon: bool,
-    pattern: Option<String>,
+    #[arg(value_name = "PATTERN")]
+    pattern: String,
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
 }
 
 #[derive(Args)]
 struct SessionArgs {
-    #[arg(long)]
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+    #[arg(long, hide = true)]
     repo: Option<PathBuf>,
     #[arg(long)]
     index_dir: Option<PathBuf>,
@@ -207,9 +218,11 @@ enum DaemonCommands {
 
 #[derive(Args)]
 struct DaemonStartArgs {
-    #[arg(long)]
-    repo: PathBuf,
-    #[arg(long)]
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+    #[arg(long, hide = true)]
+    repo: Option<PathBuf>,
+    #[arg(long, hide = true)]
     index_dir: Option<PathBuf>,
     /// Idle timeout in seconds (0 = never exit). Default: 1800.
     #[arg(long, default_value_t = 1800)]
@@ -218,16 +231,20 @@ struct DaemonStartArgs {
 
 #[derive(Args)]
 struct DaemonStopArgs {
-    #[arg(long)]
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+    #[arg(long, hide = true)]
     repo: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long, hide = true)]
     index_dir: Option<PathBuf>,
 }
 
 /// Record that files were explicitly opened/selected, boosting their frecency score.
 #[derive(Args)]
 struct FrecencySelectArgs {
-    #[arg(long)]
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+    #[arg(long, hide = true)]
     repo: Option<PathBuf>,
     #[arg(long)]
     index_dir: Option<PathBuf>,
@@ -339,7 +356,7 @@ struct NamedSearchResponse {
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = Cli::parse_from(rewrite_default_search_args(std::env::args_os()));
     match cli.command {
         Commands::Build(args) => handle_build(args),
         Commands::Update(args) => handle_update(args),
@@ -370,12 +387,13 @@ fn main() -> Result<()> {
 
 fn handle_build(args: BuildArgs) -> Result<()> {
     let config = build_config_from_common(&args.common);
-    let index_dir = args
-        .common
-        .index_dir
-        .clone()
-        .unwrap_or_else(|| default_index_dir(&args.common.repo));
-    let metadata = SearchEngine::build(&args.common.repo, Some(&index_dir), &config)?;
+    let repo_root = resolve_cli_root(
+        args.common.path.as_deref(),
+        args.common.repo.as_deref(),
+        args.common.index_dir.as_deref(),
+    )?;
+    let index_dir = resolve_index_dir(&repo_root, args.common.index_dir.as_deref())?;
+    let metadata = SearchEngine::build(&repo_root, Some(&index_dir), &config)?;
     print_json(&BuildOutput {
         action: "build",
         index_dir: index_dir.display().to_string(),
@@ -386,12 +404,13 @@ fn handle_build(args: BuildArgs) -> Result<()> {
 
 fn handle_update(args: UpdateArgs) -> Result<()> {
     let config = build_config_from_common(&args.common);
-    let index_dir = args
-        .common
-        .index_dir
-        .clone()
-        .unwrap_or_else(|| default_index_dir(&args.common.repo));
-    let outcome = SearchEngine::update(&args.common.repo, Some(&index_dir), &config)?;
+    let repo_root = resolve_cli_root(
+        args.common.path.as_deref(),
+        args.common.repo.as_deref(),
+        args.common.index_dir.as_deref(),
+    )?;
+    let index_dir = resolve_index_dir(&repo_root, args.common.index_dir.as_deref())?;
+    let outcome = SearchEngine::update(&repo_root, Some(&index_dir), &config)?;
     print_json(&UpdateOutput {
         action: "update",
         index_dir: index_dir.display().to_string(),
@@ -402,27 +421,30 @@ fn handle_update(args: UpdateArgs) -> Result<()> {
 }
 
 fn handle_measure(args: MeasureArgs) -> Result<()> {
+    let repo_root = resolve_cli_root(args.path.as_deref(), args.repo.as_deref(), None)?;
     let config = BuildConfig {
         include_hidden: args.include_hidden,
         include_binary: args.include_binary,
         max_file_size: args.max_file_size,
         merge_threshold_ratio: 0.25,
     };
-    let stats = measure_repository(&args.repo, &config)?;
+    let stats = measure_repository(&repo_root, &config)?;
     print_json(&stats)
 }
 
 fn handle_search(args: SearchArgs) -> Result<SearchResponse> {
     let request = build_query_request(&args);
-    let repo_root = resolve_repo_root(args.repo.as_deref(), args.index_dir.as_deref())?;
-    let index_dir = args
-        .index_dir
-        .clone()
-        .unwrap_or_else(|| default_index_dir(&repo_root));
+    let repo_root = resolve_cli_root(
+        args.path.as_deref(),
+        args.repo.as_deref(),
+        args.index_dir.as_deref(),
+    )?;
+    let index_dir = resolve_index_dir(&repo_root, args.index_dir.as_deref())?;
 
     // Transparent daemon forwarding: if a daemon is running, route there first.
-    if !args.no_daemon
-        && let Some(response) = try_daemon_search(&index_dir, &request)
+    if args.index_dir.is_none()
+        && !args.no_daemon
+        && let Some(response) = try_daemon_search(&repo_root, &request)
     {
         if args.json {
             print_json(&response)?;
@@ -485,11 +507,12 @@ fn handle_session(args: SessionArgs) -> Result<SessionOutput> {
     let queries: Vec<SessionQuery> = serde_json::from_slice(&query_bytes)
         .context("failed to parse session query file as JSON")?;
 
-    let repo_root = resolve_repo_root(args.repo.as_deref(), args.index_dir.as_deref())?;
-    let index_dir = args
-        .index_dir
-        .clone()
-        .unwrap_or_else(|| default_index_dir(&repo_root));
+    let repo_root = resolve_cli_root(
+        args.path.as_deref(),
+        args.repo.as_deref(),
+        args.index_dir.as_deref(),
+    )?;
+    let index_dir = resolve_index_dir(&repo_root, args.index_dir.as_deref())?;
     let index_available = index_exists(&index_dir);
     let index_metadata = if index_available {
         Some(read_index_metadata(&index_dir).with_context(|| {
@@ -617,10 +640,12 @@ fn handle_stats(args: StatsArgs) -> Result<()> {
 }
 
 fn handle_frecency_select(args: FrecencySelectArgs) -> Result<()> {
-    let repo_root = resolve_repo_root(args.repo.as_deref(), args.index_dir.as_deref())?;
-    let index_dir = args
-        .index_dir
-        .unwrap_or_else(|| default_index_dir(&repo_root));
+    let repo_root = resolve_cli_root(
+        args.path.as_deref(),
+        args.repo.as_deref(),
+        args.index_dir.as_deref(),
+    )?;
+    let index_dir = resolve_index_dir(&repo_root, args.index_dir.as_deref())?;
     let mut store = FrecencyStore::open(&index_dir);
     store.record_select(&args.paths);
     store.flush().context("failed to flush frecency store")?;
@@ -641,7 +666,7 @@ fn build_query_request(args: &SearchArgs) -> QueryRequest {
     QueryRequest {
         kind: cli_kind_to_request(args.kind),
         engine: cli_engine_to_request(args.engine),
-        pattern: args.pattern.clone().unwrap_or_default(),
+        pattern: args.pattern.clone(),
         case_mode: cli_case_to_request(args.case_mode),
         path_substrings: args.path_substrings.clone(),
         path_prefixes: args.path_prefixes.clone(),
@@ -655,15 +680,104 @@ fn build_query_request(args: &SearchArgs) -> QueryRequest {
     }
 }
 
-fn resolve_repo_root(repo: Option<&Path>, index_dir: Option<&Path>) -> Result<PathBuf> {
-    if let Some(repo) = repo {
-        return Ok(repo.to_path_buf());
+fn resolve_cli_root(
+    path: Option<&Path>,
+    repo: Option<&Path>,
+    index_dir: Option<&Path>,
+) -> Result<PathBuf> {
+    if let Some(target) = path.or(repo) {
+        return canonicalize_root(target);
     }
     if let Some(index_dir) = index_dir {
-        let metadata = read_index_metadata(index_dir)?;
-        return Ok(PathBuf::from(metadata.repo_stats.repo_root));
+        let index_dir = normalize_absolute_path(index_dir)?;
+        let metadata = read_index_metadata(&index_dir)?;
+        return canonicalize_root(Path::new(&metadata.repo_stats.repo_root));
     }
-    bail!("repo root is required when index metadata cannot supply it")
+    canonicalize_root(&std::env::current_dir().context("failed to get cwd")?)
+}
+
+fn resolve_index_dir(repo_root: &Path, index_dir: Option<&Path>) -> Result<PathBuf> {
+    match index_dir {
+        Some(dir) => normalize_absolute_path(dir),
+        None => Ok(default_index_dir(repo_root)),
+    }
+}
+
+fn canonicalize_root(path: &Path) -> Result<PathBuf> {
+    let normalized = normalize_absolute_path(path)?;
+    let metadata = fs::metadata(&normalized)
+        .with_context(|| format!("failed to inspect {}", normalized.display()))?;
+    if !metadata.is_dir() {
+        bail!("{} is not a directory", normalized.display());
+    }
+    normalized
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize {}", normalized.display()))
+}
+
+fn normalize_absolute_path(path: &Path) -> Result<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .context("failed to get cwd")?
+            .join(path)
+    };
+    Ok(lexical_normalize(&absolute))
+}
+
+fn lexical_normalize(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::Normal(value) => normalized.push(value),
+            Component::RootDir | Component::Prefix(_) => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized
+}
+
+fn rewrite_default_search_args<I>(args: I) -> Vec<OsString>
+where
+    I: IntoIterator<Item = OsString>,
+{
+    let mut args: Vec<OsString> = args.into_iter().collect();
+    if args.len() <= 1 {
+        return args;
+    }
+
+    let Some(first) = args.get(1).cloned() else {
+        return args;
+    };
+    let first_str = first.to_string_lossy();
+    let is_command = matches!(
+        first_str.as_ref(),
+        "build"
+            | "update"
+            | "measure"
+            | "search"
+            | "session"
+            | "stats"
+            | "frecency-select"
+            | "daemon"
+            | "mcp"
+            | "install"
+            | "uninstall"
+            | "doctor"
+            | "help"
+    );
+    let is_global_help = matches!(first_str.as_ref(), "-h" | "--help" | "-V" | "--version");
+
+    if is_command || is_global_help {
+        return args;
+    }
+
+    args.insert(1, OsString::from("search"));
+    args
 }
 
 fn effective_search_kind(kind: CliSearchKind) -> SearchKind {
@@ -737,28 +851,16 @@ fn timestamp_now() -> String {
 // Daemon helpers
 // ---------------------------------------------------------------------------
 
-fn resolve_index_dir_for_daemon(repo: Option<&Path>, index_dir: Option<&Path>) -> Result<PathBuf> {
-    if let Some(dir) = index_dir {
-        return Ok(dir.to_path_buf());
-    }
-    if let Some(repo) = repo {
-        return Ok(default_index_dir(repo));
-    }
-    // Fall back to cwd.
-    let cwd = std::env::current_dir().context("failed to get cwd")?;
-    Ok(default_index_dir(&cwd))
+fn daemon_port_path() -> PathBuf {
+    daemon_dir().join(DAEMON_PORT_FILE)
 }
 
-fn daemon_port_path_for_index(index_dir: &Path) -> PathBuf {
-    index_dir.join(DAEMON_PORT_FILE)
+fn daemon_pid_path() -> PathBuf {
+    daemon_dir().join(DAEMON_PID_FILE)
 }
 
-fn pid_path_for_index(index_dir: &Path) -> PathBuf {
-    index_dir.join(DAEMON_PID_FILE)
-}
-
-fn read_daemon_port(index_dir: &Path) -> Option<u16> {
-    let port_path = daemon_port_path_for_index(index_dir);
+fn read_daemon_port() -> Option<u16> {
+    let port_path = daemon_port_path();
     if !port_path.exists() {
         return None;
     }
@@ -768,8 +870,8 @@ fn read_daemon_port(index_dir: &Path) -> Option<u16> {
 }
 
 /// Return a connected TcpStream to the running daemon, or None if no daemon is listening.
-fn connect_to_daemon(index_dir: &Path) -> Option<TcpStream> {
-    let port = read_daemon_port(index_dir)?;
+fn connect_to_daemon() -> Option<TcpStream> {
+    let port = read_daemon_port()?;
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
     TcpStream::connect_timeout(&addr, Duration::from_millis(250)).ok()
 }
@@ -803,11 +905,13 @@ fn rpc_call(
     bail!("daemon closed connection without a response")
 }
 
-fn wait_for_daemon(index_dir: &Path, timeout: Duration) -> bool {
+fn wait_for_daemon(timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
+    let status_params = serde_json::to_value(DaemonStatusParams { target_root: None }).ok();
     while Instant::now() < deadline {
-        if let Some(mut stream) = connect_to_daemon(index_dir)
-            && rpc_call(&mut stream, "status", serde_json::Value::Null).is_ok()
+        if let Some(mut stream) = connect_to_daemon()
+            && let Some(params) = status_params.clone()
+            && rpc_call(&mut stream, "status", params).is_ok()
         {
             return true;
         }
@@ -817,17 +921,21 @@ fn wait_for_daemon(index_dir: &Path, timeout: Duration) -> bool {
 }
 
 fn handle_daemon_start(args: DaemonStartArgs) -> Result<()> {
-    let repo = args
-        .repo
-        .canonicalize()
-        .context("failed to resolve repo path")?;
-    let index_dir = args.index_dir.unwrap_or_else(|| default_index_dir(&repo));
+    let root = match args.path.as_deref().or(args.repo.as_deref()) {
+        Some(path) => Some(canonicalize_root(path)?),
+        None => None,
+    };
 
     // Check if daemon is already running.
-    if let Some(mut stream) = connect_to_daemon(&index_dir)
-        && rpc_call(&mut stream, "status", serde_json::Value::Null).is_ok()
+    if let Some(mut stream) = connect_to_daemon()
+        && rpc_call(
+            &mut stream,
+            "status",
+            serde_json::to_value(DaemonStatusParams { target_root: None })?,
+        )
+        .is_ok()
     {
-        eprintln!("triseek: daemon already running for {}", repo.display());
+        eprintln!("triseek: daemon already running");
         return Ok(());
     }
 
@@ -847,9 +955,10 @@ fn handle_daemon_start(args: DaemonStartArgs) -> Result<()> {
     }
 
     let mut cmd = std::process::Command::new(&server_exe);
-    cmd.arg("--repo").arg(&repo);
-    cmd.arg("--index-dir").arg(&index_dir);
     cmd.arg("--idle-timeout").arg(args.idle_timeout.to_string());
+    if let Some(root) = &root {
+        cmd.arg(root);
+    }
     // Detach from terminal.
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
@@ -858,11 +967,10 @@ fn handle_daemon_start(args: DaemonStartArgs) -> Result<()> {
     cmd.creation_flags(0x08000000);
 
     let mut child = cmd.spawn().context("failed to spawn triseek-server")?;
-    if wait_for_daemon(&index_dir, Duration::from_secs(5)) {
+    if wait_for_daemon(Duration::from_secs(5)) {
         eprintln!(
-            "triseek: daemon started (pid {}) for {} via {}",
+            "triseek: daemon started (pid {}) via {}",
             child.id(),
-            repo.display(),
             DAEMON_HOST
         );
         return Ok(());
@@ -876,48 +984,54 @@ fn handle_daemon_start(args: DaemonStartArgs) -> Result<()> {
     }
 
     eprintln!(
-        "triseek: daemon spawned (pid {}) for {} but readiness was not confirmed yet",
-        child.id(),
-        repo.display()
+        "triseek: daemon spawned (pid {}) but readiness was not confirmed yet",
+        child.id()
     );
     Ok(())
 }
 
-fn handle_daemon_stop(args: DaemonStopArgs) -> Result<()> {
-    let index_dir = resolve_index_dir_for_daemon(args.repo.as_deref(), args.index_dir.as_deref())?;
-    if let Some(mut stream) = connect_to_daemon(&index_dir) {
+fn handle_daemon_stop(_args: DaemonStopArgs) -> Result<()> {
+    if let Some(mut stream) = connect_to_daemon() {
         let _ = rpc_call(&mut stream, "shutdown", serde_json::Value::Null);
         eprintln!("triseek: shutdown signal sent");
         return Ok(());
     }
     // Fall back to SIGTERM via PID file.
-    let pid_file = pid_path_for_index(&index_dir);
+    let pid_file = daemon_pid_path();
     if pid_file.exists() {
         let pid_str = fs::read_to_string(&pid_file).context("read PID file")?;
         let pid: i32 = pid_str.trim().parse().context("parse PID")?;
         terminate_pid(pid)?;
     } else {
-        eprintln!("triseek: no daemon found for {}", index_dir.display());
+        eprintln!("triseek: no daemon found");
     }
     Ok(())
 }
 
 fn handle_daemon_status(args: DaemonStopArgs) -> Result<()> {
-    let index_dir = resolve_index_dir_for_daemon(args.repo.as_deref(), args.index_dir.as_deref())?;
-    if let Some(mut stream) = connect_to_daemon(&index_dir) {
-        let result = rpc_call(&mut stream, "status", serde_json::Value::Null)?;
+    let target_root = match args.path.as_deref().or(args.repo.as_deref()) {
+        Some(path) => Some(canonicalize_root(path)?.display().to_string()),
+        None => None,
+    };
+    if let Some(mut stream) = connect_to_daemon() {
+        let params = serde_json::to_value(DaemonStatusParams { target_root })?;
+        let result = rpc_call(&mut stream, "status", params)?;
         print_json(&result)?;
     } else {
-        eprintln!("triseek: no daemon running for {}", index_dir.display());
+        eprintln!("triseek: no daemon running");
     }
     Ok(())
 }
 
 /// Try to forward a search request to the running daemon.
 /// Returns None if no daemon is available or forwarding fails (silent fallback to local).
-fn try_daemon_search(index_dir: &Path, request: &QueryRequest) -> Option<SearchResponse> {
-    let mut stream = connect_to_daemon(index_dir)?;
-    let params = serde_json::to_value(request).ok()?;
+fn try_daemon_search(repo_root: &Path, request: &QueryRequest) -> Option<SearchResponse> {
+    let mut stream = connect_to_daemon()?;
+    let params = serde_json::to_value(DaemonSearchParams {
+        target_root: repo_root.display().to_string(),
+        request: request.clone(),
+    })
+    .ok()?;
     let result = rpc_call(&mut stream, "search", params).ok()?;
     serde_json::from_value(result).ok()
 }
@@ -942,4 +1056,50 @@ fn terminate_pid(pid: i32) -> Result<()> {
     }
     eprintln!("triseek: terminated pid {pid} via taskkill");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn cwd_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    #[test]
+    fn rewrites_bare_pattern_to_search_subcommand() {
+        let args = rewrite_default_search_args([
+            OsString::from("triseek"),
+            OsString::from("needle"),
+            OsString::from("."),
+        ]);
+        assert_eq!(args[1], OsString::from("search"));
+        assert_eq!(args[2], OsString::from("needle"));
+        assert_eq!(args[3], OsString::from("."));
+    }
+
+    #[test]
+    fn keeps_explicit_subcommands_intact() {
+        let args = rewrite_default_search_args([
+            OsString::from("triseek"),
+            OsString::from("build"),
+            OsString::from("."),
+        ]);
+        assert_eq!(args[1], OsString::from("build"));
+    }
+
+    #[test]
+    fn normalizes_relative_paths_before_canonicalizing() {
+        let _guard = cwd_lock().lock().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repos/project");
+        fs::create_dir_all(&repo).unwrap();
+        let original_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp.path()).unwrap();
+        let resolved = canonicalize_root(Path::new("./repos/child/../project")).unwrap();
+        assert_eq!(resolved, repo.canonicalize().unwrap());
+        std::env::set_current_dir(original_cwd).unwrap();
+    }
 }

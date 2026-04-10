@@ -12,8 +12,8 @@ pub use planner::{
     SearchExecutionStrategy, plan_query, route_query,
 };
 pub use protocol::{
-    DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonStatus, FrecencySelectParams, RpcError,
-    RpcRequest, RpcResponse,
+    DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonRootStatus, DaemonSearchParams,
+    DaemonStatus, DaemonStatusParams, FrecencySelectParams, RpcError, RpcRequest, RpcResponse,
 };
 pub use query::{CaseMode, QueryRequest, SearchEngineKind, SearchKind, SessionQuery};
 pub use repo::{

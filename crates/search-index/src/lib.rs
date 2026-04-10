@@ -17,6 +17,8 @@ pub use model::{
     DeltaSnapshot, DocumentRecord, NamePostingEntry, PersistedIndex, PostingListEntry,
     RuntimeIndex, SCHEMA_VERSION, SearchExecution,
 };
-pub use storage::{default_index_dir, index_exists, read_index_metadata};
+pub use storage::{
+    daemon_dir, default_index_dir, index_exists, read_index_metadata, triseek_home_dir,
+};
 pub use walker::{ScanOptions, ScanSummary, ScannedFile, scan_repository, walk_repository};
 pub use watcher::{GenerationCounter, WatcherHandle, start_watcher};

@@ -23,7 +23,7 @@ Default install location:
 Pin a version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.2.0
+curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.2.1
 ```
 
 Install to a custom directory:
@@ -76,25 +76,25 @@ triseek help
 Build an index:
 
 ```sh
-triseek build --repo /path/to/repo
+triseek build /path/to/repo
 ```
 
 Search a repository:
 
 ```sh
-triseek search --repo /path/to/repo "QueryRequest"
+triseek "QueryRequest" /path/to/repo
 ```
 
 Refresh the index after changes:
 
 ```sh
-triseek update --repo /path/to/repo
+triseek update /path/to/repo
 ```
 
 Run the background daemon for repeated searches:
 
 ```sh
-triseek daemon start --repo /path/to/repo
+triseek daemon start
 ```
 
 ## Upgrade
@@ -106,4 +106,4 @@ Rerun the installer command you used originally.
 - macOS/Linux: `rm -f ~/.local/bin/triseek ~/.local/bin/triseek-server`
 - Windows: `Remove-Item "$HOME\\AppData\\Local\\Programs\\TriSeek\\bin\\triseek.exe","$HOME\\AppData\\Local\\Programs\\TriSeek\\bin\\triseek-server.exe"`
 
-If you also want to remove local index data, delete the repo-specific index directory as well.
+If you also want to remove local index data, delete `~/.triseek`.

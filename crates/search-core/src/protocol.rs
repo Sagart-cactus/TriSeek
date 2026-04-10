@@ -1,3 +1,4 @@
+use crate::query::QueryRequest;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -57,15 +58,37 @@ impl RpcResponse {
 /// Response for the `status` method.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DaemonStatus {
-    pub repo_root: String,
-    pub index_dir: String,
+    pub daemon_dir: String,
     pub uptime_secs: u64,
+    pub active_roots: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root: Option<DaemonRootStatus>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DaemonRootStatus {
+    pub target_root: String,
+    pub index_dir: String,
+    pub index_available: bool,
     pub generation: u64,
     pub delta_docs: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DaemonSearchParams {
+    pub target_root: String,
+    pub request: QueryRequest,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DaemonStatusParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_root: Option<String>,
 }
 
 /// Parameters for the `frecency_select` method.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FrecencySelectParams {
+    pub target_root: String,
     pub paths: Vec<String>,
 }

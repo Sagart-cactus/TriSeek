@@ -59,7 +59,7 @@ pub fn run() -> Result<()> {
             println!("[ok] triseek index: {} present", index_dir.display());
         } else {
             println!(
-                "[warn] triseek index: {} absent (run `triseek build --repo {}`)",
+                "[warn] triseek index: {} absent (run `triseek build {}`)",
                 index_dir.display(),
                 repo.display()
             );

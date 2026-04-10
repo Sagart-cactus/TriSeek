@@ -1,15 +1,19 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use search_core::{
-    DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonStatus, FrecencySelectParams,
-    QueryRequest, RpcRequest, RpcResponse, SearchEngineKind, SearchHit, SearchKind, SearchResponse,
-    plan_query, route_query,
+    DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonRootStatus, DaemonSearchParams,
+    DaemonStatus, DaemonStatusParams, FrecencySelectParams, RpcRequest, RpcResponse,
+    SearchEngineKind, SearchHit, SearchKind, SearchResponse, plan_query, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
-use search_index::{BuildConfig, SearchEngine, start_watcher};
+use search_index::{
+    BuildConfig, SearchEngine, WatcherHandle, daemon_dir, default_index_dir, index_exists,
+    start_watcher,
+};
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -18,12 +22,11 @@ use std::time::{Duration, Instant};
 #[command(name = "triseek-server")]
 #[command(about = "TriSeek background search daemon")]
 struct Args {
-    /// Repository root to watch and index.
-    #[arg(long, required = true)]
-    repo: PathBuf,
-    /// Index directory (defaults to <repo>/.triseek-index).
-    #[arg(long)]
-    index_dir: Option<PathBuf>,
+    /// Optional root to preload into the daemon.
+    root: Option<PathBuf>,
+    /// Deprecated alias for `root`.
+    #[arg(long, hide = true)]
+    repo: Option<PathBuf>,
     /// TCP port for the loopback control plane (defaults to an ephemeral port).
     #[arg(long)]
     port: Option<u16>,
@@ -32,24 +35,204 @@ struct Args {
     idle_timeout: u64,
 }
 
+struct RepoService {
+    repo_root: PathBuf,
+    index_dir: PathBuf,
+    engine: RwLock<Option<SearchEngine>>,
+    frecency: Mutex<FrecencyStore>,
+    watcher: Mutex<Option<WatcherHandle>>,
+    last_seen_generation: AtomicU64,
+}
+
+impl RepoService {
+    fn new(repo_root: PathBuf) -> Result<Self> {
+        let index_dir = default_index_dir(&repo_root);
+        let engine = if index_exists(&index_dir) {
+            Some(SearchEngine::open(&index_dir).context("failed to open index")?)
+        } else {
+            None
+        };
+        let service = Self {
+            repo_root,
+            index_dir: index_dir.clone(),
+            engine: RwLock::new(engine),
+            frecency: Mutex::new(FrecencyStore::open(&index_dir)),
+            watcher: Mutex::new(None),
+            last_seen_generation: AtomicU64::new(0),
+        };
+        service.start_watcher_if_needed()?;
+        Ok(service)
+    }
+
+    fn ensure_ready(&self) -> Result<()> {
+        if !index_exists(&self.index_dir) {
+            self.stop_watcher();
+            let mut guard = self.engine.write().unwrap();
+            *guard = None;
+            return Ok(());
+        }
+
+        if self.engine.read().unwrap().is_none() {
+            let new_engine = SearchEngine::open(&self.index_dir)
+                .with_context(|| format!("failed to open index at {}", self.index_dir.display()))?;
+            let mut guard = self.engine.write().unwrap();
+            *guard = Some(new_engine);
+        }
+
+        self.start_watcher_if_needed()?;
+        self.reload_if_dirty()?;
+        Ok(())
+    }
+
+    fn status(&self) -> DaemonRootStatus {
+        let generation = self
+            .watcher
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|watcher| watcher.generation.load(Ordering::SeqCst))
+            .unwrap_or(0);
+        let (index_available, delta_docs) = self
+            .engine
+            .read()
+            .unwrap()
+            .as_ref()
+            .map(|engine| (true, engine.metadata().delta_docs))
+            .unwrap_or_else(|| (index_exists(&self.index_dir), 0));
+
+        DaemonRootStatus {
+            target_root: self.repo_root.display().to_string(),
+            index_dir: self.index_dir.display().to_string(),
+            index_available,
+            generation,
+            delta_docs,
+        }
+    }
+
+    fn flush(&self) {
+        if let Ok(store) = self.frecency.lock() {
+            let _ = store.flush();
+        }
+    }
+
+    fn stop_watcher(&self) {
+        if let Ok(mut guard) = self.watcher.lock()
+            && let Some(handle) = guard.take()
+        {
+            handle.stop();
+        }
+    }
+
+    fn start_watcher_if_needed(&self) -> Result<()> {
+        if self.engine.read().unwrap().is_none() {
+            return Ok(());
+        }
+        let mut guard = self.watcher.lock().unwrap();
+        if guard.is_some() {
+            return Ok(());
+        }
+        let handle = start_watcher(
+            self.repo_root.clone(),
+            self.index_dir.clone(),
+            BuildConfig::default(),
+        )
+        .with_context(|| format!("failed to start watcher for {}", self.repo_root.display()))?;
+        self.last_seen_generation
+            .store(handle.generation.load(Ordering::SeqCst), Ordering::SeqCst);
+        *guard = Some(handle);
+        Ok(())
+    }
+
+    fn reload_if_dirty(&self) -> Result<()> {
+        let current_generation = self
+            .watcher
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|watcher| watcher.generation.load(Ordering::SeqCst));
+        let Some(current_generation) = current_generation else {
+            return Ok(());
+        };
+        let previous_generation = self.last_seen_generation.load(Ordering::SeqCst);
+        if current_generation == previous_generation {
+            return Ok(());
+        }
+
+        let new_engine = SearchEngine::open(&self.index_dir)
+            .with_context(|| format!("failed to reload index at {}", self.index_dir.display()))?;
+        let mut guard = self.engine.write().unwrap();
+        *guard = Some(new_engine);
+        self.last_seen_generation
+            .store(current_generation, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+struct ServerState {
+    daemon_dir: PathBuf,
+    services: Mutex<HashMap<String, Arc<RepoService>>>,
+}
+
+impl ServerState {
+    fn new(daemon_dir: PathBuf) -> Self {
+        Self {
+            daemon_dir,
+            services: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn preload_root(&self, root: PathBuf) -> Result<()> {
+        let service = self.service_for_root(&root)?;
+        service.ensure_ready()?;
+        Ok(())
+    }
+
+    fn service_for_root(&self, root: &Path) -> Result<Arc<RepoService>> {
+        let key = root.display().to_string();
+        if let Some(existing) = self.services.lock().unwrap().get(&key).cloned() {
+            return Ok(existing);
+        }
+
+        let service = Arc::new(RepoService::new(root.to_path_buf())?);
+        let mut services = self.services.lock().unwrap();
+        Ok(services
+            .entry(key)
+            .or_insert_with(|| Arc::clone(&service))
+            .clone())
+    }
+
+    fn active_root_count(&self) -> usize {
+        self.services.lock().unwrap().len()
+    }
+
+    fn flush_all(&self) {
+        let services: Vec<_> = self.services.lock().unwrap().values().cloned().collect();
+        for service in services {
+            service.flush();
+        }
+    }
+
+    fn shutdown(&self) {
+        let services: Vec<_> = self.services.lock().unwrap().values().cloned().collect();
+        for service in services {
+            service.flush();
+            service.stop_watcher();
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
-    let repo_root = args
-        .repo
-        .canonicalize()
-        .context("failed to canonicalize repo path")?;
-    let index_dir = args
-        .index_dir
-        .unwrap_or_else(|| search_index::default_index_dir(&repo_root));
-    let port_file = index_dir.join(DAEMON_PORT_FILE);
-    let pid_file = index_dir.join(DAEMON_PID_FILE);
+    let daemon_root = daemon_dir();
+    let port_file = daemon_root.join(DAEMON_PORT_FILE);
+    let pid_file = daemon_root.join(DAEMON_PID_FILE);
     let idle_timeout = if args.idle_timeout == 0 {
         None
     } else {
         Some(Duration::from_secs(args.idle_timeout))
     };
 
-    std::fs::create_dir_all(&index_dir).context("failed to create index dir")?;
+    std::fs::create_dir_all(&daemon_root).context("failed to create daemon dir")?;
     let _ = std::fs::remove_file(&port_file);
 
     let bind_addr = SocketAddr::from((Ipv4Addr::LOCALHOST, args.port.unwrap_or(0)));
@@ -67,20 +250,10 @@ fn main() -> Result<()> {
     std::fs::write(&port_file, listen_port.to_string())
         .context("failed to write daemon port file")?;
 
-    let engine: Arc<RwLock<Option<SearchEngine>>> = if search_index::index_exists(&index_dir) {
-        let eng = SearchEngine::open(&index_dir).context("failed to open index")?;
-        Arc::new(RwLock::new(Some(eng)))
-    } else {
-        Arc::new(RwLock::new(None))
-    };
-
-    let frecency: Arc<Mutex<FrecencyStore>> = Arc::new(Mutex::new(FrecencyStore::open(&index_dir)));
-
-    let config = BuildConfig::default();
-    let watcher = start_watcher(repo_root.clone(), index_dir.clone(), config)
-        .context("failed to start watcher")?;
-    let watcher_gen = Arc::clone(&watcher.generation);
-    let last_seen_gen = Arc::new(AtomicU64::new(watcher_gen.load(Ordering::SeqCst)));
+    let state = Arc::new(ServerState::new(daemon_root.clone()));
+    if let Some(root) = args.root.or(args.repo) {
+        state.preload_root(canonicalize_target_root(&root)?)?;
+    }
 
     install_signal_handlers();
 
@@ -105,19 +278,8 @@ fn main() -> Result<()> {
             break;
         }
 
-        let current_gen = watcher_gen.load(Ordering::SeqCst);
-        if current_gen != last_seen_gen.load(Ordering::SeqCst) {
-            last_seen_gen.store(current_gen, Ordering::SeqCst);
-            if let Ok(new_engine) = SearchEngine::open(&index_dir) {
-                let mut guard = engine.write().unwrap();
-                *guard = Some(new_engine);
-            }
-        }
-
         if last_flush.elapsed() >= Duration::from_secs(30) {
-            if let Ok(store) = frecency.lock() {
-                let _ = store.flush();
-            }
+            state.flush_all();
             last_flush = Instant::now();
         }
 
@@ -135,48 +297,24 @@ fn main() -> Result<()> {
 
         last_request = Instant::now();
 
-        let engine = Arc::clone(&engine);
-        let frecency = Arc::clone(&frecency);
-        let index_dir = index_dir.clone();
-        let repo_root = repo_root.clone();
-        let watcher_gen_clone = Arc::clone(&watcher_gen);
+        let state = Arc::clone(&state);
         let started_clone = started;
-
         std::thread::spawn(move || {
-            if let Err(error) = handle_connection(
-                stream,
-                engine,
-                frecency,
-                index_dir,
-                repo_root,
-                watcher_gen_clone,
-                started_clone,
-            ) {
+            if let Err(error) = handle_connection(stream, state, started_clone) {
                 eprintln!("triseek-server: connection error: {error}");
             }
         });
     }
 
     eprintln!("triseek-server: shutting down");
-    watcher.stop();
-    if let Ok(store) = frecency.lock() {
-        let _ = store.flush();
-    }
+    state.shutdown();
     let _ = std::fs::remove_file(&port_file);
     let _ = std::fs::remove_file(&pid_file);
 
     Ok(())
 }
 
-fn handle_connection(
-    stream: TcpStream,
-    engine: Arc<RwLock<Option<SearchEngine>>>,
-    frecency: Arc<Mutex<FrecencyStore>>,
-    index_dir: PathBuf,
-    repo_root: PathBuf,
-    generation: Arc<AtomicU64>,
-    started: Instant,
-) -> Result<()> {
+fn handle_connection(stream: TcpStream, state: Arc<ServerState>, started: Instant) -> Result<()> {
     let mut writer = stream.try_clone().context("clone stream")?;
     let reader = BufReader::new(stream);
 
@@ -195,49 +333,46 @@ fn handle_connection(
             }
         };
 
-        let response = dispatch(
-            request,
-            &engine,
-            &frecency,
-            &index_dir,
-            &repo_root,
-            &generation,
-            started,
-        );
-
+        let response = dispatch(request, &state, started);
         writeln!(writer, "{}", serde_json::to_string(&response)?)?;
     }
     Ok(())
 }
 
-fn dispatch(
-    request: RpcRequest,
-    engine: &RwLock<Option<SearchEngine>>,
-    frecency: &Mutex<FrecencyStore>,
-    index_dir: &std::path::Path,
-    repo_root: &std::path::Path,
-    generation: &AtomicU64,
-    started: Instant,
-) -> RpcResponse {
+fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcResponse {
     let id = request.id;
     match request.method.as_str() {
         "search" => {
-            let query: QueryRequest = match serde_json::from_value(request.params) {
-                Ok(query) => query,
+            let params: DaemonSearchParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
                 Err(error) => {
                     return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
                 }
             };
-            let guard = engine.read().unwrap();
-            let Some(eng) = guard.as_ref() else {
+            let service = match service_for_target_root(state, &params.target_root) {
+                Ok(service) => service,
+                Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+            };
+            if let Err(error) = service.ensure_ready() {
+                return RpcResponse::error(id, -32000, error.to_string());
+            }
+            let query = params.request;
+            let guard = service.engine.read().unwrap();
+            let Some(engine) = guard.as_ref() else {
                 return RpcResponse::error(id, -32000, "index not available");
             };
             let plan = plan_query(&query);
-            let routing = route_query(&query, Some(&eng.metadata().repo_stats), &plan, true, false);
-            match eng.search(&query) {
+            let routing = route_query(
+                &query,
+                Some(&engine.metadata().repo_stats),
+                &plan,
+                true,
+                false,
+            );
+            match engine.search(&query) {
                 Ok(execution) => {
                     let mut hits = execution.hits;
-                    if let Ok(mut store) = frecency.lock() {
+                    if let Ok(mut store) = service.frecency.lock() {
                         if !store.is_empty() {
                             store.rerank_hits(&mut hits);
                         }
@@ -281,23 +416,34 @@ fn dispatch(
             }
         }
         "status" => {
-            let guard = engine.read().unwrap();
-            let (delta_docs, _meta_build_secs) = guard
-                .as_ref()
-                .map(|engine| {
-                    let metadata = engine.metadata();
-                    (metadata.delta_docs, metadata.build_stats.build_millis)
-                })
-                .unwrap_or((0, 0));
-            drop(guard);
+            let params: DaemonStatusParams = if request.params.is_null() {
+                DaemonStatusParams { target_root: None }
+            } else {
+                match serde_json::from_value(request.params) {
+                    Ok(params) => params,
+                    Err(error) => {
+                        return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                    }
+                }
+            };
+            let root = if let Some(target_root) = params.target_root {
+                match service_for_target_root(state, &target_root) {
+                    Ok(service) => {
+                        let _ = service.ensure_ready();
+                        Some(service.status())
+                    }
+                    Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+                }
+            } else {
+                None
+            };
             RpcResponse::ok(
                 id,
                 DaemonStatus {
-                    repo_root: repo_root.display().to_string(),
-                    index_dir: index_dir.display().to_string(),
+                    daemon_dir: state.daemon_dir.display().to_string(),
                     uptime_secs: started.elapsed().as_secs(),
-                    generation: generation.load(Ordering::SeqCst),
-                    delta_docs,
+                    active_roots: state.active_root_count(),
+                    root,
                 },
             )
         }
@@ -308,26 +454,58 @@ fn dispatch(
                     return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
                 }
             };
-            if let Ok(mut store) = frecency.lock() {
+            let service = match service_for_target_root(state, &params.target_root) {
+                Ok(service) => service,
+                Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+            };
+            if let Ok(mut store) = service.frecency.lock() {
                 store.record_select(&params.paths);
                 let _ = store.flush();
             }
             RpcResponse::ok(id, serde_json::json!({"recorded": params.paths.len()}))
         }
-        "reload" => match SearchEngine::open(index_dir) {
-            Ok(new_engine) => {
-                let mut guard = engine.write().unwrap();
-                *guard = Some(new_engine);
-                RpcResponse::ok(id, serde_json::json!({"reloaded": true}))
+        "reload" => {
+            let params: DaemonStatusParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            let Some(target_root) = params.target_root else {
+                return RpcResponse::error(id, -32602, "reload requires target_root");
+            };
+            let service = match service_for_target_root(state, &target_root) {
+                Ok(service) => service,
+                Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+            };
+            if let Err(error) = service.ensure_ready() {
+                return RpcResponse::error(id, -32000, error.to_string());
             }
-            Err(error) => RpcResponse::error(id, -32000, error.to_string()),
-        },
+            match SearchEngine::open(&service.index_dir) {
+                Ok(new_engine) => {
+                    let mut guard = service.engine.write().unwrap();
+                    *guard = Some(new_engine);
+                    RpcResponse::ok(id, serde_json::json!({"reloaded": true}))
+                }
+                Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+            }
+        }
         "shutdown" => {
             SHUTDOWN.store(true, Ordering::SeqCst);
             RpcResponse::ok(id, serde_json::json!({"shutdown": true}))
         }
         _ => RpcResponse::error(id, -32601, format!("unknown method: {}", request.method)),
     }
+}
+
+fn service_for_target_root(state: &ServerState, target_root: &str) -> Result<Arc<RepoService>> {
+    let root = canonicalize_target_root(Path::new(target_root))?;
+    state.service_for_root(&root)
+}
+
+fn canonicalize_target_root(path: &Path) -> Result<PathBuf> {
+    path.canonicalize()
+        .with_context(|| format!("failed to canonicalize root {}", path.display()))
 }
 
 #[cfg(unix)]

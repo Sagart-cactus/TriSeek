@@ -15,7 +15,7 @@ By default this installs `triseek` and `triseek-server` into `~/.local/bin`. It 
 Pin a version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.2.0
+curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.2.1
 ```
 
 Install to a different directory:
@@ -53,25 +53,27 @@ cargo install --path crates/search-server --locked
 Build an index for a repository:
 
 ```sh
-triseek build --repo /path/to/repo
+triseek build /path/to/repo
 ```
 
 Run a search:
 
 ```sh
-triseek search --repo /path/to/repo "QueryRequest"
+triseek "QueryRequest" /path/to/repo
 ```
+
+`triseek search "QueryRequest" /path/to/repo` remains supported as a compatibility alias.
 
 Update an existing index after repo changes:
 
 ```sh
-triseek update --repo /path/to/repo
+triseek update /path/to/repo
 ```
 
 Start the background daemon for repeated searches:
 
 ```sh
-triseek daemon start --repo /path/to/repo
+triseek daemon start
 ```
 
 Check the install:
@@ -164,7 +166,7 @@ comfortably under Claude Code's 10,000-token MCP output warning.
   `PATH`.
 - Codex does not see TriSeek → inspect `~/.codex/config.toml` for a
   `[mcp_servers.triseek]` block. Re-run `triseek install codex`.
-- Tool calls return `INDEX_UNAVAILABLE` → run `triseek build --repo .` or
+- Tool calls return `INDEX_UNAVAILABLE` → run `triseek build .` or
   call the `reindex` tool.
 
 ## Upgrade and Uninstall
@@ -174,7 +176,7 @@ Upgrade by rerunning the installer. To remove TriSeek, delete the installed bina
 - macOS/Linux: `rm -f ~/.local/bin/triseek ~/.local/bin/triseek-server`
 - Windows: `Remove-Item "$HOME\\AppData\\Local\\Programs\\TriSeek\\bin\\triseek.exe","$HOME\\AppData\\Local\\Programs\\TriSeek\\bin\\triseek-server.exe"`
 
-TriSeek stores indexes under the repo-specific default index directory. Remove that directory if you also want to delete local index data.
+TriSeek stores indexes under `~/.triseek` by default. Remove that directory if you also want to delete local index data.
 
 ## Docs
 
@@ -185,4 +187,4 @@ TriSeek stores indexes under the repo-specific default index directory. Remove t
 ## Release Automation
 
 - CI runs `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked`, and release-binary smoke builds on Linux, macOS, and Windows.
-- Pushing a tag like `v0.2.0` triggers a release workflow that builds TriSeek archives for Linux, macOS (Intel and Apple Silicon), and Windows and uploads them to GitHub Releases.
+- Pushing a tag like `v0.2.1` triggers a release workflow that builds TriSeek archives for Linux, macOS (Intel and Apple Silicon), and Windows and uploads them to GitHub Releases.
