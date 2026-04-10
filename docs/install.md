@@ -73,16 +73,17 @@ triseek help
 
 ## Quick Start
 
-Build an index:
+Search immediately:
+
+```sh
+triseek "AuthConfig" /path/to/repo
+```
+
+Build an index when you want repeated searches to stay fast:
 
 ```sh
 triseek build /path/to/repo
-```
-
-Search a repository:
-
-```sh
-triseek "QueryRequest" /path/to/repo
+triseek "AuthConfig" /path/to/repo
 ```
 
 Refresh the index after changes:
@@ -96,6 +97,8 @@ Run the background daemon for repeated searches:
 ```sh
 triseek daemon start
 ```
+
+TriSeek stores default state under `~/.triseek`, not in the searched repo root.
 
 ## Upgrade
 
