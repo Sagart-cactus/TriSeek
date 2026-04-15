@@ -158,7 +158,8 @@ fn handle_line(
                 .get("arguments")
                 .cloned()
                 .unwrap_or(Value::Object(serde_json::Map::new()));
-            let outcome = dispatch(state, &name, &arguments);
+            let session_id = extract_session_id(&params);
+            let outcome = dispatch(state, &name, &arguments, session_id.as_deref());
             let result = tool_result_envelope(outcome);
             write_result(writer, id, result)?;
         }
@@ -180,6 +181,19 @@ fn handle_line(
         }
     }
     Ok(())
+}
+
+fn extract_session_id(params: &Value) -> Option<String> {
+    params
+        .pointer("/_meta/session_id")
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .or_else(|| {
+            params
+                .pointer("/_meta/sessionId")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        })
 }
 
 fn initialize_result() -> Value {

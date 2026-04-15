@@ -13,7 +13,10 @@ pub use planner::{
 };
 pub use protocol::{
     DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonRootStatus, DaemonSearchParams,
-    DaemonStatus, DaemonStatusParams, FrecencySelectParams, RpcError, RpcRequest, RpcResponse,
+    DaemonStatus, DaemonStatusParams, FrecencySelectParams, MemoBulkStaleParams, MemoDebugStats,
+    MemoEventKind, MemoFileStatus, MemoFileStatusKind, MemoFileSummary, MemoObserveParams,
+    MemoObserveResponse, MemoSessionLifecycleResponse, MemoSessionParams, MemoSessionResponse,
+    MemoStatusParams, MemoStatusResponse, RpcError, RpcRequest, RpcResponse,
 };
 pub use query::{CaseMode, QueryRequest, SearchEngineKind, SearchKind, SessionQuery};
 pub use repo::{

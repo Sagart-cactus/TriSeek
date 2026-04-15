@@ -750,6 +750,8 @@ dependencies = [
  "search-index",
  "serde",
  "serde_json",
+ "tempfile",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -983,6 +985,7 @@ dependencies = [
  "time",
  "toml_edit",
  "which",
+ "xxhash-rust",
 ]
 
 [[package]]

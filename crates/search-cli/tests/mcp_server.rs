@@ -252,6 +252,8 @@ fn initialize_handshake_and_tools_list() {
     assert!(names.contains(&"search_path_and_content"));
     assert!(names.contains(&"index_status"));
     assert!(names.contains(&"reindex"));
+    assert!(names.contains(&"memo_status"));
+    assert!(names.contains(&"memo_session"));
 
     client.shutdown();
 }

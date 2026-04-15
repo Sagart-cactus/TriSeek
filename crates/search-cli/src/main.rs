@@ -1,5 +1,6 @@
 mod install;
 mod mcp;
+mod memo_shim;
 mod rg;
 mod search_runner;
 
@@ -56,6 +57,8 @@ enum Commands {
     Uninstall(InstallArgs),
     /// Run diagnostic checks for the MCP install flow.
     Doctor,
+    /// Observe a harness hook event and forward it to Memo state in the daemon.
+    MemoObserve(MemoObserveArgs),
 }
 
 #[derive(Args)]
@@ -279,6 +282,16 @@ struct McpServeArgs {
     index_dir: Option<PathBuf>,
 }
 
+#[derive(Args)]
+struct MemoObserveArgs {
+    /// Hook event kind (for example: `post-tool-use`, `session-start`, `session-end`).
+    #[arg(long)]
+    event: String,
+    /// Optional repo root override if not present in hook payload.
+    #[arg(long)]
+    repo: Option<PathBuf>,
+}
+
 // ---------------------------------------------------------------------------
 // Install subcommands
 // ---------------------------------------------------------------------------
@@ -295,6 +308,11 @@ enum InstallClient {
     ClaudeCode(ClaudeCodeInstallArgs),
     /// Register TriSeek with the Codex CLI.
     Codex,
+    /// Register TriSeek with OpenCode.
+    #[command(name = "opencode")]
+    OpenCode,
+    /// Register TriSeek with Pi.
+    Pi,
 }
 
 #[derive(Args)]
@@ -376,12 +394,17 @@ fn main() -> Result<()> {
         Commands::Install(args) => match args.client {
             InstallClient::ClaudeCode(a) => install::claude_code::install(a.scope.into()),
             InstallClient::Codex => install::codex::install(),
+            InstallClient::OpenCode => install::opencode::install(),
+            InstallClient::Pi => install::pi::install(),
         },
         Commands::Uninstall(args) => match args.client {
             InstallClient::ClaudeCode(a) => install::claude_code::uninstall(a.scope.into()),
             InstallClient::Codex => install::codex::uninstall(),
+            InstallClient::OpenCode => install::opencode::uninstall(),
+            InstallClient::Pi => install::pi::uninstall(),
         },
         Commands::Doctor => install::doctor::run(),
+        Commands::MemoObserve(args) => handle_memo_observe(args),
     }
 }
 
@@ -768,6 +791,7 @@ where
             | "install"
             | "uninstall"
             | "doctor"
+            | "memo-observe"
             | "help"
     );
     let is_global_help = matches!(first_str.as_ref(), "-h" | "--help" | "-V" | "--version");
@@ -778,6 +802,14 @@ where
 
     args.insert(1, OsString::from("search"));
     args
+}
+
+fn handle_memo_observe(args: MemoObserveArgs) -> Result<()> {
+    if let Err(error) = memo_shim::run(&args.event, args.repo.as_deref()) {
+        // Hook execution must be best-effort: never fail the parent tool call.
+        eprintln!("triseek memo-observe: {error}");
+    }
+    Ok(())
 }
 
 fn effective_search_kind(kind: CliSearchKind) -> SearchKind {

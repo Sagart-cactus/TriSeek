@@ -18,6 +18,7 @@ tempfile.workspace = true
 time.workspace = true
 toml_edit.workspace = true
 which.workspace = true
+xxhash-rust.workspace = true
 
 [dev-dependencies]
 search-index = { path = "../search-index" }

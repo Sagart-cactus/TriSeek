@@ -9,12 +9,19 @@
 use crate::mcp::errors::McpToolError;
 use crate::mcp::server::McpState;
 use crate::search_runner::{self, ExecutedSearch};
-use search_core::{CaseMode, QueryRequest, SearchEngineKind, SearchHit, SearchKind};
-use search_index::{BuildConfig, SearchEngine, index_exists, read_index_metadata};
+use search_core::{
+    CaseMode, DAEMON_PORT_FILE, MemoSessionParams, MemoStatusParams, QueryRequest, RpcRequest,
+    RpcResponse, SearchEngineKind, SearchHit, SearchKind,
+};
+use search_index::{BuildConfig, SearchEngine, daemon_dir, index_exists, read_index_metadata};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use std::collections::HashSet;
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::Path;
+use std::time::Duration;
 
 const DEFAULT_LIMIT: usize = 20;
 const HARD_LIMIT: usize = 100;
@@ -29,13 +36,20 @@ pub enum ToolOutcome {
     Error(McpToolError),
 }
 
-pub fn dispatch(state: &McpState, name: &str, arguments: &Value) -> ToolOutcome {
+pub fn dispatch(
+    state: &McpState,
+    name: &str,
+    arguments: &Value,
+    session_id_hint: Option<&str>,
+) -> ToolOutcome {
     match name {
         "find_files" => find_files(state, arguments),
         "search_content" => search_content(state, arguments),
         "search_path_and_content" => search_path_and_content(state, arguments),
         "index_status" => index_status(state, arguments),
         "reindex" => reindex(state, arguments),
+        "memo_status" => memo_status(state, arguments, session_id_hint),
+        "memo_session" => memo_session(arguments, session_id_hint),
         other => ToolOutcome::Error(McpToolError::invalid_query(format!(
             "unknown tool `{other}`"
         ))),
@@ -285,8 +299,163 @@ fn reindex(state: &McpState, arguments: &Value) -> ToolOutcome {
 }
 
 // ---------------------------------------------------------------------------
+// memo_status
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct MemoStatusArgs {
+    files: Vec<String>,
+    #[serde(default)]
+    session_id: Option<String>,
+}
+
+fn memo_status(state: &McpState, arguments: &Value, session_id_hint: Option<&str>) -> ToolOutcome {
+    let args: MemoStatusArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    if args.files.is_empty() || args.files.iter().any(|path| path.trim().is_empty()) {
+        return ToolOutcome::Error(McpToolError::invalid_query(
+            "`files` must contain at least one non-empty path",
+        ));
+    }
+    let session_id = resolve_session_id(args.session_id, session_id_hint);
+    if let Err(error) = daemon_rpc(
+        "memo_session_start",
+        json!(MemoSessionParams {
+            session_id: session_id.clone(),
+            repo_root: Some(state.repo_root().display().to_string()),
+        }),
+    ) {
+        return ToolOutcome::Error(error);
+    }
+    let params = MemoStatusParams {
+        session_id,
+        repo_root: state.repo_root().display().to_string(),
+        files: args.files,
+    };
+    match daemon_rpc("memo_status", json!(params)) {
+        Ok(value) => ToolOutcome::Success(value),
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// memo_session
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct MemoSessionArgs {
+    #[serde(default)]
+    session_id: Option<String>,
+}
+
+fn memo_session(arguments: &Value, session_id_hint: Option<&str>) -> ToolOutcome {
+    let args: MemoSessionArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    let session_id = resolve_session_id(args.session_id, session_id_hint);
+    if let Err(error) = daemon_rpc(
+        "memo_session_start",
+        json!(MemoSessionParams {
+            session_id: session_id.clone(),
+            repo_root: None,
+        }),
+    ) {
+        return ToolOutcome::Error(error);
+    }
+    match daemon_rpc(
+        "memo_session",
+        json!(MemoSessionParams {
+            session_id,
+            repo_root: None
+        }),
+    ) {
+        Ok(value) => ToolOutcome::Success(value),
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
+
+fn resolve_session_id(explicit: Option<String>, hint: Option<&str>) -> String {
+    explicit
+        .or_else(|| hint.map(ToString::to_string))
+        .unwrap_or_else(|| "default".to_string())
+}
+
+fn daemon_port_path() -> std::path::PathBuf {
+    daemon_dir().join(DAEMON_PORT_FILE)
+}
+
+fn read_daemon_port() -> Option<u16> {
+    let port_path = daemon_port_path();
+    if !port_path.exists() {
+        return None;
+    }
+    fs::read_to_string(&port_path)
+        .ok()
+        .and_then(|port| port.trim().parse::<u16>().ok())
+}
+
+fn connect_to_daemon() -> Option<TcpStream> {
+    let port = read_daemon_port()?;
+    let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+    TcpStream::connect_timeout(&addr, Duration::from_millis(250)).ok()
+}
+
+fn daemon_rpc(method: &str, params: Value) -> Result<Value, McpToolError> {
+    let mut stream = connect_to_daemon().ok_or_else(|| {
+        McpToolError::backend_failure(
+            "TriSeek daemon is not running; memo tools require `triseek daemon start`",
+        )
+    })?;
+    let req = RpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: 1,
+        method: method.to_string(),
+        params,
+    };
+    writeln!(
+        stream,
+        "{}",
+        serde_json::to_string(&req).map_err(|error| {
+            McpToolError::backend_failure(format!(
+                "failed to serialize daemon RPC request: {error}"
+            ))
+        })?
+    )
+    .map_err(|error| {
+        McpToolError::backend_failure(format!("failed to write daemon RPC: {error}"))
+    })?;
+    let reader = BufReader::new(stream.try_clone().map_err(|error| {
+        McpToolError::backend_failure(format!("failed to clone socket: {error}"))
+    })?);
+    for line in reader.lines() {
+        let line = line.map_err(|error| {
+            McpToolError::backend_failure(format!("failed to read daemon RPC: {error}"))
+        })?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let resp: RpcResponse = serde_json::from_str(&line).map_err(|error| {
+            McpToolError::backend_failure(format!("failed to parse daemon RPC response: {error}"))
+        })?;
+        if let Some(error) = resp.error {
+            return Err(McpToolError::backend_failure(format!(
+                "daemon RPC {method} failed ({}): {}",
+                error.code, error.message
+            )));
+        }
+        return Ok(resp.result.unwrap_or(Value::Null));
+    }
+    Err(McpToolError::backend_failure(format!(
+        "daemon RPC {method} returned no response"
+    )))
+}
 
 fn deserialize_args<T: for<'de> Deserialize<'de>>(arguments: &Value) -> Result<T, McpToolError> {
     let value = if arguments.is_null() {

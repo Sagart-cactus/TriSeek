@@ -13,16 +13,18 @@ pub fn install(scope: Scope) -> Result<()> {
     let binary_str = binary.to_string_lossy().into_owned();
 
     match scope {
-        Scope::Project => install_project(&binary_str),
-        Scope::Local | Scope::User => install_via_cli(&binary_str, scope),
-    }
+        Scope::Project => install_project(&binary_str)?,
+        Scope::Local | Scope::User => install_via_cli(&binary_str, scope)?,
+    };
+    install_hooks(&binary_str, scope)
 }
 
 pub fn uninstall(scope: Scope) -> Result<()> {
     match scope {
-        Scope::Project => uninstall_project(),
-        Scope::Local | Scope::User => uninstall_via_cli(scope),
-    }
+        Scope::Project => uninstall_project()?,
+        Scope::Local | Scope::User => uninstall_via_cli(scope)?,
+    };
+    uninstall_hooks(scope)
 }
 
 fn install_project(binary: &str) -> Result<()> {
@@ -98,6 +100,50 @@ fn uninstall_via_cli(scope: Scope) -> Result<()> {
         "triseek: removed from Claude Code ({} scope)",
         scope.as_claude_cli_flag()
     );
+    Ok(())
+}
+
+fn install_hooks(binary: &str, scope: Scope) -> Result<()> {
+    let settings_path = shared::claude_hooks_settings_path(scope)?;
+    let existing = fs::read_to_string(&settings_path).ok();
+    let merged = shared::upsert_claude_hooks(existing.as_deref(), binary).with_context(|| {
+        format!(
+            "failed to merge memo hooks into {}",
+            settings_path.display()
+        )
+    })?;
+    shared::atomic_write(&settings_path, &merged)
+        .with_context(|| format!("failed to write {}", settings_path.display()))?;
+    println!(
+        "triseek: memo hooks installed into {} ({} scope)",
+        settings_path.display(),
+        scope.as_claude_cli_flag()
+    );
+    Ok(())
+}
+
+fn uninstall_hooks(scope: Scope) -> Result<()> {
+    let settings_path = shared::claude_hooks_settings_path(scope)?;
+    let Ok(existing) = fs::read_to_string(&settings_path) else {
+        println!(
+            "triseek: no Claude hooks file at {} (nothing to remove)",
+            settings_path.display()
+        );
+        return Ok(());
+    };
+    match shared::remove_claude_hooks(&existing)? {
+        Some(updated) => {
+            shared::atomic_write(&settings_path, &updated)?;
+            println!(
+                "triseek: removed memo hooks from {}",
+                settings_path.display()
+            );
+        }
+        None => println!(
+            "triseek: no memo hooks found in {}",
+            settings_path.display()
+        ),
+    }
     Ok(())
 }
 
