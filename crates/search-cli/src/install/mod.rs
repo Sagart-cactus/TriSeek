@@ -1,12 +1,15 @@
 //! Agent-client installer module.
 //!
-//! Registers TriSeek as an MCP server inside Claude Code and Codex by
+//! Registers TriSeek as an MCP server inside Claude Code, Codex, OpenCode,
+//! and Pi by
 //! shelling out to their CLIs when available and falling back to
 //! merge-preserving edits to their config files.
 
 pub mod claude_code;
 pub mod codex;
 pub mod doctor;
+pub mod opencode;
+pub mod pi;
 pub mod shared;
 
 use anyhow::Result;

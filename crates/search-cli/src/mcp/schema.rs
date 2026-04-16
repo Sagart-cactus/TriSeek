@@ -1,7 +1,7 @@
 //! Static JSON Schema definitions for each MCP tool.
 //!
 //! Schemas are hard-coded `serde_json::Value` literals because the surface
-//! is small (5 tools) and freezing them by hand is the simplest way to
+//! is small and freezing them by hand is the simplest way to
 //! guarantee schema stability across releases.
 
 use serde_json::{Value, json};
@@ -43,6 +43,27 @@ pub const TOOLS: &[ToolDescriptor] = &[
         title: "Rebuild or update the TriSeek index",
         description: "Rebuild or update the TriSeek index. Use `incremental` for fast updates and `full` for a complete rebuild.",
         input_schema: reindex_schema,
+    },
+    ToolDescriptor {
+        name: "memo_status",
+        title: "Check file freshness in session cache",
+        description: "Check whether files changed since this session last read them. Use this before re-reading files to avoid redundant tokens.",
+        input_schema: memo_status_schema,
+    },
+    ToolDescriptor {
+        name: "memo_session",
+        title: "Inspect memo session stats",
+        description: "Show Memo session state: tracked files, read counts, and estimated tokens saved.",
+        input_schema: memo_session_schema,
+    },
+    ToolDescriptor {
+        name: "memo_check",
+        title: "Check single-file freshness (Codex active mode)",
+        description: "Check whether a single file has changed since this session last read it. \
+            Returns a `recommendation`: `skip_reread` (file unchanged — trust conversation history), \
+            `reread_with_diff` (file changed slightly, <10%), or `reread` (file changed significantly \
+            or was never read). Use on Codex before re-reading any file you have seen this session.",
+        input_schema: memo_check_schema,
     },
 ];
 
@@ -140,6 +161,57 @@ pub fn reindex_schema() -> Value {
                 "default": "incremental"
             }
         },
+        "additionalProperties": false
+    })
+}
+
+pub fn memo_status_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "files": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1,
+                "description": "Repository-relative file paths to check."
+            },
+            "session_id": {
+                "type": "string",
+                "description": "Optional session identifier. If omitted, MCP metadata/session defaults are used."
+            }
+        },
+        "required": ["files"],
+        "additionalProperties": false
+    })
+}
+
+pub fn memo_session_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "session_id": {
+                "type": "string",
+                "description": "Optional session identifier. If omitted, MCP metadata/session defaults are used."
+            }
+        },
+        "additionalProperties": false
+    })
+}
+
+pub fn memo_check_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Repository-relative path of the file to check."
+            },
+            "session_id": {
+                "type": "string",
+                "description": "Optional session identifier. If omitted, MCP metadata/session defaults are used."
+            }
+        },
+        "required": ["path"],
         "additionalProperties": false
     })
 }

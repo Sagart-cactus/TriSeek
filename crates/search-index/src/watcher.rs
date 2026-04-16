@@ -5,7 +5,7 @@ use ignore::gitignore::GitignoreBuilder;
 use notify::event::{EventKind, ModifyKind, RenameMode};
 use notify::{RecursiveMode, Watcher};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 /// Signals the index generation number. Incremented each time the watcher updates the index.
 /// Consumers (e.g. the server) can compare this to detect when to reload the engine.
 pub type GenerationCounter = Arc<AtomicU64>;
+pub type WatcherChangeCallback = Arc<dyn Fn(&Path) + Send + Sync + 'static>;
 
 /// Debounce windows.
 const PER_FILE_WAIT: Duration = Duration::from_millis(200);
@@ -64,6 +65,7 @@ pub fn start_watcher(
     repo_root: PathBuf,
     index_dir: PathBuf,
     config: BuildConfig,
+    on_change: Option<WatcherChangeCallback>,
 ) -> Result<WatcherHandle, SearchIndexError> {
     // Canonicalize so path comparisons work even when symlinks are involved
     // (e.g. /tmp → /private/tmp on macOS).
@@ -95,6 +97,7 @@ pub fn start_watcher(
             event_rx,
             shutdown_rx,
             generation_clone,
+            on_change,
         );
     });
 
@@ -112,6 +115,7 @@ fn watcher_loop(
     event_rx: mpsc::Receiver<notify::Event>,
     shutdown_rx: mpsc::Receiver<()>,
     generation: GenerationCounter,
+    on_change: Option<WatcherChangeCallback>,
 ) {
     // Build a gitignore matcher for the repo root.
     let gitignore = {
@@ -169,6 +173,7 @@ fn watcher_loop(
         // Filter ignored paths and split into added/removed.
         let mut added_or_modified = Vec::new();
         let mut removed_relative = Vec::new();
+        let mut changed_paths = Vec::new();
 
         for (abs_path, kind) in &pending {
             // Skip paths outside the repo root (shouldn't happen but be safe).
@@ -188,6 +193,7 @@ fn watcher_loop(
             if abs_path.starts_with(&index_dir) {
                 continue;
             }
+            changed_paths.push(abs_path.clone());
 
             let relative = normalize_relative(&repo_root, abs_path);
 
@@ -214,6 +220,12 @@ fn watcher_loop(
 
         if added_or_modified.is_empty() && removed_relative.is_empty() {
             continue;
+        }
+
+        if let Some(ref callback) = on_change {
+            for path in &changed_paths {
+                callback(path);
+            }
         }
 
         // Apply changes to the index.

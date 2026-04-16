@@ -18,3 +18,7 @@ search-core = { path = "../search-core" }
 search-frecency = { path = "../search-frecency" }
 search-index = { path = "../search-index" }
 libc.workspace = true
+xxhash-rust.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

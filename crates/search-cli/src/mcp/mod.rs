@@ -4,6 +4,7 @@
 //! any other MCP-capable client can use as their primary code-search tool.
 
 pub mod errors;
+pub mod query_cache;
 pub mod repo_root;
 pub mod schema;
 pub mod server;

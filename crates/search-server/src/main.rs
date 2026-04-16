@@ -1,9 +1,13 @@
+mod memo;
+
 use anyhow::{Context, Result};
 use clap::Parser;
+use memo::MemoState;
 use search_core::{
     DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonRootStatus, DaemonSearchParams,
-    DaemonStatus, DaemonStatusParams, FrecencySelectParams, RpcRequest, RpcResponse,
-    SearchEngineKind, SearchHit, SearchKind, SearchResponse, plan_query, route_query,
+    DaemonStatus, DaemonStatusParams, FrecencySelectParams, MemoCheckParams, MemoObserveParams,
+    MemoSessionParams, MemoStatusParams, RpcRequest, RpcResponse, SearchEngineKind, SearchHit,
+    SearchKind, SearchResponse, plan_query, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
 use search_index::{
@@ -42,10 +46,11 @@ struct RepoService {
     frecency: Mutex<FrecencyStore>,
     watcher: Mutex<Option<WatcherHandle>>,
     last_seen_generation: AtomicU64,
+    memo: Arc<MemoState>,
 }
 
 impl RepoService {
-    fn new(repo_root: PathBuf) -> Result<Self> {
+    fn new(repo_root: PathBuf, memo: Arc<MemoState>) -> Result<Self> {
         let index_dir = default_index_dir(&repo_root);
         let engine = if index_exists(&index_dir) {
             Some(SearchEngine::open(&index_dir).context("failed to open index")?)
@@ -59,6 +64,7 @@ impl RepoService {
             frecency: Mutex::new(FrecencyStore::open(&index_dir)),
             watcher: Mutex::new(None),
             last_seen_generation: AtomicU64::new(0),
+            memo,
         };
         service.start_watcher_if_needed()?;
         Ok(service)
@@ -135,6 +141,12 @@ impl RepoService {
             self.repo_root.clone(),
             self.index_dir.clone(),
             BuildConfig::default(),
+            Some({
+                let memo = Arc::clone(&self.memo);
+                Arc::new(move |path| {
+                    memo.mark_stale_for_all(path);
+                })
+            }),
         )
         .with_context(|| format!("failed to start watcher for {}", self.repo_root.display()))?;
         self.last_seen_generation
@@ -171,6 +183,7 @@ impl RepoService {
 struct ServerState {
     daemon_dir: PathBuf,
     services: Mutex<HashMap<String, Arc<RepoService>>>,
+    memo: Arc<MemoState>,
 }
 
 impl ServerState {
@@ -178,6 +191,7 @@ impl ServerState {
         Self {
             daemon_dir,
             services: Mutex::new(HashMap::new()),
+            memo: Arc::new(MemoState::new(Duration::from_secs(600))),
         }
     }
 
@@ -193,7 +207,10 @@ impl ServerState {
             return Ok(existing);
         }
 
-        let service = Arc::new(RepoService::new(root.to_path_buf())?);
+        let service = Arc::new(RepoService::new(
+            root.to_path_buf(),
+            Arc::clone(&self.memo),
+        )?);
         let mut services = self.services.lock().unwrap();
         Ok(services
             .entry(key)
@@ -489,6 +506,60 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                 }
                 Err(error) => RpcResponse::error(id, -32000, error.to_string()),
             }
+        }
+        "memo_observe" => {
+            let params: MemoObserveParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            RpcResponse::ok(id, state.memo.observe(&params))
+        }
+        "memo_status" => {
+            let params: MemoStatusParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            RpcResponse::ok(id, state.memo.status(&params))
+        }
+        "memo_session_start" => {
+            let params: MemoSessionParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            RpcResponse::ok(id, state.memo.session_start(&params))
+        }
+        "memo_session_end" => {
+            let params: MemoSessionParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            RpcResponse::ok(id, state.memo.session_end(&params))
+        }
+        "memo_session" => {
+            let params: MemoSessionParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            RpcResponse::ok(id, state.memo.session(&params))
+        }
+        "memo_check" => {
+            let params: MemoCheckParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            RpcResponse::ok(id, state.memo.check(&params))
         }
         "shutdown" => {
             SHUTDOWN.store(true, Ordering::SeqCst);

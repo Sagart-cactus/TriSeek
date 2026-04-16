@@ -16,7 +16,9 @@ use std::sync::{
     Mutex,
     atomic::{AtomicBool, Ordering},
 };
+use std::time::Duration;
 
+use crate::mcp::query_cache::QueryCache;
 use crate::mcp::schema::{TOOLS, ToolDescriptor};
 use crate::mcp::tools::{ToolOutcome, dispatch};
 
@@ -28,15 +30,21 @@ pub struct McpState {
     repo_root: PathBuf,
     index_dir: PathBuf,
     cached_engine: Mutex<Option<SearchEngine>>,
+    pub query_cache: QueryCache,
 }
 
 impl McpState {
     pub fn new(repo_root: PathBuf, index_dir_override: Option<PathBuf>) -> Self {
         let index_dir = index_dir_override.unwrap_or_else(|| default_index_dir(&repo_root));
+        let ttl_secs: u64 = std::env::var("TRISEEK_SEARCH_CACHE_TTL_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(60);
         Self {
             repo_root,
             index_dir,
             cached_engine: Mutex::new(None),
+            query_cache: QueryCache::new(Duration::from_secs(ttl_secs), 256),
         }
     }
 
@@ -68,6 +76,7 @@ impl McpState {
         if let Ok(mut guard) = self.cached_engine.lock() {
             *guard = None;
         }
+        self.query_cache.invalidate_all();
     }
 }
 
@@ -158,7 +167,8 @@ fn handle_line(
                 .get("arguments")
                 .cloned()
                 .unwrap_or(Value::Object(serde_json::Map::new()));
-            let outcome = dispatch(state, &name, &arguments);
+            let session_id = extract_session_id(&params);
+            let outcome = dispatch(state, &name, &arguments, session_id.as_deref());
             let result = tool_result_envelope(outcome);
             write_result(writer, id, result)?;
         }
@@ -180,6 +190,19 @@ fn handle_line(
         }
     }
     Ok(())
+}
+
+fn extract_session_id(params: &Value) -> Option<String> {
+    params
+        .pointer("/_meta/session_id")
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .or_else(|| {
+            params
+                .pointer("/_meta/sessionId")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        })
 }
 
 fn initialize_result() -> Value {

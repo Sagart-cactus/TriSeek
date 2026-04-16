@@ -8,10 +8,14 @@
 //! environment may reject unsigned commits. `SearchEngine::build` only
 //! needs a directory with files to walk.
 
+use search_core::DAEMON_PORT_FILE;
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 /// Locate the freshly built `triseek` binary next to the current test executable.
 fn triseek_binary() -> PathBuf {
@@ -105,6 +109,10 @@ struct McpClient {
 
 impl McpClient {
     fn spawn(repo: &Path) -> Self {
+        Self::spawn_with_home(repo, None)
+    }
+
+    fn spawn_with_home(repo: &Path, home: Option<&Path>) -> Self {
         let binary = triseek_binary();
         let index_dir = repo.join(".triseek-index");
         assert!(
@@ -112,7 +120,8 @@ impl McpClient {
             "triseek binary not found at {}; cargo test should build it",
             binary.display()
         );
-        let mut child = Command::new(&binary)
+        let mut command = Command::new(&binary);
+        command
             .arg("mcp")
             .arg("serve")
             .arg("--repo")
@@ -121,9 +130,12 @@ impl McpClient {
             .arg(&index_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("spawn triseek mcp serve");
+            .stderr(Stdio::piped());
+        if let Some(home) = home {
+            command.env("HOME", home);
+            command.env("USERPROFILE", home);
+        }
+        let mut child = command.spawn().expect("spawn triseek mcp serve");
         let stdin = child.stdin.take().expect("stdin");
         let stdout = BufReader::new(child.stdout.take().expect("stdout"));
         Self {
@@ -178,13 +190,21 @@ impl McpClient {
 }
 
 fn call_tool(client: &mut McpClient, name: &str, arguments: Value) -> Value {
-    let response = client.call(
-        "tools/call",
-        json!({
-            "name": name,
-            "arguments": arguments,
-        }),
-    );
+    call_tool_with_meta(client, name, arguments, Value::Null)
+}
+
+fn call_tool_with_meta(client: &mut McpClient, name: &str, arguments: Value, meta: Value) -> Value {
+    let mut params = json!({
+        "name": name,
+        "arguments": arguments,
+    });
+    if !meta.is_null() {
+        params
+            .as_object_mut()
+            .expect("tool params object")
+            .insert("_meta".to_string(), meta);
+    }
+    let response = client.call("tools/call", params);
     let result = response
         .get("result")
         .unwrap_or_else(|| panic!("expected result in {response}"));
@@ -206,6 +226,58 @@ fn call_tool(client: &mut McpClient, name: &str, arguments: Value) -> Value {
         panic!("tool {name} returned isError=true: {envelope}");
     }
     envelope
+}
+
+struct FakeDaemon {
+    requests: Arc<Mutex<Vec<Value>>>,
+    handle: thread::JoinHandle<()>,
+}
+
+impl FakeDaemon {
+    fn start(home: &Path, responses: Vec<Value>) -> Self {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind fake daemon");
+        let port = listener.local_addr().expect("daemon addr").port();
+        let daemon_dir = home.join(".triseek").join("daemon");
+        std::fs::create_dir_all(&daemon_dir).expect("create fake daemon dir");
+        std::fs::write(daemon_dir.join(DAEMON_PORT_FILE), port.to_string())
+            .expect("write fake daemon port");
+
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let requests_for_thread = Arc::clone(&requests);
+        let handle = thread::spawn(move || {
+            for response in responses {
+                let (mut socket, _) = listener.accept().expect("accept fake daemon connection");
+                let mut reader = BufReader::new(socket.try_clone().expect("clone fake socket"));
+                let mut line = String::new();
+                reader
+                    .read_line(&mut line)
+                    .expect("read fake daemon request");
+                let request: Value =
+                    serde_json::from_str(line.trim()).expect("parse fake daemon request");
+                requests_for_thread
+                    .lock()
+                    .expect("fake daemon requests mutex")
+                    .push(request.clone());
+                let id = request.get("id").cloned().unwrap_or_else(|| json!(1));
+                let rpc_response = json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": response,
+                });
+                writeln!(socket, "{}", serde_json::to_string(&rpc_response).unwrap())
+                    .expect("write fake daemon response");
+            }
+        });
+        Self { requests, handle }
+    }
+
+    fn finish(self) -> Vec<Value> {
+        self.handle.join().expect("fake daemon thread join");
+        Arc::try_unwrap(self.requests)
+            .expect("fake daemon request ownership")
+            .into_inner()
+            .expect("fake daemon request mutex")
+    }
 }
 
 #[test]
@@ -252,6 +324,9 @@ fn initialize_handshake_and_tools_list() {
     assert!(names.contains(&"search_path_and_content"));
     assert!(names.contains(&"index_status"));
     assert!(names.contains(&"reindex"));
+    assert!(names.contains(&"memo_status"));
+    assert!(names.contains(&"memo_session"));
+    assert!(names.contains(&"memo_check"));
 
     client.shutdown();
 }
@@ -564,4 +639,292 @@ fn invalid_query_is_returned_as_tool_error() {
     assert_eq!(code, "INVALID_QUERY");
 
     client.shutdown();
+}
+
+// ---------------------------------------------------------------------------
+// Query cache integration tests
+// ---------------------------------------------------------------------------
+
+fn handshake(client: &mut McpClient) {
+    let _ = client.call(
+        "initialize",
+        json!({"protocolVersion": "2025-06-18", "clientInfo": {"name":"t","version":"0"}, "capabilities": {}}),
+    );
+    client.notify("notifications/initialized", json!({}));
+}
+
+#[test]
+fn search_content_cache_miss_then_hit() {
+    let fixture = build_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
+    handshake(&mut client);
+
+    let args = json!({ "query": "parse_arguments", "mode": "literal", "limit": 5 });
+
+    let first = call_tool(&mut client, "search_content", args.clone());
+    assert_eq!(
+        first.get("cache").and_then(Value::as_str),
+        Some("miss"),
+        "first call must be a cache miss"
+    );
+
+    let second = call_tool(&mut client, "search_content", args);
+    assert_eq!(
+        second.get("cache").and_then(Value::as_str),
+        Some("hit"),
+        "second identical call must be a cache hit"
+    );
+
+    // Results must be identical (modulo the cache field itself).
+    assert_eq!(
+        first.get("files_with_matches"),
+        second.get("files_with_matches")
+    );
+    assert_eq!(first.get("results"), second.get("results"));
+
+    client.shutdown();
+}
+
+#[test]
+fn find_files_cache_miss_then_hit() {
+    let fixture = build_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
+    handshake(&mut client);
+
+    let args = json!({ "query": "router", "limit": 10 });
+
+    let first = call_tool(&mut client, "find_files", args.clone());
+    assert_eq!(first.get("cache").and_then(Value::as_str), Some("miss"));
+
+    let second = call_tool(&mut client, "find_files", args);
+    assert_eq!(second.get("cache").and_then(Value::as_str), Some("hit"));
+    assert_eq!(first.get("results"), second.get("results"));
+
+    client.shutdown();
+}
+
+#[test]
+fn different_tool_name_is_different_cache_entry() {
+    // find_files and search_content share the same pattern string but must NOT
+    // share a cache entry because they produce structurally different envelopes.
+    let fixture = build_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
+    handshake(&mut client);
+
+    // Both calls use "router" as the pattern.
+    let ff = call_tool(&mut client, "find_files", json!({ "query": "router" }));
+    let sc = call_tool(
+        &mut client,
+        "search_content",
+        json!({ "query": "router", "mode": "literal" }),
+    );
+
+    // Both must be misses (separate keys).
+    assert_eq!(ff.get("cache").and_then(Value::as_str), Some("miss"));
+    assert_eq!(sc.get("cache").and_then(Value::as_str), Some("miss"));
+
+    // Repeat each — both should now be hits.
+    let ff2 = call_tool(&mut client, "find_files", json!({ "query": "router" }));
+    let sc2 = call_tool(
+        &mut client,
+        "search_content",
+        json!({ "query": "router", "mode": "literal" }),
+    );
+    assert_eq!(ff2.get("cache").and_then(Value::as_str), Some("hit"));
+    assert_eq!(sc2.get("cache").and_then(Value::as_str), Some("hit"));
+
+    client.shutdown();
+}
+
+#[test]
+fn reindex_invalidates_search_cache() {
+    let fixture = build_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
+    handshake(&mut client);
+
+    let args = json!({ "query": "route_auth", "mode": "literal", "limit": 5 });
+
+    // Prime the cache.
+    let miss = call_tool(&mut client, "search_content", args.clone());
+    assert_eq!(miss.get("cache").and_then(Value::as_str), Some("miss"));
+    let hit = call_tool(&mut client, "search_content", args.clone());
+    assert_eq!(hit.get("cache").and_then(Value::as_str), Some("hit"));
+
+    // Reindex flushes the cache.
+    let reindex = call_tool(&mut client, "reindex", json!({ "mode": "incremental" }));
+    assert_eq!(reindex.get("completed"), Some(&json!(true)));
+
+    // After reindex the same query must be a miss again.
+    let after = call_tool(&mut client, "search_content", args);
+    assert_eq!(
+        after.get("cache").and_then(Value::as_str),
+        Some("miss"),
+        "cache must be cleared after reindex"
+    );
+
+    client.shutdown();
+}
+
+#[test]
+fn ripgrep_fallback_bypasses_cache() {
+    // An unindexed repo forces the ripgrep fallback path.
+    // Those results must never be cached (strategy == "ripgrep_fallback").
+    let fixture = build_unindexed_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
+    handshake(&mut client);
+
+    let args = json!({ "query": "fallback", "mode": "literal" });
+
+    let first = call_tool(&mut client, "search_content", args.clone());
+    assert_eq!(
+        first.get("cache").and_then(Value::as_str),
+        Some("bypass"),
+        "ripgrep fallback results must not be cached"
+    );
+
+    // Running again should still be bypass, not hit.
+    let second = call_tool(&mut client, "search_content", args);
+    assert_eq!(second.get("cache").and_then(Value::as_str), Some("bypass"));
+
+    client.shutdown();
+}
+
+#[test]
+fn memo_check_uses_meta_session_id_and_forwards_to_daemon() {
+    let fixture = build_fixture_repo();
+    let fake_home = tempfile::tempdir().expect("fake home");
+    let daemon = FakeDaemon::start(
+        fake_home.path(),
+        vec![
+            json!({"ok": true}),
+            json!({
+                "path": "src/auth/router.rs",
+                "status": "fresh",
+                "recommendation": "skip_reread",
+                "tokens_at_last_read": 14,
+                "last_read_ago_seconds": 2
+            }),
+        ],
+    );
+
+    let mut client = McpClient::spawn_with_home(fixture.path(), Some(fake_home.path()));
+    handshake(&mut client);
+
+    let response = call_tool_with_meta(
+        &mut client,
+        "memo_check",
+        json!({ "path": "src/auth/router.rs" }),
+        json!({ "sessionId": "codex-meta-session" }),
+    );
+    assert_eq!(response.get("path"), Some(&json!("src/auth/router.rs")));
+    assert_eq!(response.get("status"), Some(&json!("fresh")));
+    assert_eq!(response.get("recommendation"), Some(&json!("skip_reread")));
+    assert_eq!(response.get("tokens_at_last_read"), Some(&json!(14)));
+
+    client.shutdown();
+
+    let requests = daemon.finish();
+    let expected_repo_root = fixture
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| fixture.path().to_path_buf());
+    assert_eq!(
+        requests.len(),
+        2,
+        "memo_check should make 2 daemon RPC calls"
+    );
+    assert_eq!(
+        requests[0].pointer("/method").and_then(Value::as_str),
+        Some("memo_session_start")
+    );
+    assert_eq!(
+        requests[0]
+            .pointer("/params/session_id")
+            .and_then(Value::as_str),
+        Some("codex-meta-session")
+    );
+    assert_eq!(
+        requests[0]
+            .pointer("/params/repo_root")
+            .and_then(Value::as_str),
+        Some(expected_repo_root.to_str().expect("fixture path str"))
+    );
+    assert_eq!(
+        requests[1].pointer("/method").and_then(Value::as_str),
+        Some("memo_check")
+    );
+    assert_eq!(
+        requests[1]
+            .pointer("/params/session_id")
+            .and_then(Value::as_str),
+        Some("codex-meta-session")
+    );
+    assert_eq!(
+        requests[1].pointer("/params/path").and_then(Value::as_str),
+        Some("src/auth/router.rs")
+    );
+}
+
+#[test]
+fn memo_status_uses_meta_session_id_and_returns_current_tokens() {
+    let fixture = build_fixture_repo();
+    let fake_home = tempfile::tempdir().expect("fake home");
+    let daemon = FakeDaemon::start(
+        fake_home.path(),
+        vec![
+            json!({"ok": true}),
+            json!({
+                "session_id": "claude-meta-session",
+                "results": [{
+                    "path": "src/auth/router.rs",
+                    "status": "stale",
+                    "tokens": 20,
+                    "read_count": 1,
+                    "message": "Changed since last read (now ~24 tokens); re-read file.",
+                    "current_tokens": 24
+                }]
+            }),
+        ],
+    );
+
+    let mut client = McpClient::spawn_with_home(fixture.path(), Some(fake_home.path()));
+    handshake(&mut client);
+
+    let response = call_tool_with_meta(
+        &mut client,
+        "memo_status",
+        json!({ "files": ["src/auth/router.rs"] }),
+        json!({ "session_id": "claude-meta-session" }),
+    );
+    assert_eq!(
+        response.get("session_id"),
+        Some(&json!("claude-meta-session"))
+    );
+    let results = response
+        .get("results")
+        .and_then(Value::as_array)
+        .expect("memo_status results");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].get("status"), Some(&json!("stale")));
+    assert_eq!(results[0].get("current_tokens"), Some(&json!(24)));
+
+    client.shutdown();
+
+    let requests = daemon.finish();
+    assert_eq!(
+        requests[0]
+            .pointer("/params/session_id")
+            .and_then(Value::as_str),
+        Some("claude-meta-session")
+    );
+    assert_eq!(
+        requests[1].pointer("/method").and_then(Value::as_str),
+        Some("memo_status")
+    );
+    assert_eq!(
+        requests[1]
+            .pointer("/params/files/0")
+            .and_then(Value::as_str),
+        Some("src/auth/router.rs")
+    );
 }

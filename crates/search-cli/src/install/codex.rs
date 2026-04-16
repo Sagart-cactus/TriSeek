@@ -10,15 +10,21 @@ use crate::install::{current_triseek_binary, shared};
 pub fn install() -> Result<()> {
     let binary = current_triseek_binary()?;
     let binary_str = binary.to_string_lossy().into_owned();
+    install_mcp(&binary_str)?;
+    install_hooks(&binary_str)?;
+    enable_hooks_flag()?;
+    Ok(())
+}
 
-    // Try `codex mcp add` first. If the subcommand exists and succeeds, we're done.
+fn install_mcp(binary_str: &str) -> Result<()> {
+    // Try `codex mcp add` first. If it succeeds, continue to hook setup.
     if let Some(codex) = locate_codex() {
         let output = Command::new(&codex)
             .arg("mcp")
             .arg("add")
             .arg("triseek")
             .arg("--")
-            .arg(&binary_str)
+            .arg(binary_str)
             .arg("mcp")
             .arg("serve")
             .output();
@@ -43,10 +49,10 @@ pub fn install() -> Result<()> {
         }
     }
 
-    // Fall back to editing ~/.codex/config.toml.
+    // Fall back to editing ~/.codex/config.toml for MCP entry.
     let path = shared::codex_config_path()?;
     let existing = fs::read_to_string(&path).ok();
-    let merged = shared::upsert_codex_config(existing.as_deref(), &binary_str, &["mcp", "serve"])
+    let merged = shared::upsert_codex_config(existing.as_deref(), binary_str, &["mcp", "serve"])
         .context("failed to merge triseek into Codex config.toml")?;
     shared::atomic_write(&path, &merged)
         .with_context(|| format!("failed to write {}", path.display()))?;
@@ -58,6 +64,12 @@ pub fn install() -> Result<()> {
 }
 
 pub fn uninstall() -> Result<()> {
+    uninstall_mcp()?;
+    uninstall_hooks()?;
+    Ok(())
+}
+
+fn uninstall_mcp() -> Result<()> {
     if let Some(codex) = locate_codex() {
         let output = Command::new(&codex)
             .arg("mcp")
@@ -86,6 +98,52 @@ pub fn uninstall() -> Result<()> {
         }
         None => println!("triseek: no triseek entry in {}", path.display()),
     }
+    Ok(())
+}
+
+fn install_hooks(binary: &str) -> Result<()> {
+    let path = shared::codex_hooks_json_path()?;
+    let existing = fs::read_to_string(&path).ok();
+    let merged = shared::upsert_codex_hooks(existing.as_deref(), binary)
+        .with_context(|| format!("failed to merge memo hooks into {}", path.display()))?;
+    shared::atomic_write(&path, &merged)
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    println!("triseek: memo hooks installed into {}", path.display());
+    println!("triseek: note — Codex hooks currently fire only for Bash (upstream issue #16732).");
+    println!(
+        "triseek: use `mcp__triseek__memo_check {{\"path\":\"<file>\"}}` before re-reading files."
+    );
+    println!("triseek: see docs/codex-memo-skill.md for the full decision table.");
+    Ok(())
+}
+
+fn uninstall_hooks() -> Result<()> {
+    let path = shared::codex_hooks_json_path()?;
+    let Ok(existing) = fs::read_to_string(&path) else {
+        println!(
+            "triseek: no Codex hooks file at {} (nothing to remove)",
+            path.display()
+        );
+        return Ok(());
+    };
+    match shared::remove_codex_hooks(&existing)? {
+        Some(updated) => {
+            shared::atomic_write(&path, &updated)?;
+            println!("triseek: removed memo hooks from {}", path.display());
+        }
+        None => println!("triseek: no memo hooks found in {}", path.display()),
+    }
+    Ok(())
+}
+
+fn enable_hooks_flag() -> Result<()> {
+    let path = shared::codex_config_path()?;
+    let existing = fs::read_to_string(&path).ok();
+    let updated = shared::ensure_codex_hooks_enabled(existing.as_deref())
+        .context("failed to enable codex_hooks feature flag in Codex config.toml")?;
+    shared::atomic_write(&path, &updated)
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    println!("triseek: enabled Codex feature flag `codex_hooks = true`");
     Ok(())
 }
 
