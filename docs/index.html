@@ -287,6 +287,7 @@ h2 .hl { color: var(--accent-cyan); }
     <a href="index.html" class="active">home</a>
     <a href="install.html">install</a>
     <a href="mcp.html">mcp</a>
+    <a href="memo.html">memo</a>
     <a href="triseek-explained.html">how it works</a>
     <a href="triseek-architecture.html">architecture</a>
   </div>
@@ -360,6 +361,13 @@ h2 .hl { color: var(--accent-cyan); }
         <div class="doc-card-arrow">read guide →</div>
       </a>
 
+      <a class="doc-card" href="memo.html">
+        <div class="doc-card-ico pu">◇</div>
+        <h3>Memo &amp; Caching</h3>
+        <p>Session-aware file freshness tracking and search result caching across Claude Code, Codex, OpenCode, and Pi.</p>
+        <div class="doc-card-arrow">read guide →</div>
+      </a>
+
       <a class="doc-card" href="triseek-explained.html">
         <div class="doc-card-ico or">◎</div>
         <h3>How TriSeek Works</h3>
@@ -406,6 +414,11 @@ h2 .hl { color: var(--accent-cyan); }
         <div class="feature-icon">▣</div>
         <div class="feature-title">Bounded Output</div>
         <div class="feature-desc">Clipped responses, deduped matches, line preview truncation — safe for MCP budgets.</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">◇</div>
+        <div class="feature-title">Memo &amp; Cache</div>
+        <div class="feature-desc">Tracks file reads per session and caches search results. Prevents redundant re-reads and re-scans across all harnesses.</div>
       </div>
       <div class="feature-item">
         <div class="feature-icon">◈</div>

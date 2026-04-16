@@ -486,7 +486,7 @@ fn postings_to_entries(mut postings: HashMap<u32, Vec<u32>>) -> Vec<PostingListE
             PostingListEntry { trigram, docs }
         })
         .collect();
-    entries.sort_by(|left, right| left.trigram.cmp(&right.trigram));
+    entries.sort_by_key(|e| e.trigram);
     entries
 }
 
