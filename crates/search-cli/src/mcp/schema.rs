@@ -56,6 +56,15 @@ pub const TOOLS: &[ToolDescriptor] = &[
         description: "Show Memo session state: tracked files, read counts, and estimated tokens saved.",
         input_schema: memo_session_schema,
     },
+    ToolDescriptor {
+        name: "memo_check",
+        title: "Check single-file freshness (Codex active mode)",
+        description: "Check whether a single file has changed since this session last read it. \
+            Returns a `recommendation`: `skip_reread` (file unchanged — trust conversation history), \
+            `reread_with_diff` (file changed slightly, <10%), or `reread` (file changed significantly \
+            or was never read). Use on Codex before re-reading any file you have seen this session.",
+        input_schema: memo_check_schema,
+    },
 ];
 
 pub fn find_files_schema() -> Value {
@@ -185,6 +194,24 @@ pub fn memo_session_schema() -> Value {
                 "description": "Optional session identifier. If omitted, MCP metadata/session defaults are used."
             }
         },
+        "additionalProperties": false
+    })
+}
+
+pub fn memo_check_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Repository-relative path of the file to check."
+            },
+            "session_id": {
+                "type": "string",
+                "description": "Optional session identifier. If omitted, MCP metadata/session defaults are used."
+            }
+        },
+        "required": ["path"],
         "additionalProperties": false
     })
 }

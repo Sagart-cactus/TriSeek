@@ -23,7 +23,7 @@ Default install location:
 Pin a version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.2.1
+curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.3.0
 ```
 
 Install to a custom directory:
@@ -69,7 +69,24 @@ cargo install --path crates/search-server --locked
 
 ```sh
 triseek help
+triseek doctor
 ```
+
+## Agent Client Installs
+
+TriSeek can register itself as an MCP server and install Memo helpers for
+supported agent clients:
+
+```sh
+triseek install claude-code --scope project
+triseek install codex
+triseek install opencode
+triseek install pi
+```
+
+Claude Code, OpenCode, and Pi get passive Memo observation via hooks or
+plugins. Codex gets the same MCP install plus active-mode guidance for
+`memo_check` until Codex hook coverage improves.
 
 ## Quick Start
 

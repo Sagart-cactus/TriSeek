@@ -148,6 +148,11 @@ pub struct MemoFileStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub read_count: Option<u32>,
     pub message: String,
+    /// Estimated tokens currently on disk. Only set when `status == Stale`;
+    /// `None` for `Fresh` and `Unknown`. Lets agents judge whether a re-read
+    /// is worth the token cost before issuing it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -195,4 +200,41 @@ pub struct MemoDebugStats {
     pub sessions: usize,
     pub tracked_files: usize,
     pub per_session_files: HashMap<String, usize>,
+}
+
+/// Parameters for the `memo_check` method — single-file freshness query.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoCheckParams {
+    pub session_id: String,
+    pub repo_root: String,
+    pub path: String,
+}
+
+/// Agent action recommended by `memo_check`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoCheckRecommendation {
+    /// File unchanged — skip re-reading, trust conversation history.
+    SkipReread,
+    /// File changed by more than 10% — re-read normally.
+    Reread,
+    /// File changed but by less than 10% — re-read expecting a small diff.
+    RereadWithDiff,
+}
+
+/// Response for the `memo_check` method.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoCheckResponse {
+    pub path: String,
+    pub status: MemoFileStatusKind,
+    pub recommendation: MemoCheckRecommendation,
+    /// Token count recorded at last read. `None` if file is unknown.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokens_at_last_read: Option<u32>,
+    /// Estimated token count currently on disk. `None` if fresh or unknown.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_tokens: Option<u32>,
+    /// Seconds elapsed since the last read observe. `None` if unknown.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_read_ago_seconds: Option<u64>,
 }

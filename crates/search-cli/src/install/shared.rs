@@ -691,4 +691,33 @@ args = ["mcp", "serve"]
         assert!(codex_hooks_enabled(&out).unwrap());
         assert!(out.contains("foo"));
     }
+
+    #[test]
+    fn write_opencode_plugin_emits_expected_contract() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plugin_dir = tmp.path().join("plugins");
+        write_opencode_plugin(&plugin_dir, "/tmp/triseek binary").unwrap();
+        let generated = std::fs::read_to_string(plugin_dir.join("triseek-memo.ts")).unwrap();
+        assert!(generated.contains("const TRISEEK_BIN = '/tmp/triseek binary';"));
+        assert!(generated.contains("\"tool.execute.after\""));
+        assert!(generated.contains("['read', 'edit', 'write', 'apply_patch']"));
+        assert!(generated.contains("output?.args ?? input?.args ?? {}"));
+        assert!(generated.contains("memo-observe', '--event', 'post-tool-use'"));
+    }
+
+    #[test]
+    fn write_pi_extension_emits_expected_contract() {
+        let tmp = tempfile::tempdir().unwrap();
+        let extension_dir = tmp.path().join("triseek-memo");
+        write_pi_extension(&extension_dir, "/tmp/triseek binary").unwrap();
+        let generated = std::fs::read_to_string(extension_dir.join("index.ts")).unwrap();
+        assert!(generated.contains("const TRISEEK_BIN = '/tmp/triseek binary';"));
+        assert!(generated.contains("pi.on('session_start'"));
+        assert!(generated.contains("pi.on('tool_result'"));
+        assert!(generated.contains("pi.on('session_before_compact'"));
+        assert!(generated.contains("['read', 'edit', 'write', 'bash']"));
+        assert!(generated.contains("memo-observe', '--event', 'session-start'"));
+        assert!(generated.contains("memo-observe', '--event', 'post-tool-use'"));
+        assert!(generated.contains("memo-observe', '--event', 'pre-compact'"));
+    }
 }

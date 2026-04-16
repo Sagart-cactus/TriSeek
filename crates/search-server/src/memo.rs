@@ -1,7 +1,8 @@
 use search_core::{
-    MemoEventKind, MemoFileStatus, MemoFileStatusKind, MemoFileSummary, MemoObserveParams,
-    MemoObserveResponse, MemoSessionLifecycleResponse, MemoSessionParams, MemoSessionResponse,
-    MemoStatusParams, MemoStatusResponse,
+    MemoCheckParams, MemoCheckRecommendation, MemoCheckResponse, MemoEventKind, MemoFileStatus,
+    MemoFileStatusKind, MemoFileSummary, MemoObserveParams, MemoObserveResponse,
+    MemoSessionLifecycleResponse, MemoSessionParams, MemoSessionResponse, MemoStatusParams,
+    MemoStatusResponse,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -18,6 +19,7 @@ struct FileState {
     read_count: u32,
     redundant_tokens: u64,
     stale: bool,
+    last_read_at: Instant,
 }
 
 #[derive(Debug)]
@@ -116,6 +118,7 @@ impl MemoState {
                         {
                             let file = session.files.get_mut(&absolute).unwrap();
                             file.read_count += 1;
+                            file.last_read_at = Instant::now();
                             if observed_tokens > 0 {
                                 file.tokens = observed_tokens;
                             }
@@ -134,12 +137,14 @@ impl MemoState {
                                 read_count: 0,
                                 redundant_tokens: 0,
                                 stale: false,
+                                last_read_at: Instant::now(),
                             });
                             file.content_hash = observed_hash;
                             file.disk_hash = observed_hash;
                             file.tokens = token_value;
                             file.read_count += 1;
                             file.stale = false;
+                            file.last_read_at = Instant::now();
                             session.total_reads += 1;
                         }
                     }
@@ -168,10 +173,20 @@ impl MemoState {
                     file.disk_hash = disk_hash;
                     file.stale = file.disk_hash != file.content_hash;
                 }
+                let current_tokens = if file.stale {
+                    std::fs::metadata(&absolute)
+                        .map(|m| estimate_tokens(m.len()))
+                        .ok()
+                } else {
+                    None
+                };
                 let (status, message) = if file.stale {
+                    let size_hint = current_tokens
+                        .map(|ct| format!(" (now ~{ct} tokens)"))
+                        .unwrap_or_default();
                     (
                         MemoFileStatusKind::Stale,
-                        "Changed since last read; re-read file.".to_string(),
+                        format!("Changed since last read{size_hint}; re-read file."),
                     )
                 } else {
                     (
@@ -188,6 +203,7 @@ impl MemoState {
                     tokens: Some(file.tokens),
                     read_count: Some(file.read_count),
                     message,
+                    current_tokens,
                 });
             } else {
                 results.push(MemoFileStatus {
@@ -196,6 +212,7 @@ impl MemoState {
                     tokens: None,
                     read_count: None,
                     message: "File not observed in this session.".to_string(),
+                    current_tokens: None,
                 });
             }
         }
@@ -237,6 +254,77 @@ impl MemoState {
         }
     }
 
+    pub fn check(&self, params: &MemoCheckParams) -> MemoCheckResponse {
+        let repo_root = Path::new(&params.repo_root);
+        let mut sessions = self.sessions.lock().unwrap();
+        prune_idle_sessions(&mut sessions, self.session_idle_timeout);
+        let session = sessions
+            .entry(params.session_id.clone())
+            .or_insert_with(SessionState::new);
+        session.touch();
+
+        let absolute = normalize_path(repo_root, &params.path);
+
+        if let Some(file) = session.files.get_mut(&absolute) {
+            // Refresh stale flag from disk (same logic as status()).
+            let disk_hash = read_disk_hash(&absolute).unwrap_or(0);
+            if disk_hash == 0 {
+                file.stale = true;
+            } else {
+                file.disk_hash = disk_hash;
+                file.stale = file.disk_hash != file.content_hash;
+            }
+
+            let current_tokens = if file.stale {
+                std::fs::metadata(&absolute)
+                    .map(|m| estimate_tokens(m.len()))
+                    .ok()
+            } else {
+                None
+            };
+
+            let status = if file.stale {
+                MemoFileStatusKind::Stale
+            } else {
+                MemoFileStatusKind::Fresh
+            };
+
+            let recommendation = if file.stale {
+                match (current_tokens, file.tokens) {
+                    (Some(ct), prev) if prev > 0 => {
+                        let ratio = (ct as f64 - prev as f64).abs() / prev as f64;
+                        if ratio < 0.10 {
+                            MemoCheckRecommendation::RereadWithDiff
+                        } else {
+                            MemoCheckRecommendation::Reread
+                        }
+                    }
+                    _ => MemoCheckRecommendation::Reread,
+                }
+            } else {
+                MemoCheckRecommendation::SkipReread
+            };
+
+            MemoCheckResponse {
+                path: params.path.clone(),
+                status,
+                recommendation,
+                tokens_at_last_read: Some(file.tokens),
+                current_tokens,
+                last_read_ago_seconds: Some(file.last_read_at.elapsed().as_secs()),
+            }
+        } else {
+            MemoCheckResponse {
+                path: params.path.clone(),
+                status: MemoFileStatusKind::Unknown,
+                recommendation: MemoCheckRecommendation::Reread,
+                tokens_at_last_read: None,
+                current_tokens: None,
+                last_read_ago_seconds: None,
+            }
+        }
+    }
+
     pub fn mark_stale_for_all(&self, changed_path: &Path) {
         let changed_path = changed_path
             .canonicalize()
@@ -248,6 +336,16 @@ impl MemoState {
                 file.stale = true;
             }
         }
+    }
+}
+
+/// Estimate token count from byte length. Matches the formula in `memo_shim.rs`.
+fn estimate_tokens(bytes: u64) -> u32 {
+    let est = (bytes as f64 / 3.5).ceil();
+    if est > u32::MAX as f64 {
+        u32::MAX
+    } else {
+        est as u32
     }
 }
 
@@ -415,5 +513,494 @@ mod tests {
                 MemoFileStatusKind::Stale
             ));
         }
+    }
+
+    // Replay a synthetic multi-file, multi-edit trace through MemoState and verify
+    // redundant read detection, tokens_saved accounting, and zero false negatives.
+    #[test]
+    fn replay_synthetic_trace_through_memo_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let memo = MemoState::new(Duration::from_secs(600));
+        let session = "replay-session";
+        let repo_str = repo.display().to_string();
+
+        // Create 3 files
+        let paths = ["src/a.rs", "src/b.rs", "src/c.rs"];
+        let contents = [
+            "pub fn a() -> u32 { 1 }\n",
+            "pub fn b() -> u32 { 2 }\n",
+            "pub fn c() -> u32 { 3 }\n",
+        ];
+        for (path, content) in paths.iter().zip(contents.iter()) {
+            let abs = repo.join(path);
+            fs::create_dir_all(abs.parent().unwrap()).unwrap();
+            fs::write(&abs, content).unwrap();
+        }
+
+        // --- Step 1: First reads of all 3 files (no redundancy yet) ---
+        for (path, content) in paths.iter().zip(contents.iter()) {
+            let abs = repo.join(path);
+            let hash = read_disk_hash(&abs).unwrap();
+            let tokens = (content.len() as f64 / 3.5).ceil() as u32;
+
+            // status should be Unknown before first observe
+            let st = memo.status(&MemoStatusParams {
+                session_id: session.to_string(),
+                repo_root: repo_str.clone(),
+                files: vec![path.to_string()],
+            });
+            assert!(
+                matches!(st.results[0].status, MemoFileStatusKind::Unknown),
+                "Expected Unknown before first read of {}",
+                path
+            );
+
+            memo.observe(&MemoObserveParams {
+                session_id: session.to_string(),
+                repo_root: repo_str.clone(),
+                event: MemoEventKind::Read,
+                path: Some(path.to_string()),
+                content_hash: Some(hash),
+                tokens: Some(tokens),
+            });
+        }
+
+        // After first reads: all should be Fresh, session totals correct
+        let sess = memo.session(&MemoSessionParams {
+            session_id: session.to_string(),
+            repo_root: None,
+        });
+        assert_eq!(sess.total_reads, 3);
+        assert_eq!(sess.redundant_reads_prevented, 0);
+        assert_eq!(sess.tokens_saved, 0);
+
+        // --- Step 2: Re-read all 3 unchanged files (all should be Fresh / redundant) ---
+        for (path, content) in paths.iter().zip(contents.iter()) {
+            let abs = repo.join(path);
+            let hash = read_disk_hash(&abs).unwrap();
+            let tokens = (content.len() as f64 / 3.5).ceil() as u32;
+
+            // status must be Fresh (no false negatives)
+            let st = memo.status(&MemoStatusParams {
+                session_id: session.to_string(),
+                repo_root: repo_str.clone(),
+                files: vec![path.to_string()],
+            });
+            assert!(
+                matches!(st.results[0].status, MemoFileStatusKind::Fresh),
+                "False negative: expected Fresh for unchanged {} but got Stale/Unknown",
+                path
+            );
+
+            memo.observe(&MemoObserveParams {
+                session_id: session.to_string(),
+                repo_root: repo_str.clone(),
+                event: MemoEventKind::Read,
+                path: Some(path.to_string()),
+                content_hash: Some(hash),
+                tokens: Some(tokens),
+            });
+        }
+
+        let sess = memo.session(&MemoSessionParams {
+            session_id: session.to_string(),
+            repo_root: None,
+        });
+        assert_eq!(sess.total_reads, 6);
+        assert_eq!(sess.redundant_reads_prevented, 3);
+        assert!(
+            sess.tokens_saved > 0,
+            "tokens_saved should be non-zero after redundant reads"
+        );
+
+        // --- Step 3: Edit src/a.rs (Edit observe), then verify a.rs is Stale, b.rs still Fresh ---
+        let new_content_a = "pub fn a() -> u32 { 42 }\n";
+        fs::write(repo.join("src/a.rs"), new_content_a).unwrap();
+        memo.observe(&MemoObserveParams {
+            session_id: session.to_string(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::Edit,
+            path: Some("src/a.rs".to_string()),
+            content_hash: None,
+            tokens: None,
+        });
+
+        let st_a = memo.status(&MemoStatusParams {
+            session_id: session.to_string(),
+            repo_root: repo_str.clone(),
+            files: vec!["src/a.rs".to_string()],
+        });
+        assert!(
+            matches!(st_a.results[0].status, MemoFileStatusKind::Stale),
+            "src/a.rs should be Stale after edit"
+        );
+
+        let st_b = memo.status(&MemoStatusParams {
+            session_id: session.to_string(),
+            repo_root: repo_str.clone(),
+            files: vec!["src/b.rs".to_string()],
+        });
+        assert!(
+            matches!(st_b.results[0].status, MemoFileStatusKind::Fresh),
+            "src/b.rs should still be Fresh after unrelated edit"
+        );
+
+        // --- Step 4: Re-read src/a.rs with new content — clears stale ---
+        let new_hash_a = read_disk_hash(&repo.join("src/a.rs")).unwrap();
+        let new_tokens_a = (new_content_a.len() as f64 / 3.5).ceil() as u32;
+        memo.observe(&MemoObserveParams {
+            session_id: session.to_string(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::Read,
+            path: Some("src/a.rs".to_string()),
+            content_hash: Some(new_hash_a),
+            tokens: Some(new_tokens_a),
+        });
+
+        let st_a_after = memo.status(&MemoStatusParams {
+            session_id: session.to_string(),
+            repo_root: repo_str.clone(),
+            files: vec!["src/a.rs".to_string()],
+        });
+        assert!(
+            matches!(st_a_after.results[0].status, MemoFileStatusKind::Fresh),
+            "src/a.rs should be Fresh after re-read with new content"
+        );
+
+        // Final session check: redundant_reads_prevented must not have increased for the stale re-read
+        let final_sess = memo.session(&MemoSessionParams {
+            session_id: session.to_string(),
+            repo_root: None,
+        });
+        assert_eq!(
+            final_sess.redundant_reads_prevented, 3,
+            "The stale re-read of a.rs should not count as a prevented redundant read"
+        );
+    }
+
+    // Two sessions observe the same files. Session A edits via mark_stale_for_all.
+    // Both sessions must see Stale. Sequential vs concurrent results must match.
+    #[test]
+    fn parallel_session_isolation_comprehensive() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let file = repo.join("shared.rs");
+        fs::write(&file, "fn shared() {}\n").unwrap();
+        let unrelated = repo.join("other.rs");
+        fs::write(&unrelated, "fn other() {}\n").unwrap();
+
+        let memo = MemoState::new(Duration::from_secs(600));
+        let repo_str = repo.display().to_string();
+
+        // Both sessions read shared.rs
+        let hash = read_disk_hash(&file).unwrap();
+        for sid in ["session-x", "session-y"] {
+            memo.observe(&MemoObserveParams {
+                session_id: sid.to_string(),
+                repo_root: repo_str.clone(),
+                event: MemoEventKind::Read,
+                path: Some("shared.rs".to_string()),
+                content_hash: Some(hash),
+                tokens: Some(10),
+            });
+        }
+
+        // session-x also reads other.rs
+        let other_hash = read_disk_hash(&unrelated).unwrap();
+        memo.observe(&MemoObserveParams {
+            session_id: "session-x".to_string(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::Read,
+            path: Some("other.rs".to_string()),
+            content_hash: Some(other_hash),
+            tokens: Some(8),
+        });
+
+        // Verify isolation: session-y does not see other.rs
+        let st_y_other = memo.status(&MemoStatusParams {
+            session_id: "session-y".to_string(),
+            repo_root: repo_str.clone(),
+            files: vec!["other.rs".to_string()],
+        });
+        assert!(
+            matches!(st_y_other.results[0].status, MemoFileStatusKind::Unknown),
+            "session-y should not know about other.rs read by session-x"
+        );
+
+        // External edit — mark_stale_for_all fires (simulates watcher)
+        fs::write(&file, "fn shared_v2() {}\n").unwrap();
+        memo.mark_stale_for_all(&file);
+
+        // Both sessions must see shared.rs as Stale
+        for sid in ["session-x", "session-y"] {
+            let st = memo.status(&MemoStatusParams {
+                session_id: sid.to_string(),
+                repo_root: repo_str.clone(),
+                files: vec!["shared.rs".to_string()],
+            });
+            assert!(
+                matches!(st.results[0].status, MemoFileStatusKind::Stale),
+                "{} should see shared.rs as Stale after external edit",
+                sid
+            );
+        }
+
+        // session-x's other.rs must remain Fresh (unrelated to the edit)
+        let st_x_other = memo.status(&MemoStatusParams {
+            session_id: "session-x".to_string(),
+            repo_root: repo_str.clone(),
+            files: vec!["other.rs".to_string()],
+        });
+        assert!(
+            matches!(st_x_other.results[0].status, MemoFileStatusKind::Fresh),
+            "other.rs should remain Fresh in session-x after unrelated edit"
+        );
+
+        // session-x re-reads shared.rs (clears stale), session-y does not
+        let new_hash = read_disk_hash(&file).unwrap();
+        memo.observe(&MemoObserveParams {
+            session_id: "session-x".to_string(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::Read,
+            path: Some("shared.rs".to_string()),
+            content_hash: Some(new_hash),
+            tokens: Some(10),
+        });
+
+        // session-x: Fresh (just re-read), session-y: still Stale
+        let st_x = memo.status(&MemoStatusParams {
+            session_id: "session-x".to_string(),
+            repo_root: repo_str.clone(),
+            files: vec!["shared.rs".to_string()],
+        });
+        assert!(
+            matches!(st_x.results[0].status, MemoFileStatusKind::Fresh),
+            "session-x should see Fresh after re-reading updated shared.rs"
+        );
+        let st_y = memo.status(&MemoStatusParams {
+            session_id: "session-y".to_string(),
+            repo_root: repo_str.clone(),
+            files: vec!["shared.rs".to_string()],
+        });
+        assert!(
+            matches!(st_y.results[0].status, MemoFileStatusKind::Stale),
+            "session-y should still see Stale (hasn't re-read yet)"
+        );
+
+        // session-x's redundant reads: only the initial re-reads of unchanged files count
+        // shared.rs was read once fresh, then stale re-read (not redundant), so redundant=0
+        let sess_x = memo.session(&MemoSessionParams {
+            session_id: "session-x".to_string(),
+            repo_root: None,
+        });
+        assert_eq!(
+            sess_x.redundant_reads_prevented, 0,
+            "session-x: no redundant reads (stale re-read doesn't count)"
+        );
+    }
+
+    #[test]
+    fn status_includes_current_tokens_when_stale() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let file = repo.join("grow.rs");
+        fs::write(&file, "fn a() {}\n").unwrap();
+        let hash = read_disk_hash(&file).unwrap();
+        let tokens = estimate_tokens(fs::metadata(&file).unwrap().len());
+        let memo = MemoState::new(Duration::from_secs(600));
+        let repo_str = repo.display().to_string();
+
+        memo.observe(&MemoObserveParams {
+            session_id: "s".to_string(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::Read,
+            path: Some("grow.rs".to_string()),
+            content_hash: Some(hash),
+            tokens: Some(tokens),
+        });
+
+        // Grow the file on disk
+        fs::write(&file, "fn a() {}\nfn b() {}\nfn c() {}\n".repeat(10)).unwrap();
+
+        let status = memo.status(&MemoStatusParams {
+            session_id: "s".to_string(),
+            repo_root: repo_str.clone(),
+            files: vec!["grow.rs".to_string()],
+        });
+        let result = &status.results[0];
+        assert!(matches!(result.status, MemoFileStatusKind::Stale));
+        let ct = result
+            .current_tokens
+            .expect("current_tokens should be Some when stale");
+        assert!(
+            ct > tokens,
+            "current_tokens ({ct}) should exceed original tokens ({tokens})"
+        );
+    }
+
+    #[test]
+    fn status_omits_current_tokens_when_fresh() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let file = repo.join("stable.rs");
+        fs::write(&file, "fn stable() {}\n").unwrap();
+        let hash = read_disk_hash(&file).unwrap();
+        let memo = MemoState::new(Duration::from_secs(600));
+        let repo_str = repo.display().to_string();
+
+        memo.observe(&MemoObserveParams {
+            session_id: "s".to_string(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::Read,
+            path: Some("stable.rs".to_string()),
+            content_hash: Some(hash),
+            tokens: Some(5),
+        });
+
+        let status = memo.status(&MemoStatusParams {
+            session_id: "s".to_string(),
+            repo_root: repo_str.clone(),
+            files: vec!["stable.rs".to_string()],
+        });
+        let result = &status.results[0];
+        assert!(matches!(result.status, MemoFileStatusKind::Fresh));
+        assert!(
+            result.current_tokens.is_none(),
+            "current_tokens should be None for fresh files"
+        );
+    }
+
+    #[test]
+    fn check_returns_skip_reread_for_fresh_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let file = repo.join("check.rs");
+        fs::write(&file, "fn check() {}\n").unwrap();
+        let hash = read_disk_hash(&file).unwrap();
+        let memo = MemoState::new(Duration::from_secs(600));
+        let repo_str = repo.display().to_string();
+
+        memo.observe(&MemoObserveParams {
+            session_id: "s".to_string(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::Read,
+            path: Some("check.rs".to_string()),
+            content_hash: Some(hash),
+            tokens: Some(10),
+        });
+
+        let resp = memo.check(&MemoCheckParams {
+            session_id: "s".to_string(),
+            repo_root: repo_str.clone(),
+            path: "check.rs".to_string(),
+        });
+        assert!(matches!(resp.status, MemoFileStatusKind::Fresh));
+        assert!(matches!(
+            resp.recommendation,
+            MemoCheckRecommendation::SkipReread
+        ));
+        assert_eq!(resp.tokens_at_last_read, Some(10));
+        assert!(resp.current_tokens.is_none());
+    }
+
+    #[test]
+    fn check_returns_reread_with_diff_for_small_delta() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let file = repo.join("small_delta.rs");
+        // Write ~350 bytes so estimate_tokens gives ~100 tokens
+        let base = "fn placeholder() {}\n".repeat(17);
+        fs::write(&file, &base).unwrap();
+        let hash = read_disk_hash(&file).unwrap();
+        let base_tokens = estimate_tokens(base.len() as u64);
+        let memo = MemoState::new(Duration::from_secs(600));
+        let repo_str = repo.display().to_string();
+
+        memo.observe(&MemoObserveParams {
+            session_id: "s".to_string(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::Read,
+            path: Some("small_delta.rs".to_string()),
+            content_hash: Some(hash),
+            tokens: Some(base_tokens),
+        });
+
+        // Append 2 lines (~5% growth — under 10% threshold)
+        let grown = format!("{base}// added line 1\n// added line 2\n");
+        fs::write(&file, &grown).unwrap();
+
+        let resp = memo.check(&MemoCheckParams {
+            session_id: "s".to_string(),
+            repo_root: repo_str.clone(),
+            path: "small_delta.rs".to_string(),
+        });
+        assert!(matches!(resp.status, MemoFileStatusKind::Stale));
+        assert!(
+            matches!(resp.recommendation, MemoCheckRecommendation::RereadWithDiff),
+            "small delta should produce reread_with_diff, got {:?}",
+            resp.recommendation
+        );
+    }
+
+    #[test]
+    fn check_returns_reread_for_exact_ten_percent_delta() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let file = repo.join("exact_delta.rs");
+        let base = "x".repeat(350);
+        fs::write(&file, &base).unwrap();
+        let hash = read_disk_hash(&file).unwrap();
+        let base_tokens = estimate_tokens(base.len() as u64);
+        assert_eq!(
+            base_tokens, 100,
+            "base length should estimate to 100 tokens"
+        );
+
+        let memo = MemoState::new(Duration::from_secs(600));
+        let repo_str = repo.display().to_string();
+
+        memo.observe(&MemoObserveParams {
+            session_id: "s".to_string(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::Read,
+            path: Some("exact_delta.rs".to_string()),
+            content_hash: Some(hash),
+            tokens: Some(base_tokens),
+        });
+
+        let grown = "y".repeat(385);
+        fs::write(&file, &grown).unwrap();
+        let resp = memo.check(&MemoCheckParams {
+            session_id: "s".to_string(),
+            repo_root: repo_str,
+            path: "exact_delta.rs".to_string(),
+        });
+        assert!(matches!(resp.status, MemoFileStatusKind::Stale));
+        assert_eq!(resp.current_tokens, Some(110));
+        assert!(
+            matches!(resp.recommendation, MemoCheckRecommendation::Reread),
+            "exact 10% delta should use reread, got {:?}",
+            resp.recommendation
+        );
+    }
+
+    #[test]
+    fn check_returns_reread_for_unknown_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let memo = MemoState::new(Duration::from_secs(600));
+
+        let resp = memo.check(&MemoCheckParams {
+            session_id: "s".to_string(),
+            repo_root: repo.display().to_string(),
+            path: "never_read.rs".to_string(),
+        });
+        assert!(matches!(resp.status, MemoFileStatusKind::Unknown));
+        assert!(matches!(
+            resp.recommendation,
+            MemoCheckRecommendation::Reread
+        ));
+        assert!(resp.tokens_at_last_read.is_none());
     }
 }

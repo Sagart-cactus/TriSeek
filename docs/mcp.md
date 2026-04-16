@@ -2,11 +2,13 @@
 
 TriSeek exposes a local stdio MCP (Model Context Protocol) server so Claude
 Code, Codex, and other MCP-capable clients can use it as their primary
-code-search tool. The server is:
+code-search tool. Search runs directly inside the stdio MCP server. Memo uses
+the local TriSeek daemon for session state so clients can ask whether files are
+still fresh within the current session. The server is:
 
 - **local-only** — no network, no telemetry, no OAuth
 - **stdio transport** — one child process per client session
-- **search-only** — no file-editing, no shell-execution tools
+- **search-first** — search tools plus Memo freshness helpers, but no file-editing or shell-execution tools
 - **hybrid-routed** — uses the TriSeek trigram index when it helps and falls
   back to ripgrep or direct scan when it doesn't, transparently
 - **bounded** — small, stable JSON envelopes that stay well under Claude
@@ -20,6 +22,12 @@ triseek install claude-code --scope project
 
 # Codex
 triseek install codex
+
+# OpenCode
+triseek install opencode
+
+# Pi
+triseek install pi
 
 # Verify
 triseek doctor
@@ -40,6 +48,10 @@ triseek mcp serve --repo /path/to/repo
 
 All logs go to stderr; stdout carries JSON-RPC frames only. The MCP server is currently scoped to one root per process.
 
+Memo-specific note: `memo_status`, `memo_session`, and `memo_check` require a
+running local TriSeek daemon. Hooks/plugins installed by `triseek install ...`
+feed that daemon passively where supported.
+
 ## Protocol
 
 - Framing: newline-delimited JSON (one JSON-RPC 2.0 message per line)
@@ -56,13 +68,14 @@ tool output payload is encoded as a single `text` content block containing
 JSON of the shape below. Tool errors set `isError: true` and return a
 structured error envelope (see **Errors**).
 
-Every success envelope contains:
+Search success envelopes contain:
 
 - `version` — schema version string (currently `"1"`)
 - `repo_root` — absolute path of the resolved repository
 - `strategy` — which backend ran: `triseek_indexed`, `triseek_direct_scan`,
   or `ripgrep_fallback`
 - `fallback_used` — `true` when a non-indexed backend was selected
+- `cache` — `hit`, `miss`, or `bypass` for the in-process search query cache
 - `routing_reason` — short machine-readable reason string from the router
 - `results` — the list of results
 - `truncated` — `true` when results were capped by `limit`
@@ -195,6 +208,75 @@ Output:
   "indexed_files": 28145
 }
 ```
+
+### `memo_status`
+
+Check freshness for one or more files in the current session.
+
+Input:
+
+```json
+{
+  "files": ["src/auth/router.rs"]
+}
+```
+
+Output (example):
+
+```json
+{
+  "session_id": "session-123",
+  "results": [
+    {
+      "path": "src/auth/router.rs",
+      "status": "stale",
+      "tokens": 120,
+      "read_count": 1,
+      "message": "Changed since last read (now ~132 tokens); re-read file.",
+      "current_tokens": 132
+    }
+  ]
+}
+```
+
+### `memo_session`
+
+Show tracked-file state and aggregate token savings for the current session.
+
+### `memo_check`
+
+Single-file freshness check used primarily by Codex active mode.
+
+Input:
+
+```json
+{
+  "path": "src/auth/router.rs"
+}
+```
+
+Output (example):
+
+```json
+{
+  "path": "src/auth/router.rs",
+  "status": "fresh",
+  "recommendation": "skip_reread",
+  "tokens_at_last_read": 120,
+  "last_read_ago_seconds": 9
+}
+```
+
+`recommendation` is one of:
+
+- `skip_reread`
+- `reread_with_diff`
+- `reread`
+
+## Memo modes
+
+- Claude Code, OpenCode, and Pi use passive Memo observation via hooks or generated plugins/extensions.
+- Codex currently uses active Memo mode because upstream hooks still do not reliably fire for non-Bash tools. Call `memo_check` before re-reading files you already saw in-session.
 
 ## Errors
 

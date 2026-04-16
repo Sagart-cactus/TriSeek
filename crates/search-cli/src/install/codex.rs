@@ -109,6 +109,11 @@ fn install_hooks(binary: &str) -> Result<()> {
     shared::atomic_write(&path, &merged)
         .with_context(|| format!("failed to write {}", path.display()))?;
     println!("triseek: memo hooks installed into {}", path.display());
+    println!("triseek: note — Codex hooks currently fire only for Bash (upstream issue #16732).");
+    println!(
+        "triseek: use `mcp__triseek__memo_check {{\"path\":\"<file>\"}}` before re-reading files."
+    );
+    println!("triseek: see docs/codex-memo-skill.md for the full decision table.");
     Ok(())
 }
 

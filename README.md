@@ -1,6 +1,6 @@
 # TriSeek
 
-TriSeek is a fast local code search CLI for people who like `rg`, but want repeated searches on medium and large codebases to stay fast too.
+TriSeek is a fast local code search CLI for people who like `rg`, but want repeated searches on medium and large codebases to stay fast too. It also ships a Memo layer for agent clients so they can ask whether a file is still fresh in-session instead of blindly re-reading it.
 
 You can use it like a normal search command:
 
@@ -16,7 +16,8 @@ Why it feels better than a repo-local search wrapper:
 - indexing is optional, but speeds up repeated searches
 - default state lives under `~/.triseek`, not in the repo root
 - one global daemon can serve multiple roots
-- MCP support is available for Claude Code, Codex, and other MCP clients
+- MCP support is available for Claude Code, Codex, OpenCode, Pi, and other MCP clients
+- Memo can observe file reads/edits passively where hooks exist, or provide active freshness checks through MCP
 
 ## Install
 
@@ -33,7 +34,7 @@ By default this installs `triseek` and `triseek-server` into `~/.local/bin`. It 
 Pin a version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.2.1
+curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.3.0
 ```
 
 Install to a different directory:
@@ -108,12 +109,14 @@ triseek help
 triseek doctor
 ```
 
-## Use TriSeek from Claude Code and Codex (MCP)
+## Use TriSeek from Claude Code, Codex, OpenCode, and Pi
 
 TriSeek ships an **MCP (Model Context Protocol) server** so Claude Code,
-Codex, and any MCP-capable client can use it as their primary local code
-search tool. The server runs in-process over stdio — no daemon required —
-and preserves TriSeek's hybrid indexed / ripgrep-fallback routing.
+Codex, OpenCode, Pi, and any MCP-capable client can use it as their primary
+local code-search tool. The search tools run in-process over stdio and preserve
+TriSeek's hybrid indexed / ripgrep-fallback routing. Memo uses the local
+TriSeek daemon for session state, and `triseek install` wires up the hook or
+plugin side where the client supports it.
 
 ### Claude Code
 
@@ -141,6 +144,28 @@ If the Codex CLI does not expose `mcp add`, the installer falls back to
 merging a `[mcp_servers.triseek]` block into `~/.codex/config.toml` while
 preserving any existing entries and comments.
 
+Codex Memo currently runs in active mode because Codex hooks still do not
+reliably fire for non-Bash tools. Use `memo_check` before re-reading files
+you have already seen in the current session.
+
+### OpenCode
+
+```sh
+triseek install opencode
+```
+
+This writes the TriSeek MCP entry plus a local OpenCode plugin under
+`.opencode/plugins/triseek-memo.ts`.
+
+### Pi
+
+```sh
+triseek install pi
+```
+
+This writes the TriSeek MCP entry plus a Pi extension under
+`~/.pi/agent/extensions/triseek-memo/`.
+
 ### Run the MCP server manually
 
 ```sh
@@ -163,8 +188,8 @@ triseek doctor
 ```
 
 `doctor` reports the binary path, detected repo root, availability of the
-Claude and Codex CLIs, existing MCP config locations, and whether a TriSeek
-index is present for the current repo.
+supported CLIs, existing MCP config locations, Memo hook/plugin health where
+applicable, and whether a TriSeek index is present for the current repo.
 
 ### Tool reference
 
@@ -175,13 +200,18 @@ index is present for the current repo.
 | `search_path_and_content` | Narrow by path glob then search content |
 | `index_status` | Report TriSeek index health |
 | `reindex` | Rebuild or incrementally update the index |
+| `memo_status` | Report freshness of one or more files in the current session |
+| `memo_session` | Show Memo session state, tracked files, and token savings |
+| `memo_check` | Ask whether a single file should be re-read or skipped |
 
 Full input/output schemas and error codes live in the [published MCP reference](https://sagart-cactus.github.io/TriSeek/mcp.html).
 
 ### How routing works
 
-Every search response returned by the MCP server includes a `strategy` and
-a `fallback_used` flag so callers know which backend ran:
+Every search response returned by the MCP server includes a `strategy`, a
+`fallback_used` flag, and a `cache` field (`hit`, `miss`, or `bypass`) so
+callers know which backend ran and whether the result came from the in-process
+query cache:
 
 - `triseek_indexed` — trigram index (fast for medium and large repos)
 - `triseek_direct_scan` — in-process file walker (for filter-heavy queries)
@@ -199,6 +229,8 @@ comfortably under Claude Code's 10,000-token MCP output warning.
   `PATH`.
 - Codex does not see TriSeek → inspect `~/.codex/config.toml` for a
   `[mcp_servers.triseek]` block. Re-run `triseek install codex`.
+- Codex Memo seems inactive → this is expected until upstream hook support
+  matures. Use `memo_check` in active mode and see `docs/codex-memo-skill.md`.
 - Tool calls return `INDEX_UNAVAILABLE` → run `triseek build .` or
   call the `reindex` tool.
 
@@ -222,4 +254,4 @@ TriSeek stores indexes under `~/.triseek` by default. Remove that directory if y
 ## Release Automation
 
 - CI runs `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked`, and release-binary smoke builds on Linux, macOS, and Windows.
-- Pushing a tag like `v0.2.1` triggers a release workflow that builds TriSeek archives for Linux, macOS (Intel and Apple Silicon), and Windows and uploads them to GitHub Releases.
+- Pushing a tag like `v0.3.0` triggers a release workflow that builds TriSeek archives for Linux, macOS (Intel and Apple Silicon), and Windows and uploads them to GitHub Releases.

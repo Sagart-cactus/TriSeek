@@ -5,9 +5,9 @@ use clap::Parser;
 use memo::MemoState;
 use search_core::{
     DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonRootStatus, DaemonSearchParams,
-    DaemonStatus, DaemonStatusParams, FrecencySelectParams, MemoObserveParams, MemoSessionParams,
-    MemoStatusParams, RpcRequest, RpcResponse, SearchEngineKind, SearchHit, SearchKind,
-    SearchResponse, plan_query, route_query,
+    DaemonStatus, DaemonStatusParams, FrecencySelectParams, MemoCheckParams, MemoObserveParams,
+    MemoSessionParams, MemoStatusParams, RpcRequest, RpcResponse, SearchEngineKind, SearchHit,
+    SearchKind, SearchResponse, plan_query, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
 use search_index::{
@@ -551,6 +551,15 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                 }
             };
             RpcResponse::ok(id, state.memo.session(&params))
+        }
+        "memo_check" => {
+            let params: MemoCheckParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            RpcResponse::ok(id, state.memo.check(&params))
         }
         "shutdown" => {
             SHUTDOWN.store(true, Ordering::SeqCst);

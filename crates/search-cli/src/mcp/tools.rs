@@ -10,8 +10,8 @@ use crate::mcp::errors::McpToolError;
 use crate::mcp::server::McpState;
 use crate::search_runner::{self, ExecutedSearch};
 use search_core::{
-    CaseMode, DAEMON_PORT_FILE, MemoSessionParams, MemoStatusParams, QueryRequest, RpcRequest,
-    RpcResponse, SearchEngineKind, SearchHit, SearchKind,
+    CaseMode, DAEMON_PORT_FILE, MemoCheckParams, MemoSessionParams, MemoStatusParams, QueryRequest,
+    RpcRequest, RpcResponse, SearchEngineKind, SearchHit, SearchKind,
 };
 use search_index::{BuildConfig, SearchEngine, daemon_dir, index_exists, read_index_metadata};
 use serde::Deserialize;
@@ -50,6 +50,7 @@ pub fn dispatch(
         "reindex" => reindex(state, arguments),
         "memo_status" => memo_status(state, arguments, session_id_hint),
         "memo_session" => memo_session(arguments, session_id_hint),
+        "memo_check" => memo_check(state, arguments, session_id_hint),
         other => ToolOutcome::Error(McpToolError::invalid_query(format!(
             "unknown tool `{other}`"
         ))),
@@ -88,7 +89,7 @@ fn find_files(state: &McpState, arguments: &Value) -> ToolOutcome {
         ..QueryRequest::default()
     };
 
-    run_and_envelope(state, &request, limit, path_result_mapper)
+    run_and_envelope(state, "find_files", &request, limit, path_result_mapper)
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +130,13 @@ fn search_content(state: &McpState, arguments: &Value) -> ToolOutcome {
         ..QueryRequest::default()
     };
 
-    run_and_envelope(state, &request, limit, content_result_mapper)
+    run_and_envelope(
+        state,
+        "search_content",
+        &request,
+        limit,
+        content_result_mapper,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +184,13 @@ fn search_path_and_content(state: &McpState, arguments: &Value) -> ToolOutcome {
         ..QueryRequest::default()
     };
 
-    run_and_envelope(state, &request, limit, content_result_mapper)
+    run_and_envelope(
+        state,
+        "search_path_and_content",
+        &request,
+        limit,
+        content_result_mapper,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -378,6 +391,48 @@ fn memo_session(arguments: &Value, session_id_hint: Option<&str>) -> ToolOutcome
 }
 
 // ---------------------------------------------------------------------------
+// memo_check
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct MemoCheckArgs {
+    path: String,
+    #[serde(default)]
+    session_id: Option<String>,
+}
+
+fn memo_check(state: &McpState, arguments: &Value, session_id_hint: Option<&str>) -> ToolOutcome {
+    let args: MemoCheckArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    if args.path.trim().is_empty() {
+        return ToolOutcome::Error(McpToolError::invalid_query(
+            "`path` must not be empty for memo_check",
+        ));
+    }
+    let session_id = resolve_session_id(args.session_id, session_id_hint);
+    if let Err(error) = daemon_rpc(
+        "memo_session_start",
+        json!(MemoSessionParams {
+            session_id: session_id.clone(),
+            repo_root: Some(state.repo_root().display().to_string()),
+        }),
+    ) {
+        return ToolOutcome::Error(error);
+    }
+    let params = MemoCheckParams {
+        session_id,
+        repo_root: state.repo_root().display().to_string(),
+        path: args.path,
+    };
+    match daemon_rpc("memo_check", json!(params)) {
+        Ok(value) => ToolOutcome::Success(value),
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
 
@@ -486,6 +541,7 @@ type ResultMapper = fn(&SearchHit, &mut usize, usize) -> Option<Value>;
 
 fn run_and_envelope(
     state: &McpState,
+    tool_name: &str,
     request: &QueryRequest,
     limit: usize,
     mapper: ResultMapper,
@@ -493,6 +549,23 @@ fn run_and_envelope(
     let repo_root = state.repo_root();
     let index_dir = state.index_dir();
 
+    // Build cache key from tool name, limit, and the full (serialised) query.
+    let cache_key = format!(
+        "{}|{}|{}",
+        tool_name,
+        limit,
+        serde_json::to_string(request).unwrap_or_default(),
+    );
+
+    // Cache hit path.
+    if let Some(mut cached) = state.query_cache.get(&cache_key) {
+        if let Some(obj) = cached.as_object_mut() {
+            obj.insert("cache".into(), json!("hit"));
+        }
+        return ToolOutcome::Success(cached);
+    }
+
+    // Execute search.
     let executed = match state.with_cached_engine(|indexed_engine| {
         search_runner::execute_search_with_engine(
             &repo_root,
@@ -511,7 +584,27 @@ fn run_and_envelope(
         }
     };
 
-    ToolOutcome::Success(build_envelope(&repo_root, limit, executed, mapper))
+    let mut envelope = build_envelope(&repo_root, limit, executed, mapper);
+
+    // Tag and optionally cache the result.
+    // Only cache indexed results — DirectScan and Ripgrep fallback have no
+    // generation counter to drive invalidation, so we skip caching them.
+    let fallback_used = envelope
+        .get("fallback_used")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    if fallback_used {
+        if let Some(obj) = envelope.as_object_mut() {
+            obj.insert("cache".into(), json!("bypass"));
+        }
+    } else {
+        state.query_cache.put(cache_key, envelope.clone());
+        if let Some(obj) = envelope.as_object_mut() {
+            obj.insert("cache".into(), json!("miss"));
+        }
+    }
+
+    ToolOutcome::Success(envelope)
 }
 
 fn build_envelope(
