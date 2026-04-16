@@ -248,6 +248,7 @@ TriSeek stores indexes under `~/.triseek` by default. Remove that directory if y
 - [Docs Home](https://sagart-cactus.github.io/TriSeek/)
 - [Installation Guide](https://sagart-cactus.github.io/TriSeek/install.html)
 - [MCP Server Reference](https://sagart-cactus.github.io/TriSeek/mcp.html)
+- [Memo & Caching](https://sagart-cactus.github.io/TriSeek/memo.html)
 - [How TriSeek Works](https://sagart-cactus.github.io/TriSeek/triseek-explained.html)
 - [TriSeek Architecture](https://sagart-cactus.github.io/TriSeek/triseek-architecture.html)
 
