@@ -688,7 +688,10 @@ fn content_result_mapper(hit: &SearchHit, produced: &mut usize, limit: usize) ->
                 out_lines.push(json!({
                     "line": line.line_number,
                     "column": line.column,
-                    "preview": truncate_preview(&line.line_text),
+                    "preview": crate::output_format::trim_preview(
+                        &line.line_text,
+                        PREVIEW_MAX_CHARS,
+                    ),
                 }));
                 *produced += 1;
             }
@@ -709,12 +712,4 @@ fn content_result_mapper(hit: &SearchHit, produced: &mut usize, limit: usize) ->
             }))
         }
     }
-}
-
-fn truncate_preview(text: &str) -> String {
-    if text.chars().count() <= PREVIEW_MAX_CHARS {
-        return text.to_string();
-    }
-    let truncated: String = text.chars().take(PREVIEW_MAX_CHARS).collect();
-    format!("{truncated}…")
 }

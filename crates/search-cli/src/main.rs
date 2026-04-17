@@ -1,6 +1,7 @@
 mod install;
 mod mcp;
 mod memo_shim;
+mod output_format;
 mod rg;
 mod search_runner;
 
@@ -863,26 +864,16 @@ fn print_json<T: Serialize>(value: &T) -> Result<()> {
 }
 
 fn print_human_search(response: &SearchResponse) {
-    println!(
-        "engine={:?} files={} line_matches={} wall_ms={:.2}",
-        response.engine,
-        response.summary.files_with_matches,
-        response.summary.total_line_matches,
-        response.metrics.process.wall_millis
-    );
-    for hit in &response.hits {
-        match hit {
-            SearchHit::Content { path, lines } => {
-                for line in lines {
-                    println!(
-                        "{path}:{}:{}:{}",
-                        line.line_number, line.column, line.line_text
-                    );
-                }
-            }
-            SearchHit::Path { path } => println!("{path}"),
-        }
-    }
+    use std::io::IsTerminal as _;
+    let color = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
+    let cols = std::env::var("COLUMNS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok());
+    let opts = output_format::RenderOpts::human(cols, color);
+    let rendered = output_format::render_human(response, opts);
+    // `render_human` already terminates lines with `\n`; use `print!` to
+    // avoid a blank trailing line.
+    print!("{rendered}");
 }
 
 fn timestamp_now() -> String {
