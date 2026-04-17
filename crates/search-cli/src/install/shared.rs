@@ -436,13 +436,13 @@ pub fn claude_hooks_settings_path(scope: Scope) -> Result<PathBuf> {
 }
 
 pub fn opencode_config_path() -> Result<PathBuf> {
-    let cwd = std::env::current_dir().context("failed to read current working directory")?;
-    Ok(cwd.join(".opencode").join("config.json"))
+    let config_home = config_home_dir()?;
+    Ok(config_home.join("opencode").join("opencode.json"))
 }
 
 pub fn opencode_plugin_dir() -> Result<PathBuf> {
-    let cwd = std::env::current_dir().context("failed to read current working directory")?;
-    Ok(cwd.join(".opencode").join("plugins"))
+    let config_home = config_home_dir()?;
+    Ok(config_home.join("opencode").join("plugins"))
 }
 
 pub fn pi_settings_path() -> Result<PathBuf> {
@@ -477,6 +477,16 @@ pub fn home_dir() -> Option<PathBuf> {
                 Some(combined)
             })
     }
+}
+
+pub fn config_home_dir() -> Result<PathBuf> {
+    if let Some(path) = std::env::var_os("XDG_CONFIG_HOME")
+        && !path.is_empty()
+    {
+        return Ok(PathBuf::from(path));
+    }
+    let home = home_dir().context("failed to resolve user home directory")?;
+    Ok(home.join(".config"))
 }
 
 fn parse_json_root(existing: Option<&str>, parse_context: &str) -> Result<Value> {
@@ -582,6 +592,12 @@ fn escape_js_string(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn upsert_creates_mcp_servers_object() {
@@ -703,6 +719,35 @@ args = ["mcp", "serve"]
         assert!(generated.contains("['read', 'edit', 'write', 'apply_patch']"));
         assert!(generated.contains("output?.args ?? input?.args ?? {}"));
         assert!(generated.contains("memo-observe', '--event', 'post-tool-use'"));
+    }
+
+    #[test]
+    fn opencode_paths_use_user_config_home() {
+        let _guard = env_lock().lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let original = std::env::var_os("XDG_CONFIG_HOME");
+        unsafe {
+            std::env::set_var("XDG_CONFIG_HOME", tmp.path());
+        }
+
+        let config_path = opencode_config_path().unwrap();
+        let plugin_dir = opencode_plugin_dir().unwrap();
+
+        if let Some(value) = original {
+            unsafe {
+                std::env::set_var("XDG_CONFIG_HOME", value);
+            }
+        } else {
+            unsafe {
+                std::env::remove_var("XDG_CONFIG_HOME");
+            }
+        }
+
+        assert_eq!(
+            config_path,
+            tmp.path().join("opencode").join("opencode.json")
+        );
+        assert_eq!(plugin_dir, tmp.path().join("opencode").join("plugins"));
     }
 
     #[test]

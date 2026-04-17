@@ -120,17 +120,17 @@ plugin side where the client supports it.
 
 ### Claude Code
 
-Install per-project (shareable, writes `.mcp.json`):
+Install for the current user:
 
 ```sh
-triseek install claude-code --scope project
+triseek install claude-code
 claude mcp list
 ```
 
-Or install for the current user via the Claude CLI:
+Or install per-project (shareable, writes `.mcp.json`):
 
 ```sh
-triseek install claude-code --scope local
+triseek install claude-code --scope project
 ```
 
 ### Codex
@@ -154,8 +154,8 @@ you have already seen in the current session.
 triseek install opencode
 ```
 
-This writes the TriSeek MCP entry plus a local OpenCode plugin under
-`.opencode/plugins/triseek-memo.ts`.
+This writes the TriSeek MCP entry plus a user-level OpenCode plugin under
+`~/.config/opencode/plugins/triseek-memo.ts`.
 
 ### Pi
 

@@ -317,10 +317,11 @@ enum InstallClient {
 
 #[derive(Args)]
 struct ClaudeCodeInstallArgs {
-    /// Installation scope. `local` is per-user on this machine, `project` edits
-    /// `.mcp.json` in the current directory and is intended to be committed,
-    /// `user` installs globally for the current Claude Code user profile.
-    #[arg(long, value_enum, default_value_t = CliClaudeScope::Local)]
+    /// Installation scope. `user` installs globally for the current Claude Code
+    /// user profile, `project` edits `.mcp.json` in the current directory and
+    /// is intended to be committed, and `local` writes `.claude/settings.local.json`
+    /// in the current directory.
+    #[arg(long, value_enum, default_value_t = CliClaudeScope::User)]
     scope: CliClaudeScope,
 }
 
@@ -1131,6 +1132,22 @@ mod tests {
             OsString::from("."),
         ]);
         assert_eq!(args[1], OsString::from("build"));
+    }
+
+    #[test]
+    fn claude_install_defaults_to_user_scope() {
+        let cli = Cli::parse_from([
+            OsString::from("triseek"),
+            OsString::from("install"),
+            OsString::from("claude-code"),
+        ]);
+        let Commands::Install(InstallArgs {
+            client: InstallClient::ClaudeCode(args),
+        }) = cli.command
+        else {
+            panic!("expected install claude-code command");
+        };
+        assert!(matches!(args.scope, CliClaudeScope::User));
     }
 
     #[test]

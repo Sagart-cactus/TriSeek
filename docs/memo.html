@@ -326,11 +326,11 @@ a.text-link:hover { color: var(--accent-green); }
           <tbody>
             <tr>
               <td><span class="tag gn">Claude Code</span></td>
-              <td>Native hooks via <code>.claude/settings.json</code></td>
+              <td>Native hooks via Claude settings files, user-level by default</td>
             </tr>
             <tr>
               <td><span class="tag cy">OpenCode</span></td>
-              <td>TS plugin at <code>.opencode/plugins/triseek-memo.ts</code></td>
+              <td>TS plugin at <code>~/.config/opencode/plugins/triseek-memo.ts</code></td>
             </tr>
             <tr>
               <td><span class="tag pu">Pi</span></td>
@@ -585,7 +585,7 @@ a.text-link:hover { color: var(--accent-green); }
         <div class="code-block">
           <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
           <pre><span class="cmt"># Claude Code</span>
-triseek install claude-code --scope project
+triseek install claude-code
 
 <span class="cmt"># Codex</span>
 triseek install codex
@@ -618,7 +618,7 @@ triseek install pi</pre>
           <tbody>
             <tr>
               <td><span class="tag gn">Claude Code</span></td>
-              <td>MCP config + hook entries in <code>.claude/settings.json</code></td>
+              <td>MCP config + hook entries in <code>~/.claude/settings.json</code> by default</td>
             </tr>
             <tr>
               <td><span class="tag or">Codex</span></td>
@@ -626,7 +626,7 @@ triseek install pi</pre>
             </tr>
             <tr>
               <td><span class="tag cy">OpenCode</span></td>
-              <td>MCP config + TS plugin at <code>.opencode/plugins/triseek-memo.ts</code></td>
+              <td>MCP config + TS plugin at <code>~/.config/opencode/plugins/triseek-memo.ts</code></td>
             </tr>
             <tr>
               <td><span class="tag pu">Pi</span></td>
