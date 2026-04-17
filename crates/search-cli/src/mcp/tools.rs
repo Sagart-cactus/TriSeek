@@ -713,4 +713,3 @@ fn content_result_mapper(hit: &SearchHit, produced: &mut usize, limit: usize) ->
         }
     }
 }
-

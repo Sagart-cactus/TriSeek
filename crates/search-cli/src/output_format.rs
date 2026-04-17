@@ -163,9 +163,7 @@ pub fn render_digest(tool_name: &str, envelope: &Value, query_hint: Option<&str>
         }
         "index_status" => render_index_status_digest(envelope),
         "reindex" => render_reindex_digest(envelope),
-        "memo_status" | "memo_session" | "memo_check" => {
-            render_memo_digest(tool_name, envelope)
-        }
+        "memo_status" | "memo_session" | "memo_check" => render_memo_digest(tool_name, envelope),
         _ => envelope.to_string(),
     }
 }
@@ -173,10 +171,7 @@ pub fn render_digest(tool_name: &str, envelope: &Value, query_hint: Option<&str>
 /// Format an MCP tool error body as a one-line prose message.
 pub fn render_error_digest(tool_name: &str, error_value: &Value) -> String {
     let body = error_value.get("error").unwrap_or(&Value::Null);
-    let code = body
-        .get("code")
-        .and_then(Value::as_str)
-        .unwrap_or("ERROR");
+    let code = body.get("code").and_then(Value::as_str).unwrap_or("ERROR");
     let message = body
         .get("message")
         .and_then(Value::as_str)
@@ -279,13 +274,15 @@ fn render_search_envelope_digest(
                 for line in lines {
                     let line_no = line.get("line").and_then(Value::as_u64).unwrap_or(0);
                     let col = line.get("column").and_then(Value::as_u64).unwrap_or(0);
-                    let preview = line
-                        .get("preview")
-                        .and_then(Value::as_str)
-                        .unwrap_or("");
+                    let preview = line.get("preview").and_then(Value::as_str).unwrap_or("");
                     let loc = format!("L{line_no}:{col}");
-                    writeln!(&mut out, "  {:<gutter$}  {preview}", loc, gutter = gutter + 1)
-                        .unwrap();
+                    writeln!(
+                        &mut out,
+                        "  {:<gutter$}  {preview}",
+                        loc,
+                        gutter = gutter + 1
+                    )
+                    .unwrap();
                 }
             }
             _ => {
@@ -366,9 +363,7 @@ fn render_reindex_digest(envelope: &Value) -> String {
     } else {
         "incremental"
     };
-    format!(
-        "reindex: {kind} (mode={mode}) · {files} files in {elapsed} ms"
-    )
+    format!("reindex: {kind} (mode={mode}) · {files} files in {elapsed} ms")
 }
 
 fn render_memo_digest(tool_name: &str, envelope: &Value) -> String {
@@ -459,8 +454,8 @@ fn is_truncated(response: &SearchResponse) -> bool {
 
 fn count_files(hits: &[SearchHit]) -> usize {
     hits.iter()
-        .filter_map(|h| match h {
-            SearchHit::Content { path, .. } | SearchHit::Path { path } => Some(path.as_str()),
+        .map(|h| match h {
+            SearchHit::Content { path, .. } | SearchHit::Path { path } => path.as_str(),
         })
         .collect::<std::collections::BTreeSet<_>>()
         .len()
@@ -546,9 +541,9 @@ impl Style {
 mod tests {
     use super::*;
     use search_core::{
-        AdaptiveRoute, AdaptiveRoutingDecision, CaseMode, QueryPlan, QueryRequest, QuerySelectivity,
-        QueryShape, SearchEngineKind, SearchExecutionStrategy, SearchHit, SearchKind,
-        SearchLineMatch, SearchResponse, SearchSummary,
+        AdaptiveRoute, AdaptiveRoutingDecision, CaseMode, QueryPlan, QueryRequest,
+        QuerySelectivity, QueryShape, SearchEngineKind, SearchExecutionStrategy, SearchHit,
+        SearchKind, SearchLineMatch, SearchResponse, SearchSummary,
     };
     use serde_json::json;
 
@@ -607,7 +602,10 @@ mod tests {
         let out = render_human(&resp, RenderOpts::human(Some(120), false));
         assert!(out.contains("no matches"));
         assert!(out.contains("search"));
-        assert!(!out.contains("\x1b["), "should contain no ANSI when color=false");
+        assert!(
+            !out.contains("\x1b["),
+            "should contain no ANSI when color=false"
+        );
     }
 
     #[test]
