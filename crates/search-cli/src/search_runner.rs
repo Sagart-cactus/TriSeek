@@ -129,7 +129,7 @@ fn dispatch(
         AdaptiveRoute::DirectScan => Ok(SearchEngine::search_direct(
             repo_root,
             request,
-            &BuildConfig::default(),
+            &direct_scan_config(request),
         )?),
         AdaptiveRoute::Ripgrep => crate::rg::run_rg_search(repo_root, request, summary_only),
     }
@@ -164,5 +164,14 @@ fn effective_search_kind(kind: SearchKind) -> SearchKind {
     match kind {
         SearchKind::Auto => SearchKind::Literal,
         other => other,
+    }
+}
+
+fn direct_scan_config(request: &QueryRequest) -> BuildConfig {
+    BuildConfig {
+        include_hidden: request.include_hidden,
+        include_binary: request.include_binary,
+        max_file_size: None,
+        merge_threshold_ratio: BuildConfig::default().merge_threshold_ratio,
     }
 }

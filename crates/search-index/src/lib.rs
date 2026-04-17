@@ -20,5 +20,8 @@ pub use model::{
 pub use storage::{
     daemon_dir, default_index_dir, index_exists, read_index_metadata, triseek_home_dir,
 };
-pub use walker::{ScanOptions, ScanSummary, ScannedFile, scan_repository, walk_repository};
+pub use walker::{
+    DEFAULT_SEARCHABLE_HIDDEN_DIRS, DEFAULT_SEARCHABLE_HIDDEN_FILES, ScanOptions, ScanSummary,
+    ScannedFile, default_searchable_hidden_roots, scan_repository, walk_repository,
+};
 pub use watcher::{GenerationCounter, WatcherHandle, start_watcher};

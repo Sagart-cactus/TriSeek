@@ -583,9 +583,11 @@ fn handle_session(args: SessionArgs) -> Result<SessionOutput> {
                 .as_ref()
                 .context("session requested indexed search but no index is available")?
                 .search(&request)?,
-            AdaptiveRoute::DirectScan => {
-                SearchEngine::search_direct(&repo_root, &request, &BuildConfig::default())?
-            }
+            AdaptiveRoute::DirectScan => SearchEngine::search_direct(
+                &repo_root,
+                &request,
+                &build_scan_config_from_request(&request),
+            )?,
             AdaptiveRoute::Ripgrep => {
                 crate::rg::run_rg_search(&repo_root, &request, args.summary_only)?
             }
@@ -700,6 +702,15 @@ fn build_query_request(args: &SearchArgs) -> QueryRequest {
         include_hidden: args.include_hidden,
         include_binary: args.include_binary,
         max_results: args.max_results,
+    }
+}
+
+fn build_scan_config_from_request(request: &QueryRequest) -> BuildConfig {
+    BuildConfig {
+        include_hidden: request.include_hidden,
+        include_binary: request.include_binary,
+        max_file_size: None,
+        merge_threshold_ratio: BuildConfig::default().merge_threshold_ratio,
     }
 }
 

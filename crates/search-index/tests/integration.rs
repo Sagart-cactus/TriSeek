@@ -234,6 +234,112 @@ fn invalid_utf8_control_heavy_files_are_treated_as_binary() {
     assert_eq!(result.summary.files_with_matches, 0);
 }
 
+#[test]
+fn default_search_includes_allowlisted_hidden_paths() {
+    let fixture = FixtureRepo::with_files(vec![
+        (
+            "src/lib.rs".to_string(),
+            "pub fn visible() { println!(\"visible\"); }\n".to_string(),
+        ),
+        (
+            ".github/workflows/ci.yml".to_string(),
+            "name: CI\non: [workflow_dispatch]\n".to_string(),
+        ),
+        (
+            ".gitignore".to_string(),
+            "allowlisted_dotfile_marker\n".to_string(),
+        ),
+        (
+            ".venv/secret.txt".to_string(),
+            "should_not_match_hidden_default\n".to_string(),
+        ),
+    ]);
+    let index_dir = fixture.root.path().join(".triseek-index");
+
+    SearchEngine::build(
+        fixture.root.path(),
+        Some(&index_dir),
+        &BuildConfig::default(),
+    )
+    .expect("build succeeds");
+    let engine = SearchEngine::open(&index_dir).expect("index opens");
+
+    let workflow = engine
+        .search(&QueryRequest {
+            kind: SearchKind::Literal,
+            engine: SearchEngineKind::Indexed,
+            pattern: "workflow_dispatch".to_string(),
+            case_mode: CaseMode::Sensitive,
+            ..QueryRequest::default()
+        })
+        .expect("workflow search succeeds");
+    assert_eq!(workflow.summary.files_with_matches, 1);
+
+    let dotfile = engine
+        .search(&QueryRequest {
+            kind: SearchKind::Literal,
+            engine: SearchEngineKind::Indexed,
+            pattern: "allowlisted_dotfile_marker".to_string(),
+            case_mode: CaseMode::Sensitive,
+            ..QueryRequest::default()
+        })
+        .expect("dotfile search succeeds");
+    assert_eq!(dotfile.summary.files_with_matches, 1);
+
+    let skipped = engine
+        .search(&QueryRequest {
+            kind: SearchKind::Literal,
+            engine: SearchEngineKind::Indexed,
+            pattern: "should_not_match_hidden_default".to_string(),
+            case_mode: CaseMode::Sensitive,
+            ..QueryRequest::default()
+        })
+        .expect("hidden noise search succeeds");
+    assert_eq!(skipped.summary.files_with_matches, 0);
+}
+
+#[test]
+fn default_direct_scan_includes_allowlisted_hidden_paths() {
+    let fixture = FixtureRepo::with_files(vec![
+        (
+            ".github/pull_request_template.md".to_string(),
+            "allowlisted_hidden_dir_marker\n".to_string(),
+        ),
+        (
+            ".venv/secret.txt".to_string(),
+            "should_not_match_hidden_default\n".to_string(),
+        ),
+    ]);
+
+    let workflow = SearchEngine::search_direct(
+        fixture.root.path(),
+        &QueryRequest {
+            kind: SearchKind::Literal,
+            engine: SearchEngineKind::DirectScan,
+            pattern: "allowlisted_hidden_dir_marker".to_string(),
+            case_mode: CaseMode::Sensitive,
+            ..QueryRequest::default()
+        },
+        &BuildConfig::default(),
+    )
+    .expect("direct scan succeeds");
+    assert_eq!(workflow.summary.files_with_matches, 1);
+
+    let skipped = SearchEngine::search_direct(
+        fixture.root.path(),
+        &QueryRequest {
+            kind: SearchKind::Literal,
+            engine: SearchEngineKind::DirectScan,
+            pattern: "should_not_match_hidden_default".to_string(),
+            case_mode: CaseMode::Sensitive,
+            ..QueryRequest::default()
+        },
+        &BuildConfig::default(),
+    )
+    .expect("direct scan skip succeeds");
+    assert_eq!(skipped.summary.files_with_matches, 0);
+}
+
 struct FixtureRepo {
     root: TempDir,
 }

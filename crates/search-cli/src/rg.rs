@@ -10,7 +10,7 @@ use search_core::{
     CaseMode, ProcessMetrics, QueryRequest, SearchHit, SearchKind, SearchLineMatch, SearchMetrics,
     SearchSummary,
 };
-use search_index::SearchExecution;
+use search_index::{SearchExecution, default_searchable_hidden_roots};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -72,6 +72,11 @@ pub fn run_rg_search(
     }
     command.arg(&request.pattern);
     command.arg(".");
+    if !request.include_hidden {
+        for path in default_searchable_hidden_roots(repo_root) {
+            command.arg(path);
+        }
+    }
 
     let output = command.output().context("failed to execute rg")?;
     if !output.status.success() && output.status.code() != Some(1) {
@@ -170,4 +175,84 @@ pub fn run_rg_search(
         },
         hits,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::run_rg_search;
+    use search_core::{CaseMode, QueryRequest, SearchKind};
+    use std::fs;
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    fn fixture_repo() -> TempDir {
+        let root = TempDir::new().expect("tempdir");
+        fs::create_dir_all(root.path().join("src")).expect("src dir");
+        fs::create_dir_all(root.path().join(".github/workflows")).expect("github dir");
+        fs::create_dir_all(root.path().join(".venv")).expect("venv dir");
+        fs::write(
+            root.path().join("src/lib.rs"),
+            "pub fn visible() { println!(\"visible\"); }\n",
+        )
+        .expect("write lib");
+        fs::write(
+            root.path().join(".github/workflows/ci.yml"),
+            "name: CI\non: [workflow_dispatch]\n",
+        )
+        .expect("write workflow");
+        fs::write(root.path().join(".gitignore"), "target/\n").expect("write gitignore");
+        fs::write(
+            root.path().join(".venv/secret.txt"),
+            "should_not_match_hidden_default\n",
+        )
+        .expect("write venv");
+        root
+    }
+
+    #[test]
+    fn rg_searches_allowlisted_hidden_paths_by_default() {
+        if Command::new("rg").arg("--version").output().is_err() {
+            return;
+        }
+
+        let repo = fixture_repo();
+        let workflow = run_rg_search(
+            repo.path(),
+            &QueryRequest {
+                kind: SearchKind::Literal,
+                pattern: "workflow_dispatch".to_string(),
+                case_mode: CaseMode::Sensitive,
+                ..QueryRequest::default()
+            },
+            false,
+        )
+        .expect("rg workflow search");
+        assert_eq!(workflow.summary.files_with_matches, 1);
+
+        let gitignore = run_rg_search(
+            repo.path(),
+            &QueryRequest {
+                kind: SearchKind::Literal,
+                pattern: "target/".to_string(),
+                case_mode: CaseMode::Sensitive,
+                ..QueryRequest::default()
+            },
+            false,
+        )
+        .expect("rg dotfile search");
+        assert_eq!(gitignore.summary.files_with_matches, 1);
+
+        let skipped = run_rg_search(
+            repo.path(),
+            &QueryRequest {
+                kind: SearchKind::Literal,
+                pattern: "should_not_match_hidden_default".to_string(),
+                case_mode: CaseMode::Sensitive,
+                ..QueryRequest::default()
+            },
+            false,
+        )
+        .expect("rg skipped hidden search");
+        assert_eq!(skipped.summary.files_with_matches, 0);
+    }
 }
