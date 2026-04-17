@@ -214,7 +214,7 @@ where
     }
 
     if !options.include_hidden {
-        walk_default_searchable_hidden_files(repo_root, |path| process_path(path))?;
+        walk_default_searchable_hidden_files(repo_root, process_path)?;
     }
 
     let mut languages: Vec<(String, u64)> = languages.into_iter().collect();
