@@ -78,7 +78,7 @@ TriSeek can register itself as an MCP server and install Memo helpers for
 supported agent clients:
 
 ```sh
-triseek install claude-code --scope project
+triseek install claude-code
 triseek install codex
 triseek install opencode
 triseek install pi

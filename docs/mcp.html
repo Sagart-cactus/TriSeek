@@ -262,15 +262,23 @@ a.text-link:hover { color: var(--accent-green); }
 
         <div class="code-block">
           <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell · install MCP config</span></div>
-          <pre><span class="cmt"># Claude Code (project-shareable)</span>
-triseek install claude-code --scope project
+          <pre><span class="cmt"># Claude Code (user-level by default)</span>
+triseek install claude-code
 
 <span class="cmt"># Codex</span>
 triseek install codex
 
+<span class="cmt"># OpenCode</span>
+triseek install opencode
+
+<span class="cmt"># Pi</span>
+triseek install pi
+
 <span class="cmt"># Verify</span>
 triseek doctor</pre>
         </div>
+
+        <p>Use <code>triseek install claude-code --scope project</code> if you want a shareable repo-local Claude Code install via <code>.mcp.json</code>.</p>
 
         <p>Run the server manually from the target root:</p>
         <div class="code-block">

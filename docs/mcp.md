@@ -17,8 +17,8 @@ still fresh within the current session. The server is:
 ## Quickstart
 
 ```sh
-# Claude Code (project-shareable)
-triseek install claude-code --scope project
+# Claude Code (user-level by default)
+triseek install claude-code
 
 # Codex
 triseek install codex
@@ -32,6 +32,9 @@ triseek install pi
 # Verify
 triseek doctor
 ```
+
+Use `triseek install claude-code --scope project` if you want a shareable
+repo-local Claude Code install via `.mcp.json`.
 
 Run the server manually for debugging:
 

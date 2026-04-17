@@ -97,12 +97,12 @@ Expected: `"recommendation":"reread_with_diff","status":"stale"`
 "$TRISEEK" install opencode
 ```
 
-Expected: `triseek: OpenCode plugin installed at <cwd>/.opencode/plugins/triseek-memo/triseek-memo.ts`
+Expected: `triseek: OpenCode plugin installed at ~/.config/opencode/plugins/triseek-memo.ts`
 
 Inspect the generated file:
 
 ```bash
-cat .opencode/plugins/triseek-memo/triseek-memo.ts
+cat ~/.config/opencode/plugins/triseek-memo.ts
 ```
 
 Verify:
