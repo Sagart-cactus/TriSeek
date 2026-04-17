@@ -213,15 +213,20 @@ fn call_tool_with_meta(client: &mut McpClient, name: &str, arguments: Value, met
         .and_then(Value::as_array)
         .expect("content array");
     assert!(!content.is_empty(), "content must not be empty");
-    let text = content[0]
-        .get("text")
-        .and_then(Value::as_str)
-        .expect("content text");
+    // The prose digest must be present for the LLM, but the machine-readable
+    // envelope now lives in `structuredContent` (MCP 2025-06-18).
+    assert!(
+        content[0].get("text").and_then(Value::as_str).is_some(),
+        "content[0] must carry a text block"
+    );
     let is_error = result
         .get("isError")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let envelope: Value = serde_json::from_str(text).expect("parse envelope JSON");
+    let envelope = result
+        .get("structuredContent")
+        .cloned()
+        .expect("structuredContent on tool result");
     if is_error {
         panic!("tool {name} returned isError=true: {envelope}");
     }
@@ -628,8 +633,14 @@ fn invalid_query_is_returned_as_tool_error() {
         .get("content")
         .and_then(Value::as_array)
         .expect("content array");
-    let text = content[0].get("text").and_then(Value::as_str).unwrap();
-    let body: Value = serde_json::from_str(text).unwrap();
+    let prose = content[0].get("text").and_then(Value::as_str).unwrap();
+    assert!(
+        prose.contains("INVALID_QUERY"),
+        "prose digest should mention the error code, got: {prose}"
+    );
+    let body = result
+        .get("structuredContent")
+        .expect("structuredContent on error");
     assert_eq!(body.get("version"), Some(&json!("1")));
     let code = body
         .get("error")

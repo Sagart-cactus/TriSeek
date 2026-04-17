@@ -21,6 +21,7 @@ use std::time::Duration;
 use crate::mcp::query_cache::QueryCache;
 use crate::mcp::schema::{TOOLS, ToolDescriptor};
 use crate::mcp::tools::{ToolOutcome, dispatch};
+use crate::output_format;
 
 const PROTOCOL_VERSION: &str = "2025-06-18";
 const SERVER_NAME: &str = "triseek";
@@ -169,7 +170,7 @@ fn handle_line(
                 .unwrap_or(Value::Object(serde_json::Map::new()));
             let session_id = extract_session_id(&params);
             let outcome = dispatch(state, &name, &arguments, session_id.as_deref());
-            let result = tool_result_envelope(outcome);
+            let result = tool_result_envelope(&name, &arguments, outcome);
             write_result(writer, id, result)?;
         }
         "shutdown" => {
@@ -233,28 +234,52 @@ fn tool_descriptor_to_value(descriptor: &ToolDescriptor) -> Value {
     })
 }
 
-fn tool_result_envelope(outcome: ToolOutcome) -> Value {
+fn tool_result_envelope(tool_name: &str, arguments: &Value, outcome: ToolOutcome) -> Value {
     match outcome {
         ToolOutcome::Success(value) => {
-            let text = serde_json::to_string(&value)
-                .unwrap_or_else(|err| format!(r#"{{"error":"serialize_failure: {err}"}}"#));
+            let query_hint = extract_query_hint(arguments);
+            let digest = output_format::render_digest(tool_name, &value, query_hint.as_deref());
             json!({
                 "content": [
-                    { "type": "text", "text": text }
+                    { "type": "text", "text": digest }
                 ],
+                "structuredContent": value,
                 "isError": false,
             })
         }
         ToolOutcome::Error(err) => {
-            let text = serde_json::to_string(&err)
-                .unwrap_or_else(|e| format!(r#"{{"error":"serialize_failure: {e}"}}"#));
+            // Keep the structured error body available for machine clients,
+            // and surface a readable one-line prose message to the LLM.
+            let err_value = serde_json::to_value(&err)
+                .unwrap_or_else(|e| json!({ "error": format!("serialize_failure: {e}") }));
+            let digest = output_format::render_error_digest(tool_name, &err_value);
             json!({
                 "content": [
-                    { "type": "text", "text": text }
+                    { "type": "text", "text": digest }
                 ],
+                "structuredContent": err_value,
                 "isError": true,
             })
         }
+    }
+}
+
+/// Pull a short, display-only query string out of the tool arguments. Used
+/// to prefix the digest (e.g. `search_content: "McpState"`). Only the common
+/// tool parameter names are honored; anything else falls through as None.
+fn extract_query_hint(arguments: &Value) -> Option<String> {
+    let candidate = arguments
+        .get("query")
+        .or_else(|| arguments.get("content_query"))
+        .or_else(|| arguments.get("path_query"))
+        .and_then(Value::as_str)?;
+    // Clip very long hints so the first line of the digest stays readable.
+    const MAX: usize = 80;
+    if candidate.chars().count() <= MAX {
+        Some(candidate.to_string())
+    } else {
+        let head: String = candidate.chars().take(MAX.saturating_sub(1)).collect();
+        Some(format!("{head}…"))
     }
 }
 
