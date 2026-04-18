@@ -380,7 +380,7 @@ fn find_parsed_cmd_path(payload: &Value) -> Option<String> {
     })
 }
 
-fn parsed_cmd_entries<'a>(payload: &'a Value) -> impl Iterator<Item = &'a Value> {
+fn parsed_cmd_entries(payload: &Value) -> impl Iterator<Item = &Value> {
     [
         payload.pointer("/parsed_cmd"),
         payload.pointer("/tool_input/parsed_cmd"),
@@ -516,11 +516,11 @@ fn last_non_option_path_with_arg_flags(
 fn split_shell_words(command: &str) -> Option<Vec<String>> {
     let mut tokens = Vec::new();
     let mut current = String::new();
-    let mut chars = command.chars();
+    let chars = command.chars();
     let mut quote = None;
     let mut escaped = false;
 
-    while let Some(ch) = chars.next() {
+    for ch in chars {
         if escaped {
             current.push(ch);
             escaped = false;
