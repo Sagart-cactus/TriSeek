@@ -34,7 +34,7 @@ By default this installs `triseek` and `triseek-server` into `~/.local/bin`. It 
 Pin a version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.3.0
+curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.3.1
 ```
 
 Install to a different directory:
@@ -255,4 +255,4 @@ TriSeek stores indexes under `~/.triseek` by default. Remove that directory if y
 ## Release Automation
 
 - CI runs `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked`, and release-binary smoke builds on Linux, macOS, and Windows.
-- Pushing a tag like `v0.3.0` triggers a release workflow that builds TriSeek archives for Linux, macOS (Intel and Apple Silicon), and Windows and uploads them to GitHub Releases.
+- Pushing a tag like `v0.3.1` triggers a release workflow that builds TriSeek archives for Linux, macOS (Intel and Apple Silicon), and Windows and uploads them to GitHub Releases.
