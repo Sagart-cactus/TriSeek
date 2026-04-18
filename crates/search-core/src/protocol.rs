@@ -87,6 +87,11 @@ pub struct DaemonStatusParams {
     pub target_root: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DaemonRootParams {
+    pub target_root: String,
+}
+
 /// Parameters for the `frecency_select` method.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FrecencySelectParams {

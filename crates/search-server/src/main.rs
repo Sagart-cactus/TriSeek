@@ -4,10 +4,10 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use memo::MemoState;
 use search_core::{
-    DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonRootStatus, DaemonSearchParams,
-    DaemonStatus, DaemonStatusParams, FrecencySelectParams, MemoCheckParams, MemoObserveParams,
-    MemoSessionParams, MemoStatusParams, RpcRequest, RpcResponse, SearchEngineKind, SearchHit,
-    SearchKind, SearchResponse, plan_query, route_query,
+    DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonRootParams, DaemonRootStatus,
+    DaemonSearchParams, DaemonStatus, DaemonStatusParams, FrecencySelectParams, MemoCheckParams,
+    MemoObserveParams, MemoSessionParams, MemoStatusParams, RpcRequest, RpcResponse,
+    SearchEngineKind, SearchHit, SearchKind, SearchResponse, plan_query, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
 use search_index::{
@@ -504,6 +504,28 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                     *guard = Some(new_engine);
                     RpcResponse::ok(id, serde_json::json!({"reloaded": true}))
                 }
+                Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+            }
+        }
+        "preload_root" => {
+            let params: DaemonRootParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            let root = match canonicalize_target_root(Path::new(&params.target_root)) {
+                Ok(root) => root,
+                Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+            };
+            match state.preload_root(root.clone()) {
+                Ok(()) => RpcResponse::ok(
+                    id,
+                    serde_json::json!({
+                        "preloaded": true,
+                        "target_root": root.display().to_string(),
+                    }),
+                ),
                 Err(error) => RpcResponse::error(id, -32000, error.to_string()),
             }
         }

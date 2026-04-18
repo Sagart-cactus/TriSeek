@@ -27,7 +27,7 @@ Why it feels better than a repo-local search wrapper:
 curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh
 ```
 
-By default this installs `triseek` and `triseek-server` into `~/.local/bin`. It prefers prebuilt GitHub Release archives and falls back to `cargo install` when a matching release is not available but Rust is installed locally.
+By default this installs `triseek` and `triseek-server` into `~/.local/bin`. It prefers prebuilt GitHub Release archives and falls back to `cargo install` when a matching release is not available but Rust is installed locally. A successful install also ensures the TriSeek daemon is running: fresh installs start it, and reinstalls stop and restart it.
 
 `triseek` is the main CLI. `triseek-server` is the background daemon binary used by `triseek daemon`.
 
@@ -49,7 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.ps1 | iex"
 ```
 
-By default this installs `triseek.exe` and `triseek-server.exe` into `%USERPROFILE%\AppData\Local\Programs\TriSeek\bin` and adds that directory to the user `PATH` if needed. It also falls back to `cargo install` when a matching release is not available but Rust is installed locally.
+By default this installs `triseek.exe` and `triseek-server.exe` into `%USERPROFILE%\AppData\Local\Programs\TriSeek\bin` and adds that directory to the user `PATH` if needed. It also falls back to `cargo install` when a matching release is not available but Rust is installed locally. A successful install also ensures the TriSeek daemon is running: fresh installs start it, and reinstalls stop and restart it.
 
 ### Cargo Fallback
 
@@ -116,7 +116,14 @@ Codex, OpenCode, Pi, and any MCP-capable client can use it as their primary
 local code-search tool. The search tools run in-process over stdio and preserve
 TriSeek's hybrid indexed / ripgrep-fallback routing. Memo uses the local
 TriSeek daemon for session state, and `triseek install` wires up the hook or
-plugin side where the client supports it.
+plugin side where the client supports it. On `triseek mcp serve` startup,
+TriSeek now schedules a background index sync for that root: full build if no
+index exists yet, incremental refresh if one already exists. The MCP server
+starts immediately so clients do not block on index creation. Early queries use
+the existing index when one is already present, otherwise they fall back to the
+normal direct-scan / ripgrep path until the background sync finishes. If the
+local TriSeek daemon is running, `mcp serve` also preloads that root into the
+daemon so its background watcher can keep the index warm after startup.
 
 ### Claude Code
 

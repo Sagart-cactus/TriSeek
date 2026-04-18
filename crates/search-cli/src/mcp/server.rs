@@ -7,15 +7,18 @@
 //! stderr only; stdout is reserved for framed messages.
 
 use anyhow::{Context, Result};
-use search_index::{SearchEngine, default_index_dir, index_exists};
+use search_core::{DAEMON_PORT_FILE, DaemonRootParams, RpcRequest, RpcResponse};
+use search_index::{BuildConfig, SearchEngine, daemon_dir, default_index_dir, index_exists};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, StdinLock, StdoutLock, Write};
+use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{
-    Mutex,
+    Arc, Mutex, MutexGuard,
     atomic::{AtomicBool, Ordering},
 };
+use std::thread;
 use std::time::Duration;
 
 use crate::mcp::query_cache::QueryCache;
@@ -31,7 +34,20 @@ pub struct McpState {
     repo_root: PathBuf,
     index_dir: PathBuf,
     cached_engine: Mutex<Option<SearchEngine>>,
+    index_sync_in_progress: AtomicBool,
+    index_mutation_lock: Mutex<()>,
     pub query_cache: QueryCache,
+}
+
+pub struct IndexMutationGuard<'a> {
+    state: &'a McpState,
+    _guard: MutexGuard<'a, ()>,
+}
+
+impl Drop for IndexMutationGuard<'_> {
+    fn drop(&mut self) {
+        self.state.set_index_sync_in_progress(false);
+    }
 }
 
 impl McpState {
@@ -45,6 +61,8 @@ impl McpState {
             repo_root,
             index_dir,
             cached_engine: Mutex::new(None),
+            index_sync_in_progress: AtomicBool::new(false),
+            index_mutation_lock: Mutex::new(()),
             query_cache: QueryCache::new(Duration::from_secs(ttl_secs), 256),
         }
     }
@@ -65,6 +83,9 @@ impl McpState {
             .cached_engine
             .lock()
             .expect("MCP cached engine mutex poisoned");
+        if guard.is_none() && self.index_sync_in_progress.load(Ordering::Relaxed) {
+            return f(None);
+        }
         if guard.is_none() && index_exists(&self.index_dir) {
             let engine = SearchEngine::open(&self.index_dir)
                 .with_context(|| format!("failed to open index at {}", self.index_dir.display()))?;
@@ -79,11 +100,56 @@ impl McpState {
         }
         self.query_cache.invalidate_all();
     }
+
+    pub fn set_index_sync_in_progress(&self, in_progress: bool) {
+        self.index_sync_in_progress
+            .store(in_progress, Ordering::Relaxed);
+    }
+
+    pub fn prime_cached_engine(&self) -> Result<bool> {
+        let mut guard = self
+            .cached_engine
+            .lock()
+            .expect("MCP cached engine mutex poisoned");
+        if guard.is_some() || !index_exists(&self.index_dir) {
+            return Ok(guard.is_some());
+        }
+        let engine = SearchEngine::open(&self.index_dir)
+            .with_context(|| format!("failed to open index at {}", self.index_dir.display()))?;
+        *guard = Some(engine);
+        Ok(true)
+    }
+
+    pub fn start_index_mutation(&self) -> IndexMutationGuard<'_> {
+        let guard = self
+            .index_mutation_lock
+            .lock()
+            .expect("MCP index mutation mutex poisoned");
+        self.set_index_sync_in_progress(true);
+        IndexMutationGuard {
+            state: self,
+            _guard: guard,
+        }
+    }
 }
 
 /// Run the MCP server over stdin/stdout until EOF or shutdown.
 pub fn run(repo_root: &Path, index_dir: Option<&Path>) -> Result<()> {
-    let state = McpState::new(repo_root.to_path_buf(), index_dir.map(Path::to_path_buf));
+    let state = Arc::new(McpState::new(
+        repo_root.to_path_buf(),
+        index_dir.map(Path::to_path_buf),
+    ));
+    let index_was_present = index_exists(&state.index_dir());
+    if index_was_present {
+        if let Err(err) = state.prime_cached_engine() {
+            eprintln!(
+                "triseek mcp: failed to prime existing index at {}: {err}; early queries will fall back until refresh completes",
+                state.index_dir().display()
+            );
+        }
+        register_root_with_daemon(state.as_ref());
+    }
+    spawn_startup_sync(Arc::clone(&state), index_was_present);
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut reader = BufReader::new(stdin.lock());
@@ -111,10 +177,176 @@ pub fn run(repo_root: &Path, index_dir: Option<&Path>) -> Result<()> {
         if trimmed.is_empty() {
             continue;
         }
-        handle_line(&state, trimmed, &mut writer, &shutdown)?;
+        handle_line(state.as_ref(), trimmed, &mut writer, &shutdown)?;
     }
     eprintln!("triseek mcp: server exiting");
     Ok(())
+}
+
+fn spawn_startup_sync(state: Arc<McpState>, index_was_present: bool) {
+    thread::spawn(move || {
+        let _mutation = state.start_index_mutation();
+        eprintln!(
+            "triseek mcp: scheduling background startup sync for {}",
+            state.repo_root().display()
+        );
+        let sync_succeeded = sync_index_on_startup(state.as_ref());
+        if sync_succeeded {
+            if index_was_present {
+                reload_root_with_daemon(state.as_ref());
+            } else {
+                register_root_with_daemon(state.as_ref());
+            }
+        }
+    });
+}
+
+fn sync_index_on_startup(state: &McpState) -> bool {
+    let repo_root = state.repo_root();
+    let index_dir = state.index_dir();
+    let config = BuildConfig::default();
+
+    if index_exists(&index_dir) {
+        eprintln!("triseek mcp: refreshing index for {}", repo_root.display());
+        match SearchEngine::update(&repo_root, Some(&index_dir), &config) {
+            Ok(outcome) => {
+                state.invalidate_cached_engine();
+                eprintln!(
+                    "triseek mcp: index refresh complete (rebuilt_full={} indexed_files={})",
+                    outcome.rebuilt_full, outcome.metadata.build_stats.docs_indexed
+                );
+                true
+            }
+            Err(err) => {
+                eprintln!(
+                    "triseek mcp: index refresh failed for {}: {err}; continuing with fallback search",
+                    repo_root.display()
+                );
+                false
+            }
+        }
+    } else {
+        eprintln!(
+            "triseek mcp: no index found for {}; building initial index",
+            repo_root.display()
+        );
+        match SearchEngine::build(&repo_root, Some(&index_dir), &config) {
+            Ok(metadata) => {
+                state.invalidate_cached_engine();
+                eprintln!(
+                    "triseek mcp: initial index build complete (indexed_files={})",
+                    metadata.build_stats.docs_indexed
+                );
+                true
+            }
+            Err(err) => {
+                eprintln!(
+                    "triseek mcp: initial index build failed for {}: {err}; continuing with fallback search",
+                    repo_root.display()
+                );
+                false
+            }
+        }
+    }
+}
+
+fn register_root_with_daemon(state: &McpState) {
+    let repo_root = state.repo_root();
+    let Some(mut stream) = connect_to_daemon() else {
+        eprintln!(
+            "triseek mcp: daemon not running; skipping background watcher preload for {}",
+            repo_root.display()
+        );
+        return;
+    };
+
+    match rpc_call(
+        &mut stream,
+        "preload_root",
+        json!(DaemonRootParams {
+            target_root: repo_root.display().to_string(),
+        }),
+    ) {
+        Ok(_) => eprintln!(
+            "triseek mcp: registered {} with daemon watcher",
+            repo_root.display()
+        ),
+        Err(err) => eprintln!(
+            "triseek mcp: failed to register {} with daemon watcher: {err}",
+            repo_root.display()
+        ),
+    }
+}
+
+fn reload_root_with_daemon(state: &McpState) {
+    let repo_root = state.repo_root();
+    let Some(mut stream) = connect_to_daemon() else {
+        eprintln!(
+            "triseek mcp: daemon not running; skipping daemon reload for {}",
+            repo_root.display()
+        );
+        return;
+    };
+
+    match rpc_call(
+        &mut stream,
+        "reload",
+        json!(search_core::DaemonStatusParams {
+            target_root: Some(repo_root.display().to_string()),
+        }),
+    ) {
+        Ok(_) => eprintln!(
+            "triseek mcp: reloaded daemon index for {}",
+            repo_root.display()
+        ),
+        Err(err) => eprintln!(
+            "triseek mcp: failed to reload daemon index for {}: {err}",
+            repo_root.display()
+        ),
+    }
+}
+
+fn daemon_port_path() -> PathBuf {
+    daemon_dir().join(DAEMON_PORT_FILE)
+}
+
+fn read_daemon_port() -> Option<u16> {
+    let port_path = daemon_port_path();
+    if !port_path.exists() {
+        return None;
+    }
+    std::fs::read_to_string(&port_path)
+        .ok()
+        .and_then(|port| port.trim().parse::<u16>().ok())
+}
+
+fn connect_to_daemon() -> Option<TcpStream> {
+    let port = read_daemon_port()?;
+    let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+    TcpStream::connect_timeout(&addr, Duration::from_millis(250)).ok()
+}
+
+fn rpc_call(stream: &mut TcpStream, method: &str, params: Value) -> Result<Value> {
+    let req = RpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: 1,
+        method: method.to_string(),
+        params,
+    };
+    writeln!(stream, "{}", serde_json::to_string(&req)?)?;
+    let reader = BufReader::new(stream.try_clone()?);
+    for line in reader.lines() {
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let resp: RpcResponse = serde_json::from_str(&line)?;
+        if let Some(err) = resp.error {
+            anyhow::bail!("RPC error {}: {}", err.code, err.message);
+        }
+        return Ok(resp.result.unwrap_or(Value::Null));
+    }
+    anyhow::bail!("daemon closed connection without a response")
 }
 
 fn handle_line(
@@ -216,7 +448,7 @@ fn initialize_result() -> Value {
             "name": SERVER_NAME,
             "version": SERVER_VERSION,
         },
-        "instructions": "TriSeek exposes fast local code search tools (find_files, search_content, search_path_and_content, index_status, reindex). Prefer these over shell grep or file globbing for exact code search in the current repository."
+        "instructions": "TriSeek exposes fast local code search tools for this repository. Prefer `find_files`, `search_content`, and `search_path_and_content` over shell `rg`, `grep`, `sed`, `find`, `ls`, or file globbing for file discovery and exact code search. On Codex, before re-reading a file you already saw in this session, call `memo_check`. If it returns `skip_reread`, do not read the file again and rely on the content already in conversation context."
     })
 }
 

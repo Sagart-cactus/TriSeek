@@ -49,6 +49,16 @@ Or override the root explicitly:
 triseek mcp serve --repo /path/to/repo
 ```
 
+On startup, `triseek mcp serve` schedules a best-effort index sync for that
+root in the background: full build if no index exists yet, incremental update
+if one already exists. The MCP server starts serving immediately instead of
+blocking on the sync step. Early queries use the existing index when one is
+already present, otherwise they continue through the normal direct-scan /
+ripgrep fallback routing until the background sync finishes. If the sync step
+fails, the server still keeps serving. When the local TriSeek daemon is already
+running, `mcp serve` also registers that root with the daemon so its watcher
+can apply incremental index updates in the background.
+
 All logs go to stderr; stdout carries JSON-RPC frames only. The MCP server is currently scoped to one root per process.
 
 Memo-specific note: `memo_status`, `memo_session`, and `memo_check` require a

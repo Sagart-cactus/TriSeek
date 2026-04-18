@@ -33,6 +33,106 @@ have_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+resolve_path() {
+  case "$1" in
+    /*)
+      printf '%s\n' "$1"
+      ;;
+    *)
+      printf '%s/%s\n' "$(pwd)" "$1"
+      ;;
+  esac
+}
+
+triseek_home_dir() {
+  if [ -n "${TRISEEK_HOME:-}" ]; then
+    resolve_path "$TRISEEK_HOME"
+    return
+  fi
+  printf '%s\n' "${HOME}/.triseek"
+}
+
+daemon_dir() {
+  printf '%s/daemon\n' "$(triseek_home_dir)"
+}
+
+daemon_pid_file() {
+  printf '%s/%s\n' "$(daemon_dir)" "daemon.pid"
+}
+
+daemon_port_file() {
+  printf '%s/%s\n' "$(daemon_dir)" "daemon.port"
+}
+
+cleanup_stale_daemon_files() {
+  rm -f "$(daemon_pid_file)" "$(daemon_port_file)"
+}
+
+read_daemon_pid() {
+  pid_file="$(daemon_pid_file)"
+  [ -f "$pid_file" ] || return 1
+  pid="$(tr -d '[:space:]' < "$pid_file" 2>/dev/null || true)"
+  [ -n "$pid" ] || return 1
+  printf '%s\n' "$pid"
+}
+
+daemon_pid_running() {
+  kill -0 "$1" 2>/dev/null
+}
+
+wait_for_daemon_exit() {
+  attempts=0
+  while [ "$attempts" -lt 50 ]; do
+    pid="$(read_daemon_pid)" || return 0
+    if ! daemon_pid_running "$pid"; then
+      cleanup_stale_daemon_files
+      return 0
+    fi
+    sleep 0.2
+    attempts=$((attempts + 1))
+  done
+  return 1
+}
+
+stop_existing_daemon() {
+  pid="$(read_daemon_pid)" || {
+    cleanup_stale_daemon_files
+    return 0
+  }
+
+  if [ -x "$install_path" ]; then
+    "$install_path" daemon stop >/dev/null 2>&1 || true
+  elif have_cmd triseek; then
+    triseek daemon stop >/dev/null 2>&1 || true
+  fi
+
+  if wait_for_daemon_exit; then
+    return 0
+  fi
+
+  if daemon_pid_running "$pid"; then
+    kill "$pid" 2>/dev/null || true
+  fi
+
+  if wait_for_daemon_exit; then
+    return 0
+  fi
+
+  if daemon_pid_running "$pid"; then
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+
+  wait_for_daemon_exit || die "failed to stop existing TriSeek daemon (pid $pid)"
+}
+
+ensure_daemon_running() {
+  action="$1"
+  printf '%s TriSeek daemon...\n' "$action"
+  if ! "$install_path" daemon start; then
+    die "failed to start TriSeek daemon after install"
+  fi
+}
+
 normalize_version() {
   case "$1" in
     "" | latest)
@@ -136,6 +236,9 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+install_path="${install_dir}/triseek"
+server_install_path="${install_dir}/triseek-server"
+
 have_cmd tar || die "tar is required to extract TriSeek"
 have_cmd find || die "find is required to locate the installed binary"
 
@@ -211,21 +314,46 @@ else
   server_binary_path="${install_root}/bin/triseek-server"
 fi
 
-install_path="${install_dir}/triseek"
+had_existing_install=0
+if [ -e "$install_path" ] || [ -e "$server_install_path" ]; then
+  had_existing_install=1
+fi
+
+daemon_was_running=0
+existing_daemon_pid=""
+if existing_daemon_pid="$(read_daemon_pid)"; then
+  if daemon_pid_running "$existing_daemon_pid"; then
+    daemon_was_running=1
+  else
+    cleanup_stale_daemon_files
+  fi
+fi
+
+if [ "$daemon_was_running" -eq 1 ]; then
+  printf 'Stopping existing TriSeek daemon (pid %s)...\n' "$existing_daemon_pid"
+  stop_existing_daemon
+fi
+
 cp "$binary_path" "$install_path"
 chmod 755 "$install_path"
-cp "$server_binary_path" "${install_dir}/triseek-server"
-chmod 755 "${install_dir}/triseek-server"
+cp "$server_binary_path" "$server_install_path"
+chmod 755 "$server_install_path"
 
 if ! "$install_path" help >/dev/null 2>&1; then
   die "installed binary did not pass the smoke check"
 fi
-if ! "${install_dir}/triseek-server" --help >/dev/null 2>&1; then
+if ! "$server_install_path" --help >/dev/null 2>&1; then
   die "installed daemon binary did not pass the smoke check"
 fi
 
+if [ "$had_existing_install" -eq 1 ] || [ "$daemon_was_running" -eq 1 ]; then
+  ensure_daemon_running "Restarting"
+else
+  ensure_daemon_running "Starting"
+fi
+
 printf 'Installed triseek to %s\n' "$install_path"
-printf 'Installed triseek-server to %s\n' "${install_dir}/triseek-server"
+printf 'Installed triseek-server to %s\n' "$server_install_path"
 
 case ":$PATH:" in
   *":${install_dir}:"*)

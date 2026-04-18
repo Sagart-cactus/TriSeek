@@ -69,8 +69,11 @@ pub fn run() -> Result<()> {
         if let Ok(path) = shared::claude_hooks_settings_path(scope) {
             if let Ok(text) = std::fs::read_to_string(&path) {
                 match shared::claude_hooks_status(&text) {
-                    Ok((post_tool, session_start, pre_compact)) => {
+                    Ok((pre_tool, post_tool, session_start, pre_compact)) => {
                         let mut missing = Vec::new();
+                        if !pre_tool {
+                            missing.push("PreToolUse");
+                        }
                         if !post_tool {
                             missing.push("PostToolUse");
                         }
@@ -82,7 +85,7 @@ pub fn run() -> Result<()> {
                         }
                         if missing.is_empty() {
                             println!(
-                                "[ok] Claude hooks ({scope_name}): PostToolUse, SessionStart, PreCompact"
+                                "[ok] Claude hooks ({scope_name}): PreToolUse, PostToolUse, SessionStart, PreCompact"
                             );
                         } else {
                             println!(

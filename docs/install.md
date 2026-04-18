@@ -20,6 +20,8 @@ Default install location:
 ~/.local/bin/triseek-server
 ```
 
+The installer also ensures the TriSeek daemon is running. Fresh installs start it, and reinstalls stop and restart it.
+
 Pin a version:
 
 ```sh
@@ -46,6 +48,8 @@ Default install location:
 ```
 
 The PowerShell installer updates the user `PATH` automatically unless you run it with `-SkipPathUpdate`.
+
+It also ensures the TriSeek daemon is running. Fresh installs start it, and reinstalls stop and restart it.
 
 ## Cargo Fallback
 

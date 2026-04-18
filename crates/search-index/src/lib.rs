@@ -8,7 +8,8 @@ mod walker;
 pub mod watcher;
 
 pub use build::{
-    BuildConfig, UpdateOutcome, apply_incremental_changes, build_index, measure_repository,
+    BuildConfig, BuildPhase, BuildProgress, BuildProgressSnapshot, UpdateOutcome,
+    apply_incremental_changes, build_index, build_index_with_progress, measure_repository,
     update_index,
 };
 pub use engine::SearchEngine;

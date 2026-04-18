@@ -238,7 +238,7 @@ code { color: var(--accent-green); font-family: 'JetBrains Mono', monospace; fon
           <div class="card-ico cy">⌘</div>
           <h3>macOS and Linux</h3>
         </div>
-        <p>This downloads the latest release archive and installs <code>triseek</code> and <code>triseek-server</code> into <code>~/.local/bin</code>. If a matching release is not published yet, the script falls back to <code>cargo install</code> when Rust is available.</p>
+        <p>This downloads the latest release archive and installs <code>triseek</code> and <code>triseek-server</code> into <code>~/.local/bin</code>. If a matching release is not published yet, the script falls back to <code>cargo install</code> when Rust is available. A successful install also ensures the TriSeek daemon is running: fresh installs start it, and reinstalls stop and restart it.</p>
 
         <div class="code-block">
           <div class="tb">
@@ -266,7 +266,7 @@ code { color: var(--accent-green); font-family: 'JetBrains Mono', monospace; fon
           <div class="card-ico pu">⊞</div>
           <h3>Windows PowerShell</h3>
         </div>
-        <p>This downloads the latest Windows release archive, installs <code>triseek.exe</code> and <code>triseek-server.exe</code>, and updates the user <code>PATH</code> unless you opt out with <code>-SkipPathUpdate</code>. If no matching release exists, it falls back to <code>cargo install</code> when Rust is available.</p>
+        <p>This downloads the latest Windows release archive, installs <code>triseek.exe</code> and <code>triseek-server.exe</code>, and updates the user <code>PATH</code> unless you opt out with <code>-SkipPathUpdate</code>. If no matching release exists, it falls back to <code>cargo install</code> when Rust is available. A successful install also ensures the TriSeek daemon is running: fresh installs start it, and reinstalls stop and restart it.</p>
 
         <div class="code-block">
           <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">powershell · recommended</span></div>

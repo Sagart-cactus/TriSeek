@@ -111,7 +111,10 @@ fn install_hooks(binary: &str) -> Result<()> {
     println!("triseek: memo hooks installed into {}", path.display());
     println!("triseek: note — Codex hooks currently fire only for Bash (upstream issue #16732).");
     println!(
-        "triseek: use `mcp__triseek__memo_check {{\"path\":\"<file>\"}}` before re-reading files."
+        "triseek: Bash-based shell reads are observed automatically when Codex emits parsed command metadata."
+    );
+    println!(
+        "triseek: use `mcp__triseek__memo_check {{\"path\":\"<file>\"}}` before re-reading files handled by Codex's built-in Read tool."
     );
     println!("triseek: see docs/codex-memo-skill.md for the full decision table.");
     Ok(())

@@ -185,21 +185,31 @@ pub fn upsert_claude_hooks(existing: Option<&str>, binary: &str) -> Result<Strin
     let command = quote_for_shell(binary);
     upsert_claude_hook_event(
         hooks,
+        "PreToolUse",
+        "Read",
+        &format!("{command} memo-observe --event pre-tool-use"),
+        false,
+    )?;
+    upsert_claude_hook_event(
+        hooks,
         "PostToolUse",
         "Read|Edit|Write|NotebookEdit",
         &format!("{command} memo-observe --event post-tool-use"),
+        true,
     )?;
     upsert_claude_hook_event(
         hooks,
         "SessionStart",
         "",
         &format!("{command} memo-observe --event session-start"),
+        true,
     )?;
     upsert_claude_hook_event(
         hooks,
         "PreCompact",
         "",
         &format!("{command} memo-observe --event pre-compact"),
+        true,
     )?;
 
     Ok(serde_json::to_string_pretty(&root)? + "\n")
@@ -215,7 +225,7 @@ pub fn remove_claude_hooks(existing: &str) -> Result<Option<String>> {
         return Ok(None);
     };
     let mut changed = false;
-    for event in ["PostToolUse", "SessionStart", "PreCompact"] {
+    for event in ["PreToolUse", "PostToolUse", "SessionStart", "PreCompact"] {
         if let Some(groups) = hooks.get_mut(event).and_then(Value::as_array_mut) {
             let before = groups.len();
             groups.retain(|group| !is_triseek_hook_group(group));
@@ -230,16 +240,17 @@ pub fn remove_claude_hooks(existing: &str) -> Result<Option<String>> {
     Ok(Some(serde_json::to_string_pretty(&root)? + "\n"))
 }
 
-pub fn claude_hooks_status(existing: &str) -> Result<(bool, bool, bool)> {
+pub fn claude_hooks_status(existing: &str) -> Result<(bool, bool, bool, bool)> {
     let root: Value =
         serde_json::from_str(existing).context("failed to parse existing Claude settings.json")?;
     let Some(hooks) = root.get("hooks").and_then(Value::as_object) else {
-        return Ok((false, false, false));
+        return Ok((false, false, false, false));
     };
+    let pre_tool = has_triseek_hook_in_event(hooks, "PreToolUse");
     let post_tool = has_triseek_hook_in_event(hooks, "PostToolUse");
     let session_start = has_triseek_hook_in_event(hooks, "SessionStart");
     let pre_compact = has_triseek_hook_in_event(hooks, "PreCompact");
-    Ok((post_tool, session_start, pre_compact))
+    Ok((pre_tool, post_tool, session_start, pre_compact))
 }
 
 pub fn upsert_codex_hooks(existing: Option<&str>, binary: &str) -> Result<String> {
@@ -257,7 +268,7 @@ pub fn upsert_codex_hooks(existing: Option<&str>, binary: &str) -> Result<String
     upsert_codex_hook_event(
         hooks,
         "PostToolUse",
-        "Read|Edit|Write",
+        "Bash|Read|Edit|Write",
         &[binary, "memo-observe", "--event", "post-tool-use"],
     )?;
     upsert_codex_hook_event(
@@ -503,6 +514,7 @@ fn upsert_claude_hook_event(
     event: &str,
     matcher: &str,
     command: &str,
+    is_async: bool,
 ) -> Result<()> {
     let groups = hooks
         .entry(event.to_string())
@@ -517,7 +529,7 @@ fn upsert_claude_hook_event(
             "type": "command",
             "command": command,
             "timeout": 5,
-            "async": true
+            "async": is_async
         }]
     }));
     Ok(())
@@ -683,20 +695,24 @@ args = ["mcp", "serve"]
   }
 }"#;
         let out = upsert_claude_hooks(Some(existing), "/bin/triseek").unwrap();
-        let (post, start, compact) = claude_hooks_status(&out).unwrap();
-        assert!(post && start && compact);
+        let (pre, post, start, compact) = claude_hooks_status(&out).unwrap();
+        assert!(pre && post && start && compact);
+        assert!(out.contains("\"PreToolUse\""));
+        assert!(out.contains("\"matcher\": \"Read\""));
+        assert!(out.contains("\"async\": false"));
         assert!(out.contains("echo other"));
 
         let removed = remove_claude_hooks(&out).unwrap().unwrap();
         assert!(removed.contains("echo other"));
         let status = claude_hooks_status(&removed).unwrap();
-        assert_eq!(status, (false, false, false));
+        assert_eq!(status, (false, false, false, false));
     }
 
     #[test]
     fn upsert_and_remove_codex_hooks_round_trip() {
         let out = upsert_codex_hooks(None, "/bin/triseek").unwrap();
         assert_eq!(codex_hooks_status(&out).unwrap(), (true, true));
+        assert!(out.contains("\"matcher\": \"Bash|Read|Edit|Write\""));
         let removed = remove_codex_hooks(&out).unwrap().unwrap();
         assert_eq!(codex_hooks_status(&removed).unwrap(), (false, false));
     }
