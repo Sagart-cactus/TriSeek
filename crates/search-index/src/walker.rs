@@ -240,19 +240,8 @@ pub(crate) fn walk_repository_parallel_with_progress(
     let commit_sha = git_head(repo_root).unwrap_or_else(|_| "unresolved".to_string());
 
     let mut builder = WalkBuilder::new(repo_root);
-<<<<<<< Updated upstream
     configure_walk_builder(&mut builder, options.include_hidden);
-    builder.threads(num_cpus::get().min(8));
-=======
-    builder.hidden(!options.include_hidden);
-    builder.git_ignore(true);
-    builder.git_exclude(true);
-    builder.git_global(true);
-    builder.ignore(true);
-    builder.follow_links(false);
-    builder.standard_filters(true);
     builder.threads(num_cpus::get());
->>>>>>> Stashed changes
 
     let files = Mutex::new(Vec::new());
     let stats = Mutex::new(RepoStats {
@@ -266,6 +255,7 @@ pub(crate) fn walk_repository_parallel_with_progress(
     let progress = progress.cloned();
 
     builder.build_parallel().run(|| {
+        let opts = opts.clone();
         let progress = progress.clone();
         let stats = &stats;
         let files = &files;
@@ -303,6 +293,10 @@ pub(crate) fn walk_repository_parallel_with_progress(
                             )
                             .or_default() += 1;
                     }
+                    if let Some(p) = progress.as_ref() {
+                        p.record_tracked_file(file.file_size);
+                        p.record_searchable_file(file.file_size);
+                    }
                     files.lock().unwrap().push(file);
                 }
                 Ok(Some(CandidateFile::Skipped { size, binary })) => {
@@ -312,76 +306,12 @@ pub(crate) fn walk_repository_parallel_with_progress(
                     if binary {
                         s.skipped_binary_files += 1;
                     }
+                    if let Some(p) = progress.as_ref() {
+                        p.record_tracked_file(size);
+                    }
                 }
                 Ok(None) | Err(_) => {}
             }
-            if let Some(progress) = progress.as_ref() {
-                progress.record_tracked_file(size);
-            }
-
-<<<<<<< Updated upstream
-=======
-            if let Some(max_file_size) = opts.max_file_size
-                && size > max_file_size
-            {
-                return ignore::WalkState::Continue;
-            }
-
-            let contents = match fs::read(&path) {
-                Ok(c) => c,
-                Err(_) => return ignore::WalkState::Continue,
-            };
-            let is_binary = !opts.include_binary && looks_binary(&contents);
-            if is_binary {
-                stats.lock().unwrap().skipped_binary_files += 1;
-                return ignore::WalkState::Continue;
-            }
-
-            let relative_path = normalize_relative(repo_root, &path);
-            let file_name = path
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            let extension = path
-                .extension()
-                .map(|ext| ext.to_string_lossy().to_ascii_lowercase());
-
-            {
-                let mut s = stats.lock().unwrap();
-                s.searchable_files += 1;
-                s.searchable_bytes += size;
-            }
-            if let Some(progress) = progress.as_ref() {
-                progress.record_searchable_file(size);
-            }
-            {
-                *languages
-                    .lock()
-                    .unwrap()
-                    .entry(extension.clone().unwrap_or_else(|| "<none>".to_string()))
-                    .or_default() += 1;
-            }
-
-            let modified_unix_secs = metadata
-                .modified()
-                .ok()
-                .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|duration| duration.as_secs() as i64)
-                .unwrap_or_default();
-
-            let content_hash = xxh3_64(&contents);
-            files.lock().unwrap().push(ScannedFile {
-                absolute_path: path,
-                relative_path,
-                file_name,
-                extension,
-                file_size: size,
-                modified_unix_secs,
-                content_hash,
-                contents,
-            });
-
->>>>>>> Stashed changes
             ignore::WalkState::Continue
         })
     });

@@ -897,7 +897,6 @@ fn should_render_human_build(force_json: bool) -> bool {
 }
 
 fn print_human_search(response: &SearchResponse) {
-<<<<<<< Updated upstream
     use std::io::IsTerminal as _;
     let color = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
     let cols = std::env::var("COLUMNS")
@@ -907,12 +906,6 @@ fn print_human_search(response: &SearchResponse) {
     let rendered = output_format::render_human(response, opts);
     // `render_human` already terminates lines with `\n`; use `print!` to
     // avoid a blank trailing line.
-=======
-    let cols = std::env::var("COLUMNS")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok());
-    let rendered = output_format::render_human(response, output_format::RenderOpts::human(cols));
->>>>>>> Stashed changes
     print!("{rendered}");
 }
 
