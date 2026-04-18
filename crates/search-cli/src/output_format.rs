@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 //! Human-readable output formatting shared between the CLI and the MCP
 //! server's prose digest.
 //!
@@ -49,10 +50,32 @@ impl RenderOpts {
         Self {
             color,
             max_line_width: cols,
+=======
+use search_core::{SearchEngineKind, SearchHit, SearchResponse};
+use std::fmt::Write as _;
+
+const DEFAULT_TERMINAL_COLS: usize = 120;
+const MIN_TERMINAL_COLS: usize = 72;
+const MIN_FILE_WIDTH: usize = 24;
+const MIN_PREVIEW_WIDTH: usize = 24;
+
+#[derive(Clone, Copy, Debug)]
+pub struct RenderOpts {
+    max_width: usize,
+}
+
+impl RenderOpts {
+    pub fn human(terminal_cols: Option<usize>) -> Self {
+        Self {
+            max_width: terminal_cols
+                .unwrap_or(DEFAULT_TERMINAL_COLS)
+                .max(MIN_TERMINAL_COLS),
+>>>>>>> Stashed changes
         }
     }
 }
 
+<<<<<<< Updated upstream
 /// Format a [`SearchResponse`] for CLI human output.
 pub fn render_human(response: &SearchResponse, opts: RenderOpts) -> String {
     let mut out = String::new();
@@ -75,6 +98,19 @@ pub fn render_human(response: &SearchResponse, opts: RenderOpts) -> String {
         "{} {}",
         style.bold("triseek"),
         style.dim(&header_body)
+=======
+pub fn render_human(response: &SearchResponse, opts: RenderOpts) -> String {
+    let mut out = String::new();
+    writeln!(
+        &mut out,
+        "{} | {} {} | {} {} | {:.2} ms",
+        engine_label(response.engine),
+        response.summary.files_with_matches,
+        pluralize(response.summary.files_with_matches, "file"),
+        response.summary.total_line_matches,
+        pluralize(response.summary.total_line_matches, "match"),
+        response.metrics.process.wall_millis
+>>>>>>> Stashed changes
     )
     .unwrap();
 
@@ -82,16 +118,22 @@ pub fn render_human(response: &SearchResponse, opts: RenderOpts) -> String {
         writeln!(&mut out).unwrap();
         writeln!(
             &mut out,
+<<<<<<< Updated upstream
             "{}",
             style.dim(&format!(
                 "no matches for \"{}\" — try --kind regex or widening --glob patterns",
                 response.request.pattern
             ))
+=======
+            "No matches found for {:?}.",
+            response.request.pattern
+>>>>>>> Stashed changes
         )
         .unwrap();
         return out;
     }
 
+<<<<<<< Updated upstream
     // Gutter width: the `line:col` column needs to fit the widest value we
     // expect. Compute it up front so every row aligns.
     let gutter = compute_gutter(&response.hits);
@@ -145,11 +187,18 @@ pub fn render_human(response: &SearchResponse, opts: RenderOpts) -> String {
             ))
         )
         .unwrap();
+=======
+    if has_content_hits(&response.hits) {
+        render_content_table(&mut out, &response.hits, opts.max_width);
+    } else {
+        render_path_table(&mut out, &response.hits, opts.max_width);
+>>>>>>> Stashed changes
     }
 
     out
 }
 
+<<<<<<< Updated upstream
 /// Format an MCP tool envelope as a plain-text digest. Never emits ANSI.
 ///
 /// For search tools the envelope is produced by `build_envelope` and carries
@@ -537,10 +586,383 @@ impl Style {
 // Tests
 // ---------------------------------------------------------------------------
 
+=======
+#[derive(Clone, Copy, Debug)]
+enum Align {
+    Left,
+    Right,
+    Center,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ContentRow<'a> {
+    file: &'a str,
+    line_number: usize,
+    column: usize,
+    line_text: &'a str,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ContentWidths {
+    file: usize,
+    line: usize,
+    column: usize,
+    length: usize,
+    preview: usize,
+}
+
+fn has_content_hits(hits: &[SearchHit]) -> bool {
+    hits.iter()
+        .any(|hit| matches!(hit, SearchHit::Content { .. }))
+}
+
+fn render_content_table(out: &mut String, hits: &[SearchHit], max_width: usize) {
+    let rows = collect_content_rows(hits);
+    let widths = compute_content_widths(&rows, max_width);
+
+    write_border(
+        out,
+        '┌',
+        '┬',
+        '┐',
+        &[
+            widths.file,
+            widths.line,
+            widths.column,
+            widths.length,
+            widths.preview,
+        ],
+    );
+    write_row(
+        out,
+        &[
+            ("File", widths.file, Align::Center),
+            ("Line", widths.line, Align::Center),
+            ("Col", widths.column, Align::Center),
+            ("Len", widths.length, Align::Center),
+            ("Preview", widths.preview, Align::Center),
+        ],
+    );
+    write_border(
+        out,
+        '├',
+        '┼',
+        '┤',
+        &[
+            widths.file,
+            widths.line,
+            widths.column,
+            widths.length,
+            widths.preview,
+        ],
+    );
+
+    for (index, row) in rows.iter().enumerate() {
+        let file = truncate_middle(row.file, widths.file);
+        let line = row.line_number.to_string();
+        let column = row.column.to_string();
+        let length = display_line_length(row.line_text).to_string();
+        let preview = preview_for_match(row.line_text, row.column, widths.preview);
+
+        write_row(
+            out,
+            &[
+                (file.as_str(), widths.file, Align::Left),
+                (line.as_str(), widths.line, Align::Right),
+                (column.as_str(), widths.column, Align::Right),
+                (length.as_str(), widths.length, Align::Right),
+                (preview.as_str(), widths.preview, Align::Left),
+            ],
+        );
+
+        let (left, mid, right) = if index + 1 == rows.len() {
+            ('└', '┴', '┘')
+        } else {
+            ('├', '┼', '┤')
+        };
+        write_border(
+            out,
+            left,
+            mid,
+            right,
+            &[
+                widths.file,
+                widths.line,
+                widths.column,
+                widths.length,
+                widths.preview,
+            ],
+        );
+    }
+}
+
+fn render_path_table(out: &mut String, hits: &[SearchHit], max_width: usize) {
+    let rows = collect_path_rows(hits);
+    let width = compute_path_width(&rows, max_width);
+
+    write_border(out, '┌', '┬', '┐', &[width]);
+    write_row(out, &[("File", width, Align::Center)]);
+    write_border(out, '├', '┼', '┤', &[width]);
+
+    for (index, row) in rows.iter().enumerate() {
+        let file = truncate_middle(row, width);
+        write_row(out, &[(file.as_str(), width, Align::Left)]);
+        let (left, mid, right) = if index + 1 == rows.len() {
+            ('└', '┴', '┘')
+        } else {
+            ('├', '┼', '┤')
+        };
+        write_border(out, left, mid, right, &[width]);
+    }
+}
+
+fn collect_content_rows<'a>(hits: &'a [SearchHit]) -> Vec<ContentRow<'a>> {
+    let mut rows = Vec::new();
+
+    for hit in hits {
+        if let SearchHit::Content { path, lines } = hit {
+            for line in lines {
+                rows.push(ContentRow {
+                    file: path,
+                    line_number: line.line_number,
+                    column: line.column,
+                    line_text: &line.line_text,
+                });
+            }
+        }
+    }
+
+    rows
+}
+
+fn collect_path_rows<'a>(hits: &'a [SearchHit]) -> Vec<&'a str> {
+    hits.iter()
+        .filter_map(|hit| match hit {
+            SearchHit::Path { path } => Some(path.as_str()),
+            SearchHit::Content { .. } => None,
+        })
+        .collect()
+}
+
+fn compute_content_widths(rows: &[ContentRow<'_>], max_width: usize) -> ContentWidths {
+    let mut widths = ContentWidths {
+        file: "File".len(),
+        line: "Line".len(),
+        column: "Col".len(),
+        length: "Len".len(),
+        preview: MIN_PREVIEW_WIDTH,
+    };
+
+    let mut max_file = widths.file;
+
+    for row in rows {
+        widths.line = widths.line.max(decimal_width(row.line_number));
+        widths.column = widths.column.max(decimal_width(row.column));
+        widths.length = widths
+            .length
+            .max(decimal_width(display_line_length(row.line_text)));
+        max_file = max_file.max(display_width(row.file));
+    }
+
+    let fixed_width = table_overhead(5) + widths.line + widths.column + widths.length;
+    let available_text = max_width
+        .saturating_sub(fixed_width)
+        .max(MIN_FILE_WIDTH + MIN_PREVIEW_WIDTH);
+    let min_file = MIN_FILE_WIDTH.min(available_text.saturating_sub(1));
+    let preferred_file = (available_text * 3) / 5;
+
+    widths.file = preferred_file.min(max_file).max(min_file);
+    widths.preview = available_text.saturating_sub(widths.file).max(1);
+
+    if widths.preview < MIN_PREVIEW_WIDTH {
+        let needed = MIN_PREVIEW_WIDTH - widths.preview;
+        let reducible = widths.file.saturating_sub(min_file);
+        let shift = needed.min(reducible);
+        widths.file -= shift;
+        widths.preview += shift;
+    }
+
+    widths
+}
+
+fn compute_path_width(rows: &[&str], max_width: usize) -> usize {
+    let max_file = rows
+        .iter()
+        .map(|row| display_width(row))
+        .max()
+        .unwrap_or("File".len())
+        .max("File".len());
+    let available = max_width
+        .saturating_sub(table_overhead(1))
+        .max(MIN_FILE_WIDTH);
+    max_file.min(available)
+}
+
+fn write_border(out: &mut String, left: char, mid: char, right: char, widths: &[usize]) {
+    out.push(left);
+    for (index, width) in widths.iter().enumerate() {
+        for _ in 0..(width + 2) {
+            out.push('─');
+        }
+        out.push(if index + 1 == widths.len() {
+            right
+        } else {
+            mid
+        });
+    }
+    out.push('\n');
+}
+
+fn write_row(out: &mut String, cells: &[(&str, usize, Align)]) {
+    out.push('│');
+    for (content, width, align) in cells {
+        out.push(' ');
+        write_aligned(out, content, *width, *align);
+        out.push(' ');
+        out.push('│');
+    }
+    out.push('\n');
+}
+
+fn write_aligned(out: &mut String, content: &str, width: usize, align: Align) {
+    let text_width = display_width(content);
+    let padding = width.saturating_sub(text_width);
+    let (left_pad, right_pad) = match align {
+        Align::Left => (0, padding),
+        Align::Right => (padding, 0),
+        Align::Center => (padding / 2, padding - (padding / 2)),
+    };
+
+    for _ in 0..left_pad {
+        out.push(' ');
+    }
+    out.push_str(content);
+    for _ in 0..right_pad {
+        out.push(' ');
+    }
+}
+
+fn table_overhead(columns: usize) -> usize {
+    (columns * 3) + 1
+}
+
+fn decimal_width(value: usize) -> usize {
+    value.to_string().len()
+}
+
+fn display_width(text: &str) -> usize {
+    text.chars().count()
+}
+
+fn display_line_length(text: &str) -> usize {
+    sanitize_preview_text(text).chars().count()
+}
+
+fn preview_for_match(text: &str, column: usize, max_chars: usize) -> String {
+    let sanitized = sanitize_preview_text(text);
+    let chars: Vec<char> = sanitized.chars().collect();
+    if chars.len() <= max_chars {
+        return sanitized;
+    }
+
+    let target_idx = byte_column_to_char_index(text, column).min(chars.len().saturating_sub(1));
+    let body_width = max_chars.saturating_sub(2).max(1);
+    let preferred_left_context = body_width / 3;
+    let mut start = target_idx.saturating_sub(preferred_left_context);
+    let end = (start + body_width).min(chars.len());
+
+    if end == chars.len() {
+        start = end.saturating_sub(body_width);
+    }
+
+    let mut preview = String::new();
+    if start > 0 {
+        preview.push('…');
+    }
+    for ch in &chars[start..end] {
+        preview.push(*ch);
+    }
+    if end < chars.len() {
+        preview.push('…');
+    }
+    preview
+}
+
+fn truncate_middle(text: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= max_chars {
+        return text.to_string();
+    }
+
+    if max_chars <= 1 {
+        return "…".to_string();
+    }
+
+    let left = (max_chars - 1) / 2;
+    let right = max_chars - 1 - left;
+    let mut truncated = String::new();
+    for ch in &chars[..left] {
+        truncated.push(*ch);
+    }
+    truncated.push('…');
+    for ch in &chars[chars.len() - right..] {
+        truncated.push(*ch);
+    }
+    truncated
+}
+
+fn byte_column_to_char_index(text: &str, column: usize) -> usize {
+    let target = column.saturating_sub(1);
+    let mut char_index = 0;
+
+    for (byte_index, _) in text.char_indices() {
+        if byte_index >= target {
+            return char_index;
+        }
+        char_index += 1;
+    }
+
+    char_index
+}
+
+fn sanitize_preview_text(text: &str) -> String {
+    text.trim_end_matches(['\n', '\r'])
+        .chars()
+        .map(|ch| {
+            if ch == '\t' || ch.is_control() {
+                ' '
+            } else {
+                ch
+            }
+        })
+        .collect()
+}
+
+fn pluralize(count: usize, singular: &str) -> String {
+    if count == 1 {
+        singular.to_string()
+    } else if singular == "match" {
+        "matches".to_string()
+    } else {
+        format!("{singular}s")
+    }
+}
+
+fn engine_label(engine: SearchEngineKind) -> &'static str {
+    match engine {
+        SearchEngineKind::Indexed => "indexed",
+        SearchEngineKind::DirectScan => "direct-scan",
+        SearchEngineKind::Ripgrep => "ripgrep",
+        SearchEngineKind::Auto => "auto",
+    }
+}
+
+>>>>>>> Stashed changes
 #[cfg(test)]
 mod tests {
     use super::*;
     use search_core::{
+<<<<<<< Updated upstream
         AdaptiveRoute, AdaptiveRoutingDecision, CaseMode, QueryPlan, QueryRequest,
         QuerySelectivity, QueryShape, SearchEngineKind, SearchExecutionStrategy, SearchHit,
         SearchKind, SearchLineMatch, SearchResponse, SearchSummary,
@@ -576,10 +998,53 @@ mod tests {
                 total_line_matches: matches,
             },
             metrics: Default::default(),
+=======
+        CaseMode, ProcessMetrics, QueryRequest, SearchEngineKind, SearchHit, SearchKind,
+        SearchLineMatch, SearchMetrics, SearchResponse, SearchSummary, plan_query, route_query,
+    };
+
+    fn make_response(hits: Vec<SearchHit>) -> SearchResponse {
+        let request = QueryRequest {
+            kind: SearchKind::Literal,
+            engine: SearchEngineKind::Auto,
+            pattern: "needle".to_string(),
+            case_mode: CaseMode::Sensitive,
+            ..QueryRequest::default()
+        };
+        let plan = plan_query(&request);
+        let routing = route_query(&request, None, &plan, false, false);
+        let total_line_matches = hits
+            .iter()
+            .map(|hit| match hit {
+                SearchHit::Content { lines, .. } => lines.len(),
+                SearchHit::Path { .. } => 1,
+            })
+            .sum::<usize>();
+
+        SearchResponse {
+            request,
+            effective_kind: SearchKind::Literal,
+            engine: SearchEngineKind::DirectScan,
+            routing,
+            plan,
+            summary: SearchSummary {
+                files_with_matches: hits.len(),
+                total_line_matches,
+            },
+            metrics: SearchMetrics {
+                process: ProcessMetrics {
+                    wall_millis: 12.34,
+                    ..ProcessMetrics::default()
+                },
+                ..SearchMetrics::default()
+            },
+            hits,
+>>>>>>> Stashed changes
         }
     }
 
     #[test]
+<<<<<<< Updated upstream
     fn trim_preview_leaves_short_text_alone() {
         assert_eq!(trim_preview("hello", 20), "hello");
     }
@@ -811,5 +1276,71 @@ mod tests {
         assert!(out.contains("INVALID_QUERY"));
         assert!(out.contains("must not be empty"));
         assert!(out.contains("Suggested:"));
+=======
+    fn renders_boxed_table_with_flat_rows() {
+        let response = make_response(vec![SearchHit::Content {
+            path: "src/main.rs".to_string(),
+            lines: vec![
+                SearchLineMatch {
+                    line_number: 12,
+                    column: 7,
+                    line_text: "let needle = true;".to_string(),
+                },
+                SearchLineMatch {
+                    line_number: 108,
+                    column: 3,
+                    line_text: "needle();".to_string(),
+                },
+            ],
+        }]);
+
+        let rendered = render_human(&response, RenderOpts { max_width: 100 });
+        assert!(rendered.contains("direct-scan | 1 file | 2 matches | 12.34 ms"));
+        assert!(rendered.contains("┌"));
+        assert!(rendered.contains("├"));
+        assert!(rendered.contains("└"));
+        assert!(rendered.contains("File"));
+        assert!(rendered.contains("Preview"));
+        assert_eq!(rendered.matches("src/main.rs").count(), 2);
+        assert!(rendered.contains("let needle = true;"));
+    }
+
+    #[test]
+    fn long_single_line_preview_stays_bounded_and_keeps_match_context() {
+        let long_line = format!("{}MATCH{}", "a".repeat(120), "b".repeat(120));
+        let response = make_response(vec![SearchHit::Content {
+            path: "dist/app.min.js".to_string(),
+            lines: vec![SearchLineMatch {
+                line_number: 1,
+                column: 121,
+                line_text: long_line,
+            }],
+        }]);
+
+        let rendered = render_human(&response, RenderOpts { max_width: 80 });
+        assert!(rendered.contains("dist/app.min.js"));
+        assert!(rendered.contains("MATCH"));
+        assert!(rendered.contains("…"));
+        assert!(!rendered.contains(&"a".repeat(80)));
+        assert!(!rendered.contains(&"b".repeat(80)));
+    }
+
+    #[test]
+    fn path_hits_render_in_a_file_table() {
+        let response = make_response(vec![
+            SearchHit::Path {
+                path: "src/main.rs".to_string(),
+            },
+            SearchHit::Path {
+                path: "src/output_format.rs".to_string(),
+            },
+        ]);
+
+        let rendered = render_human(&response, RenderOpts { max_width: 80 });
+        assert!(rendered.contains("File"));
+        assert!(rendered.contains("src/main.rs"));
+        assert!(rendered.contains("src/output_format.rs"));
+        assert!(!rendered.contains("Preview"));
+>>>>>>> Stashed changes
     }
 }
