@@ -197,9 +197,10 @@ echo '{"jsonrpc":"2.0","id":1,"method":"memo_session","params":{"session_id":"'"
 
 Expected: `"redundant_reads_prevented":1,"tokens_saved":<n>`
 
-### C. Known limitation
+### C. Bash read tracking
 
-The Pi plugin whitelist includes `'bash'` as a tool, but the memo shim's `tool_event_kind()` does not map `bash` to any `MemoEventKind` — Bash-based file reads are not tracked. This is a known gap, not a regression. Shell reads are uncommon in Pi sessions.
+The memo shim now classifies Bash payloads as reads when the hook payload includes parsed command metadata
+or a simple shell read command such as `cat`, `sed -n`, `head`, or `tail`.
 
 ---
 
@@ -227,4 +228,4 @@ rm -rf "$TESTDIR"
 | Plugin template absolute binary path | OpenCode + Pi | PASS |
 | OpenCode event name `tool.execute.after` | OpenCode | PASS (in template) |
 | Pi event names `session_start`, `tool_result`, `session_before_compact` | Pi | PASS (in template) |
-| Pi `bash` tool silently dropped by shim | Pi | KNOWN GAP (not regression) |
+| Pi `bash` tool read tracking via parsed command metadata | Pi | PASS |

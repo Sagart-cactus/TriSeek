@@ -1,4 +1,4 @@
-use crate::build::{BuildConfig, build_index, update_index};
+use crate::build::{BuildConfig, BuildProgress, build_index_with_progress, update_index};
 use crate::error::SearchIndexError;
 use crate::fastindex::FastIndex;
 use crate::model::{RuntimeIndex, SearchExecution};
@@ -36,10 +36,19 @@ impl SearchEngine {
         index_dir: Option<&Path>,
         config: &BuildConfig,
     ) -> Result<search_core::IndexMetadata, SearchIndexError> {
+        Self::build_with_progress(repo_root, index_dir, config, None)
+    }
+
+    pub fn build_with_progress(
+        repo_root: &Path,
+        index_dir: Option<&Path>,
+        config: &BuildConfig,
+        progress: Option<&BuildProgress>,
+    ) -> Result<search_core::IndexMetadata, SearchIndexError> {
         let index_dir = index_dir
             .map(Path::to_path_buf)
             .unwrap_or_else(|| default_index_dir(repo_root));
-        build_index(repo_root, &index_dir, config)
+        build_index_with_progress(repo_root, &index_dir, config, progress)
     }
 
     pub fn update(

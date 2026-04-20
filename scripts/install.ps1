@@ -67,6 +67,120 @@ function Ensure-UserPathEntry {
     return $true
 }
 
+function Resolve-TriSeekHome {
+    if (-not [string]::IsNullOrWhiteSpace($env:TRISEEK_HOME)) {
+        return [System.IO.Path]::GetFullPath($env:TRISEEK_HOME)
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        return (Join-Path $env:LOCALAPPDATA "TriSeek")
+    }
+
+    return (Join-Path $HOME ".triseek")
+}
+
+function Get-DaemonPaths {
+    $daemonRoot = Join-Path (Resolve-TriSeekHome) "daemon"
+    return @{
+        Root = $daemonRoot
+        Pid = (Join-Path $daemonRoot "daemon.pid")
+        Port = (Join-Path $daemonRoot "daemon.port")
+    }
+}
+
+function Remove-StaleDaemonFiles {
+    $daemonPaths = Get-DaemonPaths
+    foreach ($path in @($daemonPaths.Pid, $daemonPaths.Port)) {
+        if (Test-Path $path) {
+            Remove-Item -Path $path -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Get-RunningDaemonPid {
+    $daemonPaths = Get-DaemonPaths
+    if (-not (Test-Path $daemonPaths.Pid)) {
+        return $null
+    }
+
+    $raw = (Get-Content -Path $daemonPaths.Pid -Raw -ErrorAction SilentlyContinue).Trim()
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        return $null
+    }
+
+    [int]$daemonPid = 0
+    if (-not [int]::TryParse($raw, [ref]$daemonPid)) {
+        return $null
+    }
+
+    if (Get-Process -Id $daemonPid -ErrorAction SilentlyContinue) {
+        return $daemonPid
+    }
+
+    Remove-StaleDaemonFiles
+    return $null
+}
+
+function Wait-ForDaemonExit {
+    param(
+        [int]$DaemonPid,
+        [int]$TimeoutSeconds = 10
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (-not (Get-Process -Id $DaemonPid -ErrorAction SilentlyContinue)) {
+            Remove-StaleDaemonFiles
+            return $true
+        }
+        Start-Sleep -Milliseconds 200
+    }
+
+    return $false
+}
+
+function Stop-ExistingDaemon {
+    param([string]$CliPath)
+
+    $existingDaemonPid = Get-RunningDaemonPid
+    if (-not $existingDaemonPid) {
+        Remove-StaleDaemonFiles
+        return
+    }
+
+    if (Test-Path $CliPath) {
+        & $CliPath daemon stop *> $null
+    }
+    elseif (Get-Command triseek -ErrorAction SilentlyContinue) {
+        & triseek daemon stop *> $null
+    }
+
+    if (Wait-ForDaemonExit -DaemonPid $existingDaemonPid) {
+        return
+    }
+
+    if (Get-Process -Id $existingDaemonPid -ErrorAction SilentlyContinue) {
+        Stop-Process -Id $existingDaemonPid -Force -ErrorAction SilentlyContinue
+    }
+
+    if (-not (Wait-ForDaemonExit -DaemonPid $existingDaemonPid)) {
+        throw "Failed to stop existing TriSeek daemon (PID $existingDaemonPid)."
+    }
+}
+
+function Ensure-DaemonRunning {
+    param(
+        [string]$CliPath,
+        [string]$Action
+    )
+
+    Write-Host "$Action TriSeek daemon..."
+    & $CliPath daemon start
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to start TriSeek daemon after install."
+    }
+}
+
 function Install-FromCargo {
     param(
         [string]$RepoName,
@@ -127,6 +241,9 @@ else {
 $tmpRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("triseek-install-" + [guid]::NewGuid().ToString("N"))
 $archivePath = Join-Path $tmpRoot $archiveName
 $extractDir = Join-Path $tmpRoot "extract"
+$installPath = Join-Path $InstallDir "triseek.exe"
+$serverInstallPath = Join-Path $InstallDir "triseek-server.exe"
+$hadExistingInstall = (Test-Path $installPath) -or (Test-Path $serverInstallPath)
 
 New-Item -ItemType Directory -Force -Path $tmpRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
@@ -159,8 +276,12 @@ try {
         $binaryPaths = Install-FromCargo -RepoName $Repo -ResolvedVersion $versionTag -TargetRoot $cargoRoot
     }
 
-    $installPath = Join-Path $InstallDir "triseek.exe"
-    $serverInstallPath = Join-Path $InstallDir "triseek-server.exe"
+    $existingDaemonPid = Get-RunningDaemonPid
+    if ($existingDaemonPid) {
+        Write-Host "Stopping existing TriSeek daemon (PID $existingDaemonPid)..."
+        Stop-ExistingDaemon -CliPath $installPath
+    }
+
     Copy-Item -Path $binaryPaths.Cli -Destination $installPath -Force
     Copy-Item -Path $binaryPaths.Server -Destination $serverInstallPath -Force
 
@@ -171,6 +292,13 @@ try {
     & $serverInstallPath --help *> $null
     if ($LASTEXITCODE -ne 0) {
         throw "Installed daemon binary did not pass the smoke check."
+    }
+
+    if ($hadExistingInstall -or $existingDaemonPid) {
+        Ensure-DaemonRunning -CliPath $installPath -Action "Restarting"
+    }
+    else {
+        Ensure-DaemonRunning -CliPath $installPath -Action "Starting"
     }
 
     $pathUpdated = $false

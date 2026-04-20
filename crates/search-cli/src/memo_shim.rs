@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use search_core::{
-    DAEMON_PORT_FILE, MemoEventKind, MemoObserveParams, MemoSessionParams, RpcRequest, RpcResponse,
+    DAEMON_PORT_FILE, MemoCheckParams, MemoCheckRecommendation, MemoCheckResponse, MemoEventKind,
+    MemoObserveParams, MemoSessionParams, RpcRequest, RpcResponse,
 };
 use search_index::daemon_dir;
 use serde_json::{Value, json};
@@ -57,6 +58,14 @@ pub fn run(event: &str, repo_override: Option<&Path>) -> Result<()> {
             };
             let _ = rpc_call(&mut stream, "memo_observe", json!(params));
         }
+        Some("pre-tool-use") => {
+            if matches!(tool_event_kind(&payload), Some(MemoEventKind::Read))
+                && let Some(response) = memo_check(&mut stream, &session_id, &repo_root, &payload)?
+                && matches!(response.recommendation, MemoCheckRecommendation::SkipReread)
+            {
+                print!("{}", pre_tool_use_deny_output(&response));
+            }
+        }
         Some("read") | Some("edit") | Some("write") => {
             let params = build_tool_observe_params(
                 &session_id,
@@ -83,6 +92,27 @@ pub fn run(event: &str, repo_override: Option<&Path>) -> Result<()> {
         _ => {}
     }
     Ok(())
+}
+
+fn memo_check(
+    stream: &mut TcpStream,
+    session_id: &str,
+    repo_root: &Path,
+    payload: &Value,
+) -> Result<Option<MemoCheckResponse>> {
+    let Some(path) = find_path(payload) else {
+        return Ok(None);
+    };
+    let response = rpc_call(
+        stream,
+        "memo_check",
+        json!(MemoCheckParams {
+            session_id: session_id.to_string(),
+            repo_root: repo_root.display().to_string(),
+            path,
+        }),
+    )?;
+    Ok(Some(serde_json::from_value(response)?))
 }
 
 fn build_tool_observe_params(
@@ -177,14 +207,22 @@ fn tool_event_kind(payload: &Value) -> Option<MemoEventKind> {
     let tool_name = find_string_path(payload, &["tool_name"])
         .or_else(|| find_string_pointer(payload, "/tool/name"))
         .or_else(|| find_string_pointer(payload, "/tool"))
-        .or_else(|| find_string_pointer(payload, "/name"))?;
-    match tool_name.to_ascii_lowercase().as_str() {
-        "read" | "view" => Some(MemoEventKind::Read),
-        "edit" | "write" | "multiedit" | "notebookedit" | "apply_patch" => {
-            Some(MemoEventKind::Edit)
+        .or_else(|| find_string_pointer(payload, "/name"));
+    if let Some(tool_name) = tool_name {
+        match tool_name.to_ascii_lowercase().as_str() {
+            "read" | "view" => return Some(MemoEventKind::Read),
+            "edit" | "write" | "multiedit" | "notebookedit" | "apply_patch" => {
+                return Some(MemoEventKind::Edit);
+            }
+            "bash" => {
+                if let Some(kind) = infer_bash_event_kind(payload) {
+                    return Some(kind);
+                }
+            }
+            _ => {}
         }
-        _ => None,
     }
+    infer_bash_event_kind(payload)
 }
 
 fn resolve_repo_root(repo_override: Option<&Path>, payload: &Value) -> Result<PathBuf> {
@@ -222,6 +260,8 @@ fn find_path(payload: &Value) -> Option<String> {
         .or_else(|| find_string_pointer(payload, "/tool_response/filePath"))
         .or_else(|| find_string_pointer(payload, "/input/file_path"))
         .or_else(|| find_string_pointer(payload, "/input/path"))
+        .or_else(|| find_parsed_cmd_path(payload))
+        .or_else(|| find_bash_read_path(payload))
 }
 
 fn find_content_hash(payload: &Value, repo_root: &Path, path: Option<&str>) -> Option<u64> {
@@ -307,6 +347,252 @@ fn find_string_pointer(payload: &Value, pointer: &str) -> Option<String> {
         .map(ToString::to_string)
 }
 
+fn infer_bash_event_kind(payload: &Value) -> Option<MemoEventKind> {
+    if parsed_cmd_entries(payload).any(|entry| {
+        entry
+            .get("type")
+            .and_then(Value::as_str)
+            .map(|kind| kind.eq_ignore_ascii_case("read"))
+            .unwrap_or(false)
+    }) {
+        return Some(MemoEventKind::Read);
+    }
+    if find_bash_read_path(payload).is_some() {
+        return Some(MemoEventKind::Read);
+    }
+    None
+}
+
+fn find_parsed_cmd_path(payload: &Value) -> Option<String> {
+    parsed_cmd_entries(payload).find_map(|entry| {
+        let is_read = entry
+            .get("type")
+            .and_then(Value::as_str)
+            .map(|kind| kind.eq_ignore_ascii_case("read"))
+            .unwrap_or(false);
+        if !is_read {
+            return None;
+        }
+        entry
+            .get("path")
+            .and_then(Value::as_str)
+            .map(ToString::to_string)
+    })
+}
+
+fn parsed_cmd_entries(payload: &Value) -> impl Iterator<Item = &Value> {
+    [
+        payload.pointer("/parsed_cmd"),
+        payload.pointer("/tool_input/parsed_cmd"),
+        payload.pointer("/tool_response/parsed_cmd"),
+        payload.pointer("/result/parsed_cmd"),
+        payload.pointer("/output/parsed_cmd"),
+    ]
+    .into_iter()
+    .flatten()
+    .filter_map(Value::as_array)
+    .flat_map(|entries| entries.iter())
+}
+
+fn find_bash_read_path(payload: &Value) -> Option<String> {
+    let command = find_bash_command(payload)?;
+    extract_simple_shell_read_path(&command)
+}
+
+fn find_bash_command(payload: &Value) -> Option<String> {
+    if let Some(command) = find_string_path(payload, &["command"]) {
+        return Some(command);
+    }
+    if let Some(command) = find_string_pointer(payload, "/tool_input/command") {
+        return Some(command);
+    }
+    if let Some(command) = find_string_pointer(payload, "/input/command") {
+        return Some(command);
+    }
+
+    for pointer in ["/command", "/tool_input/command", "/input/command"] {
+        let Some(values) = payload.pointer(pointer).and_then(Value::as_array) else {
+            continue;
+        };
+        let tokens: Vec<&str> = values.iter().filter_map(Value::as_str).collect();
+        if let Some(shell_command) = extract_shell_command_from_argv(&tokens) {
+            return Some(shell_command.to_string());
+        }
+    }
+    None
+}
+
+fn extract_shell_command_from_argv<'a>(tokens: &'a [&'a str]) -> Option<&'a str> {
+    for idx in 0..tokens.len() {
+        if matches!(tokens[idx], "-c" | "-lc" | "-cl") {
+            return tokens.get(idx + 1).copied();
+        }
+    }
+    None
+}
+
+fn extract_simple_shell_read_path(command: &str) -> Option<String> {
+    let command = command
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with("printf "))?;
+    let tokens = split_shell_words(command)?;
+    classify_simple_shell_read_tokens(&tokens)
+}
+
+fn classify_simple_shell_read_tokens(tokens: &[String]) -> Option<String> {
+    let first = tokens.first()?.as_str();
+    match first {
+        "cat" => first_non_option_path(&tokens[1..]),
+        "head" | "tail" => {
+            first_non_option_path_with_arg_flags(&tokens[1..], &["-n", "-c", "--lines", "--bytes"])
+        }
+        "sed" => last_non_option_path_with_arg_flags(&tokens[1..], &["-e", "-f"]),
+        _ => None,
+    }
+}
+
+fn first_non_option_path(tokens: &[String]) -> Option<String> {
+    tokens
+        .iter()
+        .find(|token| !token.starts_with('-') && token.as_str() != "-")
+        .cloned()
+}
+
+fn first_non_option_path_with_arg_flags(
+    tokens: &[String],
+    flags_with_arg: &[&str],
+) -> Option<String> {
+    let mut idx = 0;
+    while idx < tokens.len() {
+        let token = tokens[idx].as_str();
+        if token == "--" {
+            return tokens.get(idx + 1).cloned();
+        }
+        if flags_with_arg.contains(&token) {
+            idx += 2;
+            continue;
+        }
+        if token.starts_with('-') {
+            idx += 1;
+            continue;
+        }
+        if token != "-" {
+            return Some(tokens[idx].clone());
+        }
+        idx += 1;
+    }
+    None
+}
+
+fn last_non_option_path_with_arg_flags(
+    tokens: &[String],
+    flags_with_arg: &[&str],
+) -> Option<String> {
+    let mut last_path = None;
+    let mut idx = 0;
+    while idx < tokens.len() {
+        let token = tokens[idx].as_str();
+        if token == "--" {
+            last_path = tokens.get(idx + 1).cloned();
+            break;
+        }
+        if flags_with_arg.contains(&token) {
+            idx += 2;
+            continue;
+        }
+        if token.starts_with('-') {
+            idx += 1;
+            continue;
+        }
+        if token != "-" {
+            last_path = Some(tokens[idx].clone());
+        }
+        idx += 1;
+    }
+    last_path
+}
+
+fn split_shell_words(command: &str) -> Option<Vec<String>> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let chars = command.chars();
+    let mut quote = None;
+    let mut escaped = false;
+
+    for ch in chars {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
+        match quote {
+            Some('\'') => {
+                if ch == '\'' {
+                    quote = None;
+                } else {
+                    current.push(ch);
+                }
+            }
+            Some('"') => {
+                if ch == '"' {
+                    quote = None;
+                } else if ch == '\\' {
+                    escaped = true;
+                } else {
+                    current.push(ch);
+                }
+            }
+            _ => match ch {
+                '\'' | '"' => quote = Some(ch),
+                '\\' => escaped = true,
+                c if c.is_whitespace() => {
+                    if !current.is_empty() {
+                        tokens.push(std::mem::take(&mut current));
+                    }
+                }
+                _ => current.push(ch),
+            },
+        }
+    }
+
+    if escaped || quote.is_some() {
+        return None;
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    Some(tokens)
+}
+
+fn pre_tool_use_deny_output(response: &MemoCheckResponse) -> String {
+    let last_read = response
+        .last_read_ago_seconds
+        .map(|seconds| format!(" Last read {seconds}s ago."))
+        .unwrap_or_default();
+    let token_hint = response
+        .tokens_at_last_read
+        .map(|tokens| format!(" Approximate prior read size: {tokens} tokens."))
+        .unwrap_or_default();
+    serde_json::to_string(&json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": format!(
+                "TriSeek memo: {} is unchanged in this session. Reuse the content already in context instead of reading it again.",
+                response.path
+            ),
+            "additionalContext": format!(
+                "TriSeek memo_check for {} returned skip_reread. The file is fresh and unchanged since the last successful read in this session. Use the previously read content already in conversation context instead of issuing another Read tool call.{}{}",
+                response.path,
+                last_read,
+                token_hint
+            )
+        }
+    }))
+    .unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,6 +610,21 @@ mod tests {
         let payload = json!({"tool_name":"NotebookEdit"});
         let kind = tool_event_kind(&payload).unwrap();
         assert!(matches!(kind, MemoEventKind::Edit));
+    }
+
+    #[test]
+    fn infers_bash_read_event_from_parsed_command() {
+        let payload = json!({
+            "tool_name": "Bash",
+            "parsed_cmd": [
+                {
+                    "type": "read",
+                    "path": "Sundara/package.json"
+                }
+            ]
+        });
+        let kind = tool_event_kind(&payload).unwrap();
+        assert!(matches!(kind, MemoEventKind::Read));
     }
 
     #[test]
@@ -348,11 +649,71 @@ mod tests {
     }
 
     #[test]
+    fn resolves_path_from_bash_parsed_command() {
+        let payload = json!({
+            "tool_name": "Bash",
+            "parsed_cmd": [
+                {
+                    "type": "read",
+                    "path": "Sundara/package.json"
+                }
+            ]
+        });
+        assert_eq!(find_path(&payload).as_deref(), Some("Sundara/package.json"));
+    }
+
+    #[test]
+    fn resolves_path_from_shell_command_array() {
+        let payload = json!({
+            "tool_name": "Bash",
+            "command": ["/bin/zsh", "-lc", "sed -n '1,240p' Sundara/package.json"]
+        });
+        assert_eq!(find_path(&payload).as_deref(), Some("Sundara/package.json"));
+    }
+
+    #[test]
     fn estimates_tokens_from_content() {
         let payload = json!({"tool_response":{"content":"1234567890"}});
         assert_eq!(
             find_tokens(&payload, Path::new("/tmp"), Some("unused")),
             Some(3)
+        );
+    }
+
+    #[test]
+    fn pre_tool_use_output_blocks_fresh_rereads() {
+        let response = MemoCheckResponse {
+            path: "src/main.rs".to_string(),
+            status: search_core::MemoFileStatusKind::Fresh,
+            recommendation: MemoCheckRecommendation::SkipReread,
+            tokens_at_last_read: Some(42),
+            current_tokens: None,
+            last_read_ago_seconds: Some(7),
+        };
+
+        let rendered = pre_tool_use_deny_output(&response);
+        let parsed: Value = serde_json::from_str(&rendered).unwrap();
+        assert_eq!(
+            parsed.pointer("/hookSpecificOutput/hookEventName"),
+            Some(&Value::String("PreToolUse".to_string()))
+        );
+        assert_eq!(
+            parsed.pointer("/hookSpecificOutput/permissionDecision"),
+            Some(&Value::String("deny".to_string()))
+        );
+        assert!(
+            parsed
+                .pointer("/hookSpecificOutput/permissionDecisionReason")
+                .and_then(Value::as_str)
+                .unwrap()
+                .contains("src/main.rs")
+        );
+        assert!(
+            parsed
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .unwrap()
+                .contains("skip_reread")
         );
     }
 }

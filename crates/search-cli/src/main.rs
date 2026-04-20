@@ -1,3 +1,4 @@
+mod build_output;
 mod install;
 mod mcp;
 mod memo_shim;
@@ -23,6 +24,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs;
+use std::io::IsTerminal;
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -84,6 +86,8 @@ struct CommonIndexArgs {
 struct BuildArgs {
     #[command(flatten)]
     common: CommonIndexArgs,
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(Args)]
@@ -418,13 +422,36 @@ fn handle_build(args: BuildArgs) -> Result<()> {
         args.common.index_dir.as_deref(),
     )?;
     let index_dir = resolve_index_dir(&repo_root, args.common.index_dir.as_deref())?;
-    let metadata = SearchEngine::build(&repo_root, Some(&index_dir), &config)?;
-    print_json(&BuildOutput {
-        action: "build",
-        index_dir: index_dir.display().to_string(),
-        metadata,
-        generated_at: timestamp_now(),
-    })
+    let human_output = should_render_human_build(args.json);
+    let progress = if human_output { std::io::stderr().is_terminal() } else { false }
+        .then(search_index::BuildProgress::new);
+    let renderer = progress
+        .as_ref()
+        .map(|progress| build_output::BuildProgressRenderer::spawn(progress.clone()));
+    let result =
+        SearchEngine::build_with_progress(&repo_root, Some(&index_dir), &config, progress.as_ref());
+    if let Some(renderer) = renderer {
+        renderer.finish();
+    }
+    let metadata = result?;
+
+    if human_output {
+        let cols = std::env::var("COLUMNS")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok());
+        println!(
+            "{}",
+            build_output::render_build_summary(&index_dir, &metadata, cols)
+        );
+        Ok(())
+    } else {
+        print_json(&BuildOutput {
+            action: "build",
+            index_dir: index_dir.display().to_string(),
+            metadata,
+            generated_at: timestamp_now(),
+        })
+    }
 }
 
 fn handle_update(args: UpdateArgs) -> Result<()> {
@@ -863,6 +890,10 @@ fn print_json<T: Serialize>(value: &T) -> Result<()> {
     Ok(())
 }
 
+fn should_render_human_build(force_json: bool) -> bool {
+    !force_json && std::io::stdout().is_terminal()
+}
+
 fn print_human_search(response: &SearchResponse) {
     use std::io::IsTerminal as _;
     let color = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
@@ -1152,5 +1183,10 @@ mod tests {
         let resolved = canonicalize_root(Path::new("./repos/child/../project")).unwrap();
         assert_eq!(resolved, repo.canonicalize().unwrap());
         std::env::set_current_dir(original_cwd).unwrap();
+    }
+
+    #[test]
+    fn build_uses_json_when_requested() {
+        assert!(!should_render_human_build(true));
     }
 }

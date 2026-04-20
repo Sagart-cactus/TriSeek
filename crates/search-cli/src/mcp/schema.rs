@@ -17,19 +17,19 @@ pub const TOOLS: &[ToolDescriptor] = &[
     ToolDescriptor {
         name: "find_files",
         title: "Find files",
-        description: "Find files by path or filename using the TriSeek index. Returns ranked paths. Use this instead of globbing or ls to locate files.",
+        description: "Locate files by path or filename using the TriSeek index. Use this instead of `ls`, `find`, `fd`, globbing, or `rg --files` for file discovery in this repository.",
         input_schema: find_files_schema,
     },
     ToolDescriptor {
         name: "search_content",
         title: "Search file content",
-        description: "Search file content (literal or regex) across the repository using the TriSeek hybrid backend. Returns line-level matches with short previews. Use this instead of shell grep for exact code search.",
+        description: "Search repository content (literal or regex) using the TriSeek backend. Use this instead of `rg`, `grep`, or ad-hoc `sed` scans for exact code search before falling back to shell tools.",
         input_schema: search_content_schema,
     },
     ToolDescriptor {
         name: "search_path_and_content",
         title: "Search with path narrowing",
-        description: "Narrow to path constraints (glob) then search content. Use when you know which subtree to search.",
+        description: "First narrow by path glob, then search content. Prefer this over shell pipelines that combine `find`, globs, and `rg` when you already know the subtree or filename pattern.",
         input_schema: search_path_and_content_schema,
     },
     ToolDescriptor {
@@ -58,11 +58,8 @@ pub const TOOLS: &[ToolDescriptor] = &[
     },
     ToolDescriptor {
         name: "memo_check",
-        title: "Check single-file freshness (Codex active mode)",
-        description: "Check whether a single file has changed since this session last read it. \
-            Returns a `recommendation`: `skip_reread` (file unchanged — trust conversation history), \
-            `reread_with_diff` (file changed slightly, <10%), or `reread` (file changed significantly \
-            or was never read). Use on Codex before re-reading any file you have seen this session.",
+        title: "Check single-file freshness before reread",
+        description: "Before re-reading a file you already saw in this Codex session, call this tool. If `recommendation` is `skip_reread`, do not read the file again and rely on prior context. Only re-read when it returns `reread_with_diff` or `reread`.",
         input_schema: memo_check_schema,
     },
 ];

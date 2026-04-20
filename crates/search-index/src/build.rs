@@ -9,11 +9,16 @@ use crate::storage::{
 };
 use crate::walker::{
     ScanOptions, ScanSummary, ScannedFile, scan_repository, walk_repository,
-    walk_repository_parallel,
+    walk_repository_parallel_with_progress,
 };
+use rayon::prelude::*;
 use search_core::{BuildStats, FileFingerprint, IndexMetadata, RepoStats, trigrams_from_bytes};
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU8, AtomicU64, Ordering},
+};
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
@@ -31,6 +36,112 @@ impl Default for BuildConfig {
             include_binary: false,
             max_file_size: None,
             merge_threshold_ratio: 0.25,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum BuildPhase {
+    #[default]
+    Idle = 0,
+    Scanning = 1,
+    Indexing = 2,
+    Persisting = 3,
+    Finished = 4,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct BuildProgressSnapshot {
+    pub phase: BuildPhase,
+    pub tracked_files: u64,
+    pub searchable_files: u64,
+    pub searchable_bytes: u64,
+    pub total_disk_bytes: u64,
+    pub total_files: u64,
+    pub total_bytes: u64,
+    pub indexed_files: u64,
+    pub indexed_bytes: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct BuildProgress {
+    inner: Arc<BuildProgressInner>,
+}
+
+#[derive(Debug, Default)]
+struct BuildProgressInner {
+    phase: AtomicU8,
+    tracked_files: AtomicU64,
+    searchable_files: AtomicU64,
+    searchable_bytes: AtomicU64,
+    total_disk_bytes: AtomicU64,
+    total_files: AtomicU64,
+    total_bytes: AtomicU64,
+    indexed_files: AtomicU64,
+    indexed_bytes: AtomicU64,
+}
+
+impl BuildProgress {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn snapshot(&self) -> BuildProgressSnapshot {
+        BuildProgressSnapshot {
+            phase: BuildPhase::from_u8(self.inner.phase.load(Ordering::Relaxed)),
+            tracked_files: self.inner.tracked_files.load(Ordering::Relaxed),
+            searchable_files: self.inner.searchable_files.load(Ordering::Relaxed),
+            searchable_bytes: self.inner.searchable_bytes.load(Ordering::Relaxed),
+            total_disk_bytes: self.inner.total_disk_bytes.load(Ordering::Relaxed),
+            total_files: self.inner.total_files.load(Ordering::Relaxed),
+            total_bytes: self.inner.total_bytes.load(Ordering::Relaxed),
+            indexed_files: self.inner.indexed_files.load(Ordering::Relaxed),
+            indexed_bytes: self.inner.indexed_bytes.load(Ordering::Relaxed),
+        }
+    }
+
+    pub(crate) fn set_phase(&self, phase: BuildPhase) {
+        self.inner.phase.store(phase as u8, Ordering::Relaxed);
+    }
+
+    pub(crate) fn record_tracked_file(&self, file_size: u64) {
+        self.inner.tracked_files.fetch_add(1, Ordering::Relaxed);
+        self.inner
+            .total_disk_bytes
+            .fetch_add(file_size, Ordering::Relaxed);
+    }
+
+    pub(crate) fn record_searchable_file(&self, file_size: u64) {
+        self.inner.searchable_files.fetch_add(1, Ordering::Relaxed);
+        self.inner
+            .searchable_bytes
+            .fetch_add(file_size, Ordering::Relaxed);
+    }
+
+    pub(crate) fn set_index_totals(&self, total_files: u64, total_bytes: u64) {
+        self.inner.total_files.store(total_files, Ordering::Relaxed);
+        self.inner.total_bytes.store(total_bytes, Ordering::Relaxed);
+        self.inner.indexed_files.store(0, Ordering::Relaxed);
+        self.inner.indexed_bytes.store(0, Ordering::Relaxed);
+    }
+
+    pub(crate) fn record_indexed_file(&self, file_size: u64) {
+        self.inner.indexed_files.fetch_add(1, Ordering::Relaxed);
+        self.inner
+            .indexed_bytes
+            .fetch_add(file_size, Ordering::Relaxed);
+    }
+}
+
+impl BuildPhase {
+    fn from_u8(value: u8) -> Self {
+        match value {
+            1 => Self::Scanning,
+            2 => Self::Indexing,
+            3 => Self::Persisting,
+            4 => Self::Finished,
+            _ => Self::Idle,
         }
     }
 }
@@ -53,14 +164,54 @@ pub fn build_index(
     index_dir: &Path,
     config: &BuildConfig,
 ) -> Result<IndexMetadata, SearchIndexError> {
+    build_index_with_progress(repo_root, index_dir, config, None)
+}
+
+pub fn build_index_with_progress(
+    repo_root: &Path,
+    index_dir: &Path,
+    config: &BuildConfig,
+    progress: Option<&BuildProgress>,
+) -> Result<IndexMetadata, SearchIndexError> {
     let started = Instant::now();
-    let (repo_stats, files) = walk_repository_parallel(repo_root, &ScanOptions::from(config))?;
-    let mut accumulator = BuildAccumulator::new(1);
-    for file in files {
-        accumulator.push(file);
+    if let Some(progress) = progress {
+        progress.set_phase(BuildPhase::Scanning);
+    }
+    let (repo_stats, files) =
+        walk_repository_parallel_with_progress(repo_root, &ScanOptions::from(config), progress)?;
+    if let Some(progress) = progress {
+        progress.set_phase(BuildPhase::Indexing);
+        progress.set_index_totals(repo_stats.searchable_files, repo_stats.searchable_bytes);
+    }
+    let accumulator = files
+        .into_par_iter()
+        .enumerate()
+        .fold(
+            || BuildAccumulator::new(0),
+            |mut acc, (idx, file)| {
+                let doc_id = 1u32 + idx as u32;
+                let file_size = file.file_size;
+                acc.push_with_id(file, doc_id);
+                if let Some(p) = progress {
+                    p.record_indexed_file(file_size);
+                }
+                acc
+            },
+        )
+        .reduce_with(|mut a, b| {
+            a.merge(b);
+            a
+        })
+        .unwrap_or_else(|| BuildAccumulator::new(1));
+    if let Some(progress) = progress {
+        progress.set_phase(BuildPhase::Persisting);
     }
     let persisted = accumulator.finish(repo_root, repo_stats, started.elapsed().as_millis());
-    persist_full_index(index_dir, persisted)
+    let metadata = persist_full_index(index_dir, persisted)?;
+    if let Some(progress) = progress {
+        progress.set_phase(BuildPhase::Finished);
+    }
+    Ok(metadata)
 }
 
 pub fn update_index(
@@ -146,7 +297,7 @@ pub fn update_index(
         update_millis: Some(started.elapsed().as_millis()),
     };
 
-    let mut delta = build_delta_snapshot(
+    let delta = build_delta_snapshot(
         repo_root,
         scan,
         delta_files,
@@ -154,8 +305,6 @@ pub fn update_index(
         next_doc_id,
         build_stats,
     );
-    let delta_size = persist_delta(index_dir, &delta)?;
-    delta.build_stats.index_bytes = delta_size;
     let delta_size = persist_delta(index_dir, &delta)?;
     let metadata = IndexMetadata {
         schema_version: SCHEMA_VERSION,
@@ -251,7 +400,7 @@ pub fn apply_incremental_changes(
         repo_stats: base.repo_stats.clone(),
         files: vec![],
     };
-    let mut delta = build_delta_snapshot(
+    let delta = build_delta_snapshot(
         repo_root,
         fake_scan,
         delta_files,
@@ -259,8 +408,6 @@ pub fn apply_incremental_changes(
         next_doc_id,
         build_stats,
     );
-    let delta_size = persist_delta(index_dir, &delta)?;
-    delta.build_stats.index_bytes = delta_size;
     let delta_size = persist_delta(index_dir, &delta)?;
     let metadata = IndexMetadata {
         schema_version: SCHEMA_VERSION,
@@ -285,10 +432,8 @@ pub fn apply_incremental_changes(
 
 fn persist_full_index(
     index_dir: &Path,
-    mut persisted: PersistedIndex,
+    persisted: PersistedIndex,
 ) -> Result<IndexMetadata, SearchIndexError> {
-    let size = persist_base(index_dir, &persisted)?;
-    persisted.build_stats.index_bytes = size;
     let size = persist_base(index_dir, &persisted)?;
     // Also write fast binary index for mmap-based loading
     let fast_size = write_fast_index(&fast_index_path(index_dir), &persisted, None)?;
@@ -365,9 +510,7 @@ impl BuildAccumulator {
         }
     }
 
-    fn push(&mut self, file: ScannedFile) {
-        let doc_id = self.next_doc_id;
-        self.next_doc_id += 1;
+    fn push_with_id(&mut self, file: ScannedFile, doc_id: u32) {
         self.docs.push(DocumentRecord {
             doc_id,
             relative_path: file.relative_path.clone(),
@@ -399,6 +542,27 @@ impl BuildAccumulator {
                 .or_default()
                 .push(doc_id);
         }
+    }
+
+    fn merge(&mut self, other: BuildAccumulator) {
+        self.docs.extend(other.docs);
+        for (trigram, ids) in other.content_postings {
+            self.content_postings
+                .entry(trigram)
+                .or_default()
+                .extend(ids);
+        }
+        for (trigram, ids) in other.path_postings {
+            self.path_postings.entry(trigram).or_default().extend(ids);
+        }
+        for (name, ids) in other.filename_map {
+            self.filename_map.entry(name).or_default().extend(ids);
+        }
+        for (ext, ids) in other.extension_map {
+            self.extension_map.entry(ext).or_default().extend(ids);
+        }
+        self.total_postings += other.total_postings;
+        self.next_doc_id = self.next_doc_id.max(other.next_doc_id);
     }
 
     fn finish(self, repo_root: &Path, repo_stats: RepoStats, build_millis: u128) -> PersistedIndex {

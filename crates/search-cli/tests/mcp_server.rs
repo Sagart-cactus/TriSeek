@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
 /// Locate the freshly built `triseek` binary next to the current test executable.
 fn triseek_binary() -> PathBuf {
@@ -283,6 +284,45 @@ impl FakeDaemon {
             .into_inner()
             .expect("fake daemon request mutex")
     }
+
+    fn wait_for_requests(&self, expected: usize, timeout: Duration) {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if self
+                .requests
+                .lock()
+                .expect("fake daemon requests mutex")
+                .len()
+                >= expected
+            {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "timed out waiting for {expected} fake-daemon request(s)"
+            );
+            thread::sleep(Duration::from_millis(25));
+        }
+    }
+}
+
+fn wait_for_index_status(
+    client: &mut McpClient,
+    predicate: impl Fn(&Value) -> bool,
+    timeout: Duration,
+) -> Value {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let status = call_tool(client, "index_status", json!({}));
+        if predicate(&status) {
+            return status;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for expected index_status, last response: {status}"
+        );
+        thread::sleep(Duration::from_millis(25));
+    }
 }
 
 #[test]
@@ -309,6 +349,13 @@ fn initialize_handshake_and_tools_list() {
         Some("triseek")
     );
     assert!(result.get("capabilities").is_some());
+    let instructions = result
+        .get("instructions")
+        .and_then(Value::as_str)
+        .expect("initialize instructions");
+    assert!(instructions.contains("memo_check"));
+    assert!(instructions.contains("skip_reread"));
+    assert!(instructions.contains("rg"));
 
     // 2. initialized notification
     client.notify("notifications/initialized", json!({}));
@@ -332,8 +379,63 @@ fn initialize_handshake_and_tools_list() {
     assert!(names.contains(&"memo_status"));
     assert!(names.contains(&"memo_session"));
     assert!(names.contains(&"memo_check"));
+    let tool_map: std::collections::HashMap<&str, &Value> = tools
+        .iter()
+        .filter_map(|tool| {
+            tool.get("name")
+                .and_then(Value::as_str)
+                .map(|name| (name, tool))
+        })
+        .collect();
+    let find_files_description = tool_map["find_files"]
+        .get("description")
+        .and_then(Value::as_str)
+        .expect("find_files description");
+    assert!(find_files_description.contains("rg --files"));
+    let memo_check_description = tool_map["memo_check"]
+        .get("description")
+        .and_then(Value::as_str)
+        .expect("memo_check description");
+    assert!(memo_check_description.contains("skip_reread"));
+    assert!(memo_check_description.contains("do not read the file again"));
 
     client.shutdown();
+}
+
+#[test]
+fn mcp_serve_registers_root_with_daemon_on_startup() {
+    let fixture = build_fixture_repo();
+    let fake_home = tempfile::tempdir().expect("fake home");
+    let daemon = FakeDaemon::start(
+        fake_home.path(),
+        vec![json!({"preloaded": true}), json!({"reloaded": true})],
+    );
+
+    let mut client = McpClient::spawn_with_home(fixture.path(), Some(fake_home.path()));
+    handshake(&mut client);
+    daemon.wait_for_requests(2, Duration::from_secs(5));
+    client.shutdown();
+
+    let requests = daemon.finish();
+    let expected_repo_root = fixture
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| fixture.path().to_path_buf());
+    assert_eq!(requests.len(), 2);
+    assert_eq!(
+        requests[0].pointer("/method").and_then(Value::as_str),
+        Some("preload_root")
+    );
+    assert_eq!(
+        requests[0]
+            .pointer("/params/target_root")
+            .and_then(Value::as_str),
+        Some(expected_repo_root.to_str().expect("fixture path str"))
+    );
+    assert_eq!(
+        requests[1].pointer("/method").and_then(Value::as_str),
+        Some("reload")
+    );
 }
 
 #[test]
@@ -487,6 +589,52 @@ fn index_status_reports_present_index() {
 }
 
 #[test]
+fn mcp_serve_bootstraps_missing_index_on_startup() {
+    let fixture = build_unindexed_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
+    handshake(&mut client);
+
+    let envelope = wait_for_index_status(
+        &mut client,
+        |status| status.get("index_present") == Some(&json!(true)),
+        Duration::from_secs(5),
+    );
+    assert_eq!(envelope.get("version"), Some(&json!("1")));
+    assert_eq!(envelope.get("index_present"), Some(&json!(true)));
+    assert_eq!(envelope.get("indexed_files"), Some(&json!(1)));
+
+    client.shutdown();
+}
+
+#[test]
+fn mcp_serve_reindexes_existing_index_on_startup() {
+    let fixture = build_fixture_repo();
+    std::fs::write(
+        fixture.path().join("src/new_feature.rs"),
+        "pub fn fresh_startup_symbol() -> bool {\n    true\n}\n",
+    )
+    .unwrap();
+
+    let mut client = McpClient::spawn(fixture.path());
+    handshake(&mut client);
+
+    let status = wait_for_index_status(
+        &mut client,
+        |status| {
+            status.get("index_present") == Some(&json!(true))
+                && status.get("index_fresh") == Some(&json!(true))
+                && status.get("indexed_files") == Some(&json!(4))
+        },
+        Duration::from_secs(5),
+    );
+    assert_eq!(status.get("index_present"), Some(&json!(true)));
+    assert_eq!(status.get("index_fresh"), Some(&json!(true)));
+    assert_eq!(status.get("indexed_files"), Some(&json!(4)));
+
+    client.shutdown();
+}
+
+#[test]
 fn reindex_incremental_completes() {
     let fixture = build_fixture_repo();
     let mut client = McpClient::spawn(fixture.path());
@@ -501,29 +649,6 @@ fn reindex_incremental_completes() {
     assert_eq!(envelope.get("completed"), Some(&json!(true)));
     assert_eq!(envelope.get("mode"), Some(&json!("incremental")));
     assert!(envelope.get("elapsed_ms").is_some());
-
-    client.shutdown();
-}
-
-#[test]
-fn reindex_incremental_bootstraps_missing_index() {
-    let fixture = build_unindexed_fixture_repo();
-    let mut client = McpClient::spawn(fixture.path());
-    let _ = client.call(
-        "initialize",
-        json!({"protocolVersion": "2025-06-18", "clientInfo": {"name":"t","version":"0"}, "capabilities": {}}),
-    );
-    client.notify("notifications/initialized", json!({}));
-
-    let envelope = call_tool(&mut client, "reindex", json!({ "mode": "incremental" }));
-    assert_eq!(envelope.get("version"), Some(&json!("1")));
-    assert_eq!(envelope.get("completed"), Some(&json!(true)));
-    assert_eq!(envelope.get("mode"), Some(&json!("incremental")));
-    assert_eq!(envelope.get("rebuilt_full"), Some(&json!(true)));
-
-    let status = call_tool(&mut client, "index_status", json!({}));
-    assert_eq!(status.get("index_present"), Some(&json!(true)));
-    assert_eq!(status.get("index_fresh"), Some(&json!(true)));
 
     client.shutdown();
 }
@@ -778,19 +903,21 @@ fn reindex_invalidates_search_cache() {
 
 #[test]
 fn ripgrep_fallback_bypasses_cache() {
-    // An unindexed repo forces the ripgrep fallback path.
-    // Those results must never be cached (strategy == "ripgrep_fallback").
+    // Non-indexed fallback results must never be cached. Depending on whether
+    // the async startup build has finished, the same weak query can route
+    // through ripgrep or direct-scan.
     let fixture = build_unindexed_fixture_repo();
     let mut client = McpClient::spawn(fixture.path());
     handshake(&mut client);
 
-    let args = json!({ "query": "fallback", "mode": "literal" });
+    let args = json!({ "query": "fn", "mode": "literal" });
 
     let first = call_tool(&mut client, "search_content", args.clone());
+    assert_eq!(first.get("fallback_used"), Some(&json!(true)));
     assert_eq!(
         first.get("cache").and_then(Value::as_str),
         Some("bypass"),
-        "ripgrep fallback results must not be cached"
+        "fallback results must not be cached"
     );
 
     // Running again should still be bypass, not hit.
@@ -807,6 +934,8 @@ fn memo_check_uses_meta_session_id_and_forwards_to_daemon() {
     let daemon = FakeDaemon::start(
         fake_home.path(),
         vec![
+            json!({"preloaded": true}),
+            json!({"reloaded": true}),
             json!({"ok": true}),
             json!({
                 "path": "src/auth/router.rs",
@@ -820,6 +949,7 @@ fn memo_check_uses_meta_session_id_and_forwards_to_daemon() {
 
     let mut client = McpClient::spawn_with_home(fixture.path(), Some(fake_home.path()));
     handshake(&mut client);
+    daemon.wait_for_requests(2, Duration::from_secs(5));
 
     let response = call_tool_with_meta(
         &mut client,
@@ -841,37 +971,45 @@ fn memo_check_uses_meta_session_id_and_forwards_to_daemon() {
         .unwrap_or_else(|_| fixture.path().to_path_buf());
     assert_eq!(
         requests.len(),
-        2,
-        "memo_check should make 2 daemon RPC calls"
+        4,
+        "memo_check should make preload_root + reload + 2 daemon RPC calls"
     );
     assert_eq!(
         requests[0].pointer("/method").and_then(Value::as_str),
+        Some("preload_root")
+    );
+    assert_eq!(
+        requests[1].pointer("/method").and_then(Value::as_str),
+        Some("reload")
+    );
+    assert_eq!(
+        requests[2].pointer("/method").and_then(Value::as_str),
         Some("memo_session_start")
     );
     assert_eq!(
-        requests[0]
+        requests[2]
             .pointer("/params/session_id")
             .and_then(Value::as_str),
         Some("codex-meta-session")
     );
     assert_eq!(
-        requests[0]
+        requests[2]
             .pointer("/params/repo_root")
             .and_then(Value::as_str),
         Some(expected_repo_root.to_str().expect("fixture path str"))
     );
     assert_eq!(
-        requests[1].pointer("/method").and_then(Value::as_str),
+        requests[3].pointer("/method").and_then(Value::as_str),
         Some("memo_check")
     );
     assert_eq!(
-        requests[1]
+        requests[3]
             .pointer("/params/session_id")
             .and_then(Value::as_str),
         Some("codex-meta-session")
     );
     assert_eq!(
-        requests[1].pointer("/params/path").and_then(Value::as_str),
+        requests[3].pointer("/params/path").and_then(Value::as_str),
         Some("src/auth/router.rs")
     );
 }
@@ -883,6 +1021,8 @@ fn memo_status_uses_meta_session_id_and_returns_current_tokens() {
     let daemon = FakeDaemon::start(
         fake_home.path(),
         vec![
+            json!({"preloaded": true}),
+            json!({"reloaded": true}),
             json!({"ok": true}),
             json!({
                 "session_id": "claude-meta-session",
@@ -900,6 +1040,7 @@ fn memo_status_uses_meta_session_id_and_returns_current_tokens() {
 
     let mut client = McpClient::spawn_with_home(fixture.path(), Some(fake_home.path()));
     handshake(&mut client);
+    daemon.wait_for_requests(2, Duration::from_secs(5));
 
     let response = call_tool_with_meta(
         &mut client,
@@ -923,17 +1064,29 @@ fn memo_status_uses_meta_session_id_and_returns_current_tokens() {
 
     let requests = daemon.finish();
     assert_eq!(
-        requests[0]
+        requests[1].pointer("/method").and_then(Value::as_str),
+        Some("reload")
+    );
+    assert_eq!(
+        requests[2]
             .pointer("/params/session_id")
             .and_then(Value::as_str),
         Some("claude-meta-session")
     );
     assert_eq!(
-        requests[1].pointer("/method").and_then(Value::as_str),
+        requests[0].pointer("/method").and_then(Value::as_str),
+        Some("preload_root")
+    );
+    assert_eq!(
+        requests[2].pointer("/method").and_then(Value::as_str),
+        Some("memo_session_start")
+    );
+    assert_eq!(
+        requests[3].pointer("/method").and_then(Value::as_str),
         Some("memo_status")
     );
     assert_eq!(
-        requests[1]
+        requests[3]
             .pointer("/params/files/0")
             .and_then(Value::as_str),
         Some("src/auth/router.rs")

@@ -263,6 +263,7 @@ fn reindex(state: &McpState, arguments: &Value) -> ToolOutcome {
     let repo_root = state.repo_root();
     let index_dir = state.index_dir();
     let config = BuildConfig::default();
+    let _mutation = state.start_index_mutation();
     let index_present = index_exists(&index_dir);
 
     let started = std::time::Instant::now();

@@ -4,7 +4,8 @@ TriSeek Memo tracks which files your agent has read this session and detects whe
 On **Claude Code**, **OpenCode**, and **Pi**, Memo works passively — hooks fire automatically after every Read and Edit tool call.
 
 On **Codex**, hooks currently fire only for the Bash tool (upstream issue [#16732](https://github.com/openai/codex/issues/16732)).
-Until that is resolved, Memo runs in **active mode**: you call `memo_check` yourself before re-reading a file.
+TriSeek observes Bash-based shell reads automatically when Codex emits parsed command metadata, but built-in Codex `Read`
+tool calls still need **active mode**: call `memo_check` yourself before re-reading a file.
 
 ---
 
@@ -51,7 +52,7 @@ Add this to your Codex system prompt or per-session instruction:
 
 ---
 
-## Passive mode will be available once Codex hooks mature
+## Full passive mode will be available once Codex hooks mature
 
 Once Codex fires hooks for non-Bash tools (issue #16732), `triseek install codex` will automatically
 upgrade to passive mode and this explicit `memo_check` step will no longer be needed.

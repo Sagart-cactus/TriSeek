@@ -1,4 +1,4 @@
-use crate::build::BuildConfig;
+use crate::build::{BuildConfig, BuildProgress};
 use crate::error::SearchIndexError;
 use ignore::WalkBuilder;
 use search_core::{RepoStats, classify_repo};
@@ -228,10 +228,10 @@ where
     Ok(repo_stats)
 }
 
-/// Parallel walk for index building — collects all files using multiple threads.
-pub fn walk_repository_parallel(
+pub(crate) fn walk_repository_parallel_with_progress(
     repo_root: &Path,
     options: &ScanOptions,
+    progress: Option<&BuildProgress>,
 ) -> Result<(RepoStats, Vec<ScannedFile>), SearchIndexError> {
     let repo_name = repo_root
         .file_name()
@@ -241,7 +241,7 @@ pub fn walk_repository_parallel(
 
     let mut builder = WalkBuilder::new(repo_root);
     configure_walk_builder(&mut builder, options.include_hidden);
-    builder.threads(num_cpus::get().min(8));
+    builder.threads(num_cpus::get());
 
     let files = Mutex::new(Vec::new());
     let stats = Mutex::new(RepoStats {
@@ -252,9 +252,15 @@ pub fn walk_repository_parallel(
     });
     let languages = Mutex::new(HashMap::<String, u64>::new());
     let opts = options.clone();
+    let progress = progress.cloned();
 
     builder.build_parallel().run(|| {
-        Box::new(|entry| {
+        let opts = opts.clone();
+        let progress = progress.clone();
+        let stats = &stats;
+        let files = &files;
+        let languages = &languages;
+        Box::new(move |entry| {
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(_) => return ignore::WalkState::Continue,
@@ -287,6 +293,10 @@ pub fn walk_repository_parallel(
                             )
                             .or_default() += 1;
                     }
+                    if let Some(p) = progress.as_ref() {
+                        p.record_tracked_file(file.file_size);
+                        p.record_searchable_file(file.file_size);
+                    }
                     files.lock().unwrap().push(file);
                 }
                 Ok(Some(CandidateFile::Skipped { size, binary })) => {
@@ -296,10 +306,12 @@ pub fn walk_repository_parallel(
                     if binary {
                         s.skipped_binary_files += 1;
                     }
+                    if let Some(p) = progress.as_ref() {
+                        p.record_tracked_file(size);
+                    }
                 }
                 Ok(None) | Err(_) => {}
             }
-
             ignore::WalkState::Continue
         })
     });
