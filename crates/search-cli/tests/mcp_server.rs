@@ -110,10 +110,22 @@ struct McpClient {
 
 impl McpClient {
     fn spawn(repo: &Path) -> Self {
-        Self::spawn_with_home(repo, None)
+        Self::spawn_with_home_and_env(repo, None, &[])
     }
 
     fn spawn_with_home(repo: &Path, home: Option<&Path>) -> Self {
+        Self::spawn_with_home_and_env(repo, home, &[])
+    }
+
+    fn spawn_without_startup_sync(repo: &Path) -> Self {
+        Self::spawn_with_home_and_env(repo, None, &[("TRISEEK_MCP_DISABLE_STARTUP_SYNC", "1")])
+    }
+
+    fn spawn_with_home_and_env(
+        repo: &Path,
+        home: Option<&Path>,
+        extra_env: &[(&str, &str)],
+    ) -> Self {
         let binary = triseek_binary();
         let index_dir = repo.join(".triseek-index");
         assert!(
@@ -135,6 +147,9 @@ impl McpClient {
         if let Some(home) = home {
             command.env("HOME", home);
             command.env("USERPROFILE", home);
+        }
+        for (key, value) in extra_env {
+            command.env(key, value);
         }
         let mut child = command.spawn().expect("spawn triseek mcp serve");
         let stdin = child.stdin.take().expect("stdin");
@@ -902,15 +917,15 @@ fn reindex_invalidates_search_cache() {
 }
 
 #[test]
-fn ripgrep_fallback_bypasses_cache() {
-    // Non-indexed fallback results must never be cached. Depending on whether
-    // the async startup build has finished, the same weak query can route
-    // through ripgrep or direct-scan.
+fn non_indexed_fallback_bypasses_cache() {
+    // Non-indexed fallback results must never be cached. Disable startup sync
+    // so this covers fallback behavior without depending on `rg` being
+    // installed on CI or racing the background index build.
     let fixture = build_unindexed_fixture_repo();
-    let mut client = McpClient::spawn(fixture.path());
+    let mut client = McpClient::spawn_without_startup_sync(fixture.path());
     handshake(&mut client);
 
-    let args = json!({ "query": "fn", "mode": "literal" });
+    let args = json!({ "query": "McpState", "mode": "literal" });
 
     let first = call_tool(&mut client, "search_content", args.clone());
     assert_eq!(first.get("fallback_used"), Some(&json!(true)));

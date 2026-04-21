@@ -225,9 +225,14 @@ fn index_status(state: &McpState, _arguments: &Value) -> ToolOutcome {
                 payload.insert("routing_hint".into(), json!("indexed_default"));
             }
             Err(err) => {
-                return ToolOutcome::Error(McpToolError::backend_failure(format!(
-                    "failed to read index metadata: {err}"
-                )));
+                if !state.index_sync_in_progress() {
+                    return ToolOutcome::Error(McpToolError::backend_failure(format!(
+                        "failed to read index metadata: {err}"
+                    )));
+                }
+                payload.insert("index_present".into(), json!(false));
+                payload.insert("index_fresh".into(), json!(false));
+                payload.insert("routing_hint".into(), json!("index_syncing"));
             }
         }
     } else {
