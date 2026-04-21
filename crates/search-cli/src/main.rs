@@ -423,8 +423,12 @@ fn handle_build(args: BuildArgs) -> Result<()> {
     )?;
     let index_dir = resolve_index_dir(&repo_root, args.common.index_dir.as_deref())?;
     let human_output = should_render_human_build(args.json);
-    let progress = if human_output { std::io::stderr().is_terminal() } else { false }
-        .then(search_index::BuildProgress::new);
+    let progress = if human_output {
+        std::io::stderr().is_terminal()
+    } else {
+        false
+    }
+    .then(search_index::BuildProgress::new);
     let renderer = progress
         .as_ref()
         .map(|progress| build_output::BuildProgressRenderer::spawn(progress.clone()));

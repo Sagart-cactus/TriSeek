@@ -92,6 +92,7 @@ impl MemoState {
             }
             MemoEventKind::PreCompact => {
                 session.compaction_count += 1;
+                session.files.clear();
             }
             MemoEventKind::Edit => {
                 if let Some(ref path) = params.path {
@@ -376,7 +377,10 @@ fn read_disk_hash(path: &Path) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use search_core::{MemoEventKind, MemoObserveParams, MemoSessionParams, MemoStatusParams};
+    use search_core::{
+        MemoCheckParams, MemoCheckRecommendation, MemoEventKind, MemoObserveParams,
+        MemoSessionParams, MemoStatusParams,
+    };
     use std::time::Duration;
 
     #[test]
@@ -513,6 +517,144 @@ mod tests {
                 MemoFileStatusKind::Stale
             ));
         }
+    }
+
+    #[test]
+    fn pre_compact_invalidates_session_file_map() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let file = repo.join("lib.rs");
+        fs::write(&file, "pub fn hello() {}\n").unwrap();
+        let hash = read_disk_hash(&file).unwrap();
+        let memo = MemoState::new(Duration::from_secs(600));
+        let repo_str = repo.display().to_string();
+        let session_id = "compact-session".to_string();
+
+        memo.observe(&MemoObserveParams {
+            session_id: session_id.clone(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::Read,
+            path: Some("lib.rs".to_string()),
+            content_hash: Some(hash),
+            tokens: Some(5),
+        });
+
+        let pre = memo.check(&MemoCheckParams {
+            session_id: session_id.clone(),
+            repo_root: repo_str.clone(),
+            path: "lib.rs".to_string(),
+        });
+        assert!(matches!(pre.status, MemoFileStatusKind::Fresh));
+        assert!(matches!(
+            pre.recommendation,
+            MemoCheckRecommendation::SkipReread
+        ));
+
+        memo.observe(&MemoObserveParams {
+            session_id: session_id.clone(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::PreCompact,
+            path: None,
+            content_hash: None,
+            tokens: None,
+        });
+
+        let post = memo.check(&MemoCheckParams {
+            session_id: session_id.clone(),
+            repo_root: repo_str.clone(),
+            path: "lib.rs".to_string(),
+        });
+        assert!(
+            matches!(post.status, MemoFileStatusKind::Unknown),
+            "after PreCompact, memo must not claim the file is Fresh"
+        );
+        assert!(
+            matches!(post.recommendation, MemoCheckRecommendation::Reread),
+            "after PreCompact, recommendation must be Reread"
+        );
+
+        let session = memo.session(&MemoSessionParams {
+            session_id: session_id.clone(),
+            repo_root: None,
+        });
+        assert_eq!(session.compaction_count, 1);
+        assert_eq!(session.tracked_files, 0);
+        assert_eq!(session.total_reads, 1);
+        assert_eq!(session.redundant_reads_prevented, 0);
+        assert_eq!(session.tokens_saved, 0);
+
+        memo.observe(&MemoObserveParams {
+            session_id: session_id.clone(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::Read,
+            path: Some("lib.rs".to_string()),
+            content_hash: Some(hash),
+            tokens: Some(5),
+        });
+
+        let relearned = memo.check(&MemoCheckParams {
+            session_id,
+            repo_root: repo_str,
+            path: "lib.rs".to_string(),
+        });
+        assert!(matches!(relearned.status, MemoFileStatusKind::Fresh));
+        assert!(matches!(
+            relearned.recommendation,
+            MemoCheckRecommendation::SkipReread
+        ));
+    }
+
+    #[test]
+    fn pre_compact_only_invalidates_observing_session() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let file = repo.join("shared.rs");
+        fs::write(&file, "pub fn shared() {}\n").unwrap();
+        let hash = read_disk_hash(&file).unwrap();
+        let memo = MemoState::new(Duration::from_secs(600));
+        let repo_str = repo.display().to_string();
+
+        for session_id in ["session-a", "session-b"] {
+            memo.observe(&MemoObserveParams {
+                session_id: session_id.to_string(),
+                repo_root: repo_str.clone(),
+                event: MemoEventKind::Read,
+                path: Some("shared.rs".to_string()),
+                content_hash: Some(hash),
+                tokens: Some(6),
+            });
+        }
+
+        memo.observe(&MemoObserveParams {
+            session_id: "session-a".to_string(),
+            repo_root: repo_str.clone(),
+            event: MemoEventKind::PreCompact,
+            path: None,
+            content_hash: None,
+            tokens: None,
+        });
+
+        let session_a = memo.check(&MemoCheckParams {
+            session_id: "session-a".to_string(),
+            repo_root: repo_str.clone(),
+            path: "shared.rs".to_string(),
+        });
+        assert!(matches!(session_a.status, MemoFileStatusKind::Unknown));
+        assert!(matches!(
+            session_a.recommendation,
+            MemoCheckRecommendation::Reread
+        ));
+
+        let session_b = memo.check(&MemoCheckParams {
+            session_id: "session-b".to_string(),
+            repo_root: repo_str,
+            path: "shared.rs".to_string(),
+        });
+        assert!(matches!(session_b.status, MemoFileStatusKind::Fresh));
+        assert!(matches!(
+            session_b.recommendation,
+            MemoCheckRecommendation::SkipReread
+        ));
     }
 
     // Replay a synthetic multi-file, multi-edit trace through MemoState and verify
