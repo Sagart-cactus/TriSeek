@@ -8,7 +8,9 @@
 
 use anyhow::{Context, Result};
 use search_core::{DAEMON_PORT_FILE, DaemonRootParams, RpcRequest, RpcResponse};
-use search_index::{BuildConfig, SearchEngine, daemon_dir, default_index_dir, index_exists};
+use search_index::{
+    BuildConfig, SearchEngine, UpdateOutcome, daemon_dir, default_index_dir, index_exists,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, StdinLock, StdoutLock, Write};
@@ -29,6 +31,7 @@ use crate::output_format;
 const PROTOCOL_VERSION: &str = "2025-06-18";
 const SERVER_NAME: &str = "triseek";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
+const DISABLE_STARTUP_SYNC_ENV: &str = "TRISEEK_MCP_DISABLE_STARTUP_SYNC";
 
 pub struct McpState {
     repo_root: PathBuf,
@@ -94,6 +97,16 @@ impl McpState {
         f(guard.as_ref())
     }
 
+    pub fn should_bypass_index_for_startup_sync(&self) -> bool {
+        if !self.index_sync_in_progress.load(Ordering::Relaxed) {
+            return false;
+        }
+        self.cached_engine
+            .lock()
+            .expect("MCP cached engine mutex poisoned")
+            .is_none()
+    }
+
     pub fn invalidate_cached_engine(&self) {
         if let Ok(mut guard) = self.cached_engine.lock() {
             *guard = None;
@@ -104,6 +117,10 @@ impl McpState {
     pub fn set_index_sync_in_progress(&self, in_progress: bool) {
         self.index_sync_in_progress
             .store(in_progress, Ordering::Relaxed);
+    }
+
+    pub fn index_sync_in_progress(&self) -> bool {
+        self.index_sync_in_progress.load(Ordering::Relaxed)
     }
 
     pub fn prime_cached_engine(&self) -> Result<bool> {
@@ -149,7 +166,14 @@ pub fn run(repo_root: &Path, index_dir: Option<&Path>) -> Result<()> {
         }
         register_root_with_daemon(state.as_ref());
     }
-    spawn_startup_sync(Arc::clone(&state), index_was_present);
+    if std::env::var_os(DISABLE_STARTUP_SYNC_ENV).is_some() {
+        eprintln!(
+            "triseek mcp: startup sync disabled by {DISABLE_STARTUP_SYNC_ENV}; repo_root={}",
+            state.repo_root().display()
+        );
+    } else {
+        spawn_startup_sync(Arc::clone(&state), index_was_present);
+    }
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut reader = BufReader::new(stdin.lock());
@@ -210,7 +234,9 @@ fn sync_index_on_startup(state: &McpState) -> bool {
         eprintln!("triseek mcp: refreshing index for {}", repo_root.display());
         match SearchEngine::update(&repo_root, Some(&index_dir), &config) {
             Ok(outcome) => {
-                state.invalidate_cached_engine();
+                if startup_update_changed_index(&outcome) {
+                    state.invalidate_cached_engine();
+                }
                 eprintln!(
                     "triseek mcp: index refresh complete (rebuilt_full={} indexed_files={})",
                     outcome.rebuilt_full, outcome.metadata.build_stats.docs_indexed
@@ -248,6 +274,12 @@ fn sync_index_on_startup(state: &McpState) -> bool {
             }
         }
     }
+}
+
+fn startup_update_changed_index(outcome: &UpdateOutcome) -> bool {
+    outcome.rebuilt_full
+        || outcome.metadata.delta_docs > 0
+        || outcome.metadata.delta_removed_paths > 0
 }
 
 fn register_root_with_daemon(state: &McpState) {
