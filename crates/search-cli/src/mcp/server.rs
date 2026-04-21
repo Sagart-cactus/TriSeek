@@ -94,6 +94,16 @@ impl McpState {
         f(guard.as_ref())
     }
 
+    pub fn should_bypass_index_for_startup_sync(&self) -> bool {
+        if !self.index_sync_in_progress.load(Ordering::Relaxed) {
+            return false;
+        }
+        self.cached_engine
+            .lock()
+            .expect("MCP cached engine mutex poisoned")
+            .is_none()
+    }
+
     pub fn invalidate_cached_engine(&self) {
         if let Ok(mut guard) = self.cached_engine.lock() {
             *guard = None;

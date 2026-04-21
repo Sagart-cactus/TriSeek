@@ -567,16 +567,24 @@ fn run_and_envelope(
     }
 
     // Execute search.
-    let executed = match state.with_cached_engine(|indexed_engine| {
-        search_runner::execute_search_with_engine(
-            &repo_root,
-            &index_dir,
-            request,
-            /* repeated_session_hint */ true,
+    let executed_result = if state.should_bypass_index_for_startup_sync() {
+        search_runner::execute_search_without_index(
+            &repo_root, &index_dir, request, /* repeated_session_hint */ true,
             /* summary_only */ false,
-            indexed_engine,
         )
-    }) {
+    } else {
+        state.with_cached_engine(|indexed_engine| {
+            search_runner::execute_search_with_engine(
+                &repo_root,
+                &index_dir,
+                request,
+                /* repeated_session_hint */ true,
+                /* summary_only */ false,
+                indexed_engine,
+            )
+        })
+    };
+    let executed = match executed_result {
         Ok(v) => v,
         Err(err) => {
             return ToolOutcome::Error(McpToolError::backend_failure(format!(

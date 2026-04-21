@@ -55,7 +55,44 @@ pub fn execute_search_with_engine(
     summary_only: bool,
     indexed_engine: Option<&SearchEngine>,
 ) -> Result<ExecutedSearch> {
-    let index_available = index_exists(index_dir);
+    execute_search_inner(
+        repo_root,
+        index_dir,
+        request,
+        repeated_session_hint,
+        summary_only,
+        indexed_engine,
+        index_exists(index_dir),
+    )
+}
+
+pub fn execute_search_without_index(
+    repo_root: &Path,
+    index_dir: &Path,
+    request: &QueryRequest,
+    repeated_session_hint: bool,
+    summary_only: bool,
+) -> Result<ExecutedSearch> {
+    execute_search_inner(
+        repo_root,
+        index_dir,
+        request,
+        repeated_session_hint,
+        summary_only,
+        None,
+        false,
+    )
+}
+
+fn execute_search_inner(
+    repo_root: &Path,
+    index_dir: &Path,
+    request: &QueryRequest,
+    repeated_session_hint: bool,
+    summary_only: bool,
+    indexed_engine: Option<&SearchEngine>,
+    index_available: bool,
+) -> Result<ExecutedSearch> {
     let index_metadata = if index_available {
         Some(read_index_metadata(index_dir).with_context(|| {
             format!("failed to read index metadata from {}", index_dir.display())
