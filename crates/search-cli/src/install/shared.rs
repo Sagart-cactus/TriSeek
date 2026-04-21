@@ -265,17 +265,18 @@ pub fn upsert_codex_hooks(existing: Option<&str>, binary: &str) -> Result<String
         .as_object_mut()
         .ok_or_else(|| anyhow::anyhow!("existing Codex `hooks` is not an object"))?;
 
+    let command = quote_for_shell(binary);
     upsert_codex_hook_event(
         hooks,
         "PostToolUse",
         "Bash|Read|Edit|Write",
-        &[binary, "memo-observe", "--event", "post-tool-use"],
+        &format!("{command} memo-observe --event post-tool-use"),
     )?;
     upsert_codex_hook_event(
         hooks,
         "SessionStart",
         "startup|resume",
-        &[binary, "memo-observe", "--event", "session-start"],
+        &format!("{command} memo-observe --event session-start"),
     )?;
 
     Ok(serde_json::to_string_pretty(&root)? + "\n")
@@ -539,7 +540,7 @@ fn upsert_codex_hook_event(
     hooks: &mut Map<String, Value>,
     event: &str,
     matcher: &str,
-    command: &[&str],
+    command: &str,
 ) -> Result<()> {
     let groups = hooks
         .entry(event.to_string())
@@ -553,7 +554,7 @@ fn upsert_codex_hook_event(
         "hooks": [{
             "type": "command",
             "command": command,
-            "timeout": 5000
+            "timeout": 5
         }]
     }));
     Ok(())
@@ -711,8 +712,15 @@ args = ["mcp", "serve"]
     #[test]
     fn upsert_and_remove_codex_hooks_round_trip() {
         let out = upsert_codex_hooks(None, "/bin/triseek").unwrap();
+        let parsed: Value = serde_json::from_str(&out).unwrap();
+        let command_hook = &parsed["hooks"]["PostToolUse"][0]["hooks"][0];
         assert_eq!(codex_hooks_status(&out).unwrap(), (true, true));
         assert!(out.contains("\"matcher\": \"Bash|Read|Edit|Write\""));
+        assert_eq!(
+            command_hook["command"],
+            "'/bin/triseek' memo-observe --event post-tool-use"
+        );
+        assert_eq!(command_hook["timeout"], 5);
         let removed = remove_codex_hooks(&out).unwrap().unwrap();
         assert_eq!(codex_hooks_status(&removed).unwrap(), (false, false));
     }
