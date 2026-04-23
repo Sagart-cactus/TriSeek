@@ -72,6 +72,8 @@ pub struct DaemonRootStatus {
     pub index_dir: String,
     pub index_available: bool,
     pub generation: u64,
+    #[serde(default)]
+    pub context_epoch: u64,
     pub delta_docs: u64,
 }
 
@@ -90,6 +92,36 @@ pub struct DaemonStatusParams {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DaemonRootParams {
     pub target_root: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchReuseCheckParams {
+    pub target_root: String,
+    pub request: QueryRequest,
+    pub recorded_generation: u64,
+    pub recorded_context_epoch: u64,
+    pub matched_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchReuseReason {
+    Unchanged,
+    ContextInvalidated,
+    ChangedMatchedPath,
+    ChangedSearchScope,
+    JournalOverflow,
+    GenerationReset,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchReuseCheckResponse {
+    pub fresh: bool,
+    pub reason: SearchReuseReason,
+    pub generation: u64,
+    pub context_epoch: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changed_paths: Vec<String>,
 }
 
 /// Parameters for the `frecency_select` method.

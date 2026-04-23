@@ -7,11 +7,13 @@
 //! `truncated` flag.
 
 use crate::mcp::errors::McpToolError;
+use crate::mcp::search_memo::SearchMemoEntry;
 use crate::mcp::server::McpState;
 use crate::search_runner::{self, ExecutedSearch};
 use search_core::{
-    CaseMode, DAEMON_PORT_FILE, MemoCheckParams, MemoSessionParams, MemoStatusParams, QueryRequest,
-    RpcRequest, RpcResponse, SearchEngineKind, SearchHit, SearchKind,
+    CaseMode, DAEMON_PORT_FILE, DaemonStatus, DaemonStatusParams, MemoCheckParams,
+    MemoSessionParams, MemoStatusParams, QueryRequest, RpcRequest, RpcResponse, SearchEngineKind,
+    SearchHit, SearchKind, SearchReuseCheckParams, SearchReuseReason,
 };
 use search_index::{BuildConfig, SearchEngine, daemon_dir, index_exists, read_index_metadata};
 use serde::Deserialize;
@@ -43,9 +45,9 @@ pub fn dispatch(
     session_id_hint: Option<&str>,
 ) -> ToolOutcome {
     match name {
-        "find_files" => find_files(state, arguments),
-        "search_content" => search_content(state, arguments),
-        "search_path_and_content" => search_path_and_content(state, arguments),
+        "find_files" => find_files(state, arguments, session_id_hint),
+        "search_content" => search_content(state, arguments, session_id_hint),
+        "search_path_and_content" => search_path_and_content(state, arguments, session_id_hint),
         "index_status" => index_status(state, arguments),
         "reindex" => reindex(state, arguments),
         "memo_status" => memo_status(state, arguments, session_id_hint),
@@ -66,9 +68,11 @@ struct FindFilesArgs {
     query: String,
     #[serde(default)]
     limit: Option<usize>,
+    #[serde(default)]
+    force_refresh: bool,
 }
 
-fn find_files(state: &McpState, arguments: &Value) -> ToolOutcome {
+fn find_files(state: &McpState, arguments: &Value, session_id_hint: Option<&str>) -> ToolOutcome {
     let args: FindFilesArgs = match deserialize_args(arguments) {
         Ok(args) => args,
         Err(err) => return ToolOutcome::Error(err),
@@ -89,7 +93,15 @@ fn find_files(state: &McpState, arguments: &Value) -> ToolOutcome {
         ..QueryRequest::default()
     };
 
-    run_and_envelope(state, "find_files", &request, limit, path_result_mapper)
+    run_and_envelope(
+        state,
+        "find_files",
+        &request,
+        limit,
+        path_result_mapper,
+        args.force_refresh,
+        session_id_hint,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -103,9 +115,15 @@ struct SearchContentArgs {
     mode: Option<String>,
     #[serde(default)]
     limit: Option<usize>,
+    #[serde(default)]
+    force_refresh: bool,
 }
 
-fn search_content(state: &McpState, arguments: &Value) -> ToolOutcome {
+fn search_content(
+    state: &McpState,
+    arguments: &Value,
+    session_id_hint: Option<&str>,
+) -> ToolOutcome {
     let args: SearchContentArgs = match deserialize_args(arguments) {
         Ok(args) => args,
         Err(err) => return ToolOutcome::Error(err),
@@ -136,6 +154,8 @@ fn search_content(state: &McpState, arguments: &Value) -> ToolOutcome {
         &request,
         limit,
         content_result_mapper,
+        args.force_refresh,
+        session_id_hint,
     )
 }
 
@@ -151,9 +171,15 @@ struct SearchPathContentArgs {
     mode: Option<String>,
     #[serde(default)]
     limit: Option<usize>,
+    #[serde(default)]
+    force_refresh: bool,
 }
 
-fn search_path_and_content(state: &McpState, arguments: &Value) -> ToolOutcome {
+fn search_path_and_content(
+    state: &McpState,
+    arguments: &Value,
+    session_id_hint: Option<&str>,
+) -> ToolOutcome {
     let args: SearchPathContentArgs = match deserialize_args(arguments) {
         Ok(args) => args,
         Err(err) => return ToolOutcome::Error(err),
@@ -190,6 +216,8 @@ fn search_path_and_content(state: &McpState, arguments: &Value) -> ToolOutcome {
         &request,
         limit,
         content_result_mapper,
+        args.force_refresh,
+        session_id_hint,
     )
 }
 
@@ -468,6 +496,30 @@ fn connect_to_daemon() -> Option<TcpStream> {
     TcpStream::connect_timeout(&addr, Duration::from_millis(250)).ok()
 }
 
+fn try_daemon_rpc(method: &str, params: Value) -> Option<Value> {
+    let mut stream = connect_to_daemon()?;
+    let req = RpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: 1,
+        method: method.to_string(),
+        params,
+    };
+    writeln!(stream, "{}", serde_json::to_string(&req).ok()?).ok()?;
+    let reader = BufReader::new(stream.try_clone().ok()?);
+    for line in reader.lines() {
+        let line = line.ok()?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let resp: RpcResponse = serde_json::from_str(&line).ok()?;
+        if resp.error.is_some() {
+            return None;
+        }
+        return resp.result;
+    }
+    None
+}
+
 fn daemon_rpc(method: &str, params: Value) -> Result<Value, McpToolError> {
     let mut stream = connect_to_daemon().ok_or_else(|| {
         McpToolError::backend_failure(
@@ -545,31 +597,40 @@ fn parse_mode(mode: Option<&str>) -> Result<SearchKind, McpToolError> {
 
 type ResultMapper = fn(&SearchHit, &mut usize, usize) -> Option<Value>;
 
+#[derive(Debug, Clone)]
+struct SearchContextStatus {
+    generation: u64,
+    context_epoch: u64,
+}
+
 fn run_and_envelope(
     state: &McpState,
     tool_name: &str,
     request: &QueryRequest,
     limit: usize,
     mapper: ResultMapper,
+    force_refresh: bool,
+    session_id_hint: Option<&str>,
 ) -> ToolOutcome {
     let repo_root = state.repo_root();
     let index_dir = state.index_dir();
-
-    // Build cache key from tool name, limit, and the full (serialised) query.
+    let context_key = search_context_key(session_id_hint);
     let cache_key = format!(
-        "{}|{}|{}",
+        "{}|{}|{}|{}",
+        context_key,
         tool_name,
         limit,
         serde_json::to_string(request).unwrap_or_default(),
     );
 
-    // Cache hit path.
-    if let Some(mut cached) = state.query_cache.get(&cache_key) {
-        if let Some(obj) = cached.as_object_mut() {
-            obj.insert("cache".into(), json!("hit"));
-        }
-        return ToolOutcome::Success(cached);
+    if !force_refresh
+        && let Some(entry) = state.search_memo.get(&cache_key)
+        && let Some(reuse_envelope) = build_context_reuse_envelope(state, request, &entry)
+    {
+        return ToolOutcome::Success(reuse_envelope);
     }
+
+    let search_context = search_context_status(state);
 
     // Execute search.
     let executed_result = if state.should_bypass_index_for_startup_sync() {
@@ -600,25 +661,130 @@ fn run_and_envelope(
 
     let mut envelope = build_envelope(&repo_root, limit, executed, mapper);
 
-    // Tag and optionally cache the result.
-    // Only cache indexed results — DirectScan and Ripgrep fallback have no
-    // generation counter to drive invalidation, so we skip caching them.
     let fallback_used = envelope
         .get("fallback_used")
         .and_then(Value::as_bool)
         .unwrap_or(true);
-    if fallback_used {
-        if let Some(obj) = envelope.as_object_mut() {
-            obj.insert("cache".into(), json!("bypass"));
+    let cache_status = if fallback_used { "bypass" } else { "miss" };
+    if let Some(obj) = envelope.as_object_mut() {
+        obj.insert("cache".into(), json!(cache_status));
+        if force_refresh {
+            obj.insert("force_refreshed".into(), json!(true));
         }
-    } else {
-        state.query_cache.put(cache_key, envelope.clone());
+    }
+
+    if fallback_used {
+        return ToolOutcome::Success(envelope);
+    }
+
+    if let Some(context) = search_context {
+        let entry = state.search_memo.put(
+            cache_key,
+            SearchMemoEntry {
+                search_id: String::new(),
+                recorded_generation: context.generation,
+                recorded_context_epoch: context.context_epoch,
+                matched_paths: collect_matched_paths(&envelope),
+                files_with_matches: envelope
+                    .get("files_with_matches")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0),
+                total_line_matches: envelope
+                    .get("total_line_matches")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0),
+                strategy: envelope
+                    .get("strategy")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown")
+                    .to_string(),
+            },
+        );
         if let Some(obj) = envelope.as_object_mut() {
-            obj.insert("cache".into(), json!("miss"));
+            obj.insert("search_id".into(), json!(entry.search_id));
         }
     }
 
     ToolOutcome::Success(envelope)
+}
+
+fn search_context_key(session_id_hint: Option<&str>) -> String {
+    session_id_hint
+        .map(|session| format!("session:{session}"))
+        .unwrap_or_else(|| format!("process:{}", std::process::id()))
+}
+
+fn search_context_status(state: &McpState) -> Option<SearchContextStatus> {
+    let value = try_daemon_rpc(
+        "status",
+        json!(DaemonStatusParams {
+            target_root: Some(state.repo_root().display().to_string()),
+        }),
+    )?;
+    let status: DaemonStatus = serde_json::from_value(value).ok()?;
+    let root = status.root?;
+    Some(SearchContextStatus {
+        generation: root.generation,
+        context_epoch: root.context_epoch,
+    })
+}
+
+fn build_context_reuse_envelope(
+    state: &McpState,
+    request: &QueryRequest,
+    entry: &SearchMemoEntry,
+) -> Option<Value> {
+    let response = try_daemon_rpc(
+        "search_reuse_check",
+        json!(SearchReuseCheckParams {
+            target_root: state.repo_root().display().to_string(),
+            request: request.clone(),
+            recorded_generation: entry.recorded_generation,
+            recorded_context_epoch: entry.recorded_context_epoch,
+            matched_paths: entry.matched_paths.clone(),
+        }),
+    )?;
+    let response: search_core::SearchReuseCheckResponse = serde_json::from_value(response).ok()?;
+    if !response.fresh {
+        return None;
+    }
+    Some(json!({
+        "version": ENVELOPE_VERSION,
+        "repo_root": state.repo_root().display().to_string(),
+        "strategy": entry.strategy,
+        "fallback_used": false,
+        "cache": "hit",
+        "search_id": entry.search_id,
+        "prior_search_id": entry.search_id,
+        "reuse_status": "fresh_duplicate",
+        "reuse_reason": serde_json::to_value(response.reason).unwrap_or(json!(SearchReuseReason::Unchanged)),
+        "generation": response.generation,
+        "context_epoch": response.context_epoch,
+        "files_with_matches": entry.files_with_matches,
+        "total_line_matches": entry.total_line_matches,
+        "results": [],
+        "results_omitted": true,
+        "truncated": false,
+    }))
+}
+
+fn collect_matched_paths(envelope: &Value) -> Vec<String> {
+    let mut paths = HashSet::new();
+    let mut ordered = Vec::new();
+    for result in envelope
+        .get("results")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(path) = result.get("path").and_then(Value::as_str) else {
+            continue;
+        };
+        if paths.insert(path.to_string()) {
+            ordered.push(path.to_string());
+        }
+    }
+    ordered
 }
 
 fn build_envelope(

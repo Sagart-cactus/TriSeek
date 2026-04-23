@@ -78,6 +78,11 @@ pub fn find_files_schema() -> Value {
                 "maximum": 100,
                 "default": 20,
                 "description": "Maximum number of results to return (default 20, hard cap 100)."
+            },
+            "force_refresh": {
+                "type": "boolean",
+                "default": false,
+                "description": "Bypass duplicate-result reuse and execute the search again."
             }
         },
         "required": ["query"],
@@ -104,6 +109,11 @@ pub fn search_content_schema() -> Value {
                 "minimum": 1,
                 "maximum": 100,
                 "default": 20
+            },
+            "force_refresh": {
+                "type": "boolean",
+                "default": false,
+                "description": "Bypass duplicate-result reuse and execute the search again."
             }
         },
         "required": ["query"],
@@ -133,6 +143,11 @@ pub fn search_path_and_content_schema() -> Value {
                 "minimum": 1,
                 "maximum": 100,
                 "default": 20
+            },
+            "force_refresh": {
+                "type": "boolean",
+                "default": false,
+                "description": "Bypass duplicate-result reuse and execute the search again."
             }
         },
         "required": ["path_query", "content_query"],

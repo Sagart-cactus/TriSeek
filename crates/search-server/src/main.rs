@@ -6,15 +6,16 @@ use memo::MemoState;
 use search_core::{
     DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonRootParams, DaemonRootStatus,
     DaemonSearchParams, DaemonStatus, DaemonStatusParams, FrecencySelectParams, MemoCheckParams,
-    MemoObserveParams, MemoSessionParams, MemoStatusParams, RpcRequest, RpcResponse,
-    SearchEngineKind, SearchHit, SearchKind, SearchResponse, plan_query, route_query,
+    MemoEventKind, MemoObserveParams, MemoSessionParams, MemoStatusParams, RpcRequest, RpcResponse,
+    SearchEngineKind, SearchHit, SearchKind, SearchResponse, SearchReuseCheckParams,
+    SearchReuseCheckResponse, SearchReuseReason, plan_query, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
 use search_index::{
     BuildConfig, SearchEngine, WatcherHandle, daemon_dir, default_index_dir, index_exists,
-    start_watcher,
+    query_matches_path_filters, start_watcher,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -46,8 +47,18 @@ struct RepoService {
     frecency: Mutex<FrecencyStore>,
     watcher: Mutex<Option<WatcherHandle>>,
     last_seen_generation: AtomicU64,
+    context_epoch: AtomicU64,
+    search_change_journal: Arc<Mutex<VecDeque<SearchChangeBatch>>>,
     memo: Arc<MemoState>,
 }
+
+#[derive(Debug, Clone)]
+struct SearchChangeBatch {
+    generation: u64,
+    paths: Vec<String>,
+}
+
+const SEARCH_CHANGE_JOURNAL_LIMIT: usize = 256;
 
 impl RepoService {
     fn new(repo_root: PathBuf, memo: Arc<MemoState>) -> Result<Self> {
@@ -64,6 +75,8 @@ impl RepoService {
             frecency: Mutex::new(FrecencyStore::open(&index_dir)),
             watcher: Mutex::new(None),
             last_seen_generation: AtomicU64::new(0),
+            context_epoch: AtomicU64::new(0),
+            search_change_journal: Arc::new(Mutex::new(VecDeque::new())),
             memo,
         };
         service.start_watcher_if_needed()?;
@@ -91,13 +104,7 @@ impl RepoService {
     }
 
     fn status(&self) -> DaemonRootStatus {
-        let generation = self
-            .watcher
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|watcher| watcher.generation.load(Ordering::SeqCst))
-            .unwrap_or(0);
+        let generation = self.current_generation();
         let (index_available, delta_docs) = self
             .engine
             .read()
@@ -111,6 +118,7 @@ impl RepoService {
             index_dir: self.index_dir.display().to_string(),
             index_available,
             generation,
+            context_epoch: self.context_epoch.load(Ordering::SeqCst),
             delta_docs,
         }
     }
@@ -119,6 +127,15 @@ impl RepoService {
         if let Ok(store) = self.frecency.lock() {
             let _ = store.flush();
         }
+    }
+
+    fn current_generation(&self) -> u64 {
+        self.watcher
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|watcher| watcher.generation.load(Ordering::SeqCst))
+            .unwrap_or_else(|| self.last_seen_generation.load(Ordering::SeqCst))
     }
 
     fn stop_watcher(&self) {
@@ -145,6 +162,24 @@ impl RepoService {
                 let memo = Arc::clone(&self.memo);
                 Arc::new(move |path| {
                     memo.mark_stale_for_all(path);
+                })
+            }),
+            Some({
+                let repo_root = self.repo_root.clone();
+                let journal = self.search_change_journal.clone();
+                Arc::new(move |generation, changed_paths| {
+                    let paths: Vec<String> = changed_paths
+                        .iter()
+                        .filter_map(|path| normalize_relative_path(&repo_root, path))
+                        .collect();
+                    if paths.is_empty() {
+                        return;
+                    }
+                    let mut guard = journal.lock().unwrap();
+                    guard.push_back(SearchChangeBatch { generation, paths });
+                    while guard.len() > SEARCH_CHANGE_JOURNAL_LIMIT {
+                        guard.pop_front();
+                    }
                 })
             }),
         )
@@ -177,6 +212,92 @@ impl RepoService {
         self.last_seen_generation
             .store(current_generation, Ordering::SeqCst);
         Ok(())
+    }
+
+    fn invalidate_search_context(&self) {
+        self.context_epoch.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn check_search_reuse(&self, params: &SearchReuseCheckParams) -> SearchReuseCheckResponse {
+        let current_generation = self.current_generation();
+        let current_context_epoch = self.context_epoch.load(Ordering::SeqCst);
+        if current_context_epoch != params.recorded_context_epoch {
+            return SearchReuseCheckResponse {
+                fresh: false,
+                reason: SearchReuseReason::ContextInvalidated,
+                generation: current_generation,
+                context_epoch: current_context_epoch,
+                changed_paths: Vec::new(),
+            };
+        }
+        if current_generation < params.recorded_generation {
+            return SearchReuseCheckResponse {
+                fresh: false,
+                reason: SearchReuseReason::GenerationReset,
+                generation: current_generation,
+                context_epoch: current_context_epoch,
+                changed_paths: Vec::new(),
+            };
+        }
+        if current_generation == params.recorded_generation {
+            return SearchReuseCheckResponse {
+                fresh: true,
+                reason: SearchReuseReason::Unchanged,
+                generation: current_generation,
+                context_epoch: current_context_epoch,
+                changed_paths: Vec::new(),
+            };
+        }
+
+        let guard = self.search_change_journal.lock().unwrap();
+        let earliest_generation = guard.front().map(|batch| batch.generation).unwrap_or(0);
+        if earliest_generation > params.recorded_generation.saturating_add(1) {
+            return SearchReuseCheckResponse {
+                fresh: false,
+                reason: SearchReuseReason::JournalOverflow,
+                generation: current_generation,
+                context_epoch: current_context_epoch,
+                changed_paths: Vec::new(),
+            };
+        }
+
+        let matched_paths: HashSet<&str> =
+            params.matched_paths.iter().map(String::as_str).collect();
+        for batch in guard
+            .iter()
+            .filter(|batch| batch.generation > params.recorded_generation)
+        {
+            for changed_path in &batch.paths {
+                if matched_paths.contains(changed_path.as_str()) {
+                    return SearchReuseCheckResponse {
+                        fresh: false,
+                        reason: SearchReuseReason::ChangedMatchedPath,
+                        generation: current_generation,
+                        context_epoch: current_context_epoch,
+                        changed_paths: vec![changed_path.clone()],
+                    };
+                }
+                let matches_scope =
+                    query_matches_path_filters(changed_path, &params.request).unwrap_or(true);
+                if matches_scope {
+                    return SearchReuseCheckResponse {
+                        fresh: false,
+                        reason: SearchReuseReason::ChangedSearchScope,
+                        generation: current_generation,
+                        context_epoch: current_context_epoch,
+                        changed_paths: vec![changed_path.clone()],
+                    };
+                }
+            }
+        }
+
+        SearchReuseCheckResponse {
+            fresh: true,
+            reason: SearchReuseReason::Unchanged,
+            generation: current_generation,
+            context_epoch: current_context_epoch,
+            changed_paths: Vec::new(),
+        }
     }
 }
 
@@ -536,6 +657,13 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                     return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
                 }
             };
+            if matches!(
+                params.event,
+                MemoEventKind::SessionStart | MemoEventKind::PreCompact
+            ) && let Ok(service) = service_for_target_root(state, &params.repo_root)
+            {
+                service.invalidate_search_context();
+            }
             RpcResponse::ok(id, state.memo.observe(&params))
         }
         "memo_status" => {
@@ -583,6 +711,22 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
             };
             RpcResponse::ok(id, state.memo.check(&params))
         }
+        "search_reuse_check" => {
+            let params: SearchReuseCheckParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            let service = match service_for_target_root(state, &params.target_root) {
+                Ok(service) => service,
+                Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+            };
+            if let Err(error) = service.ensure_ready() {
+                return RpcResponse::error(id, -32000, error.to_string());
+            }
+            RpcResponse::ok(id, service.check_search_reuse(&params))
+        }
         "shutdown" => {
             SHUTDOWN.store(true, Ordering::SeqCst);
             RpcResponse::ok(id, serde_json::json!({"shutdown": true}))
@@ -601,6 +745,16 @@ fn canonicalize_target_root(path: &Path) -> Result<PathBuf> {
         .with_context(|| format!("failed to canonicalize root {}", path.display()))
 }
 
+fn normalize_relative_path(repo_root: &Path, absolute_path: &Path) -> Option<String> {
+    let relative = absolute_path.strip_prefix(repo_root).ok()?;
+    let rendered = relative.to_string_lossy().replace('\\', "/");
+    if rendered.is_empty() {
+        None
+    } else {
+        Some(rendered)
+    }
+}
+
 #[cfg(unix)]
 fn install_signal_handlers() {
     unsafe {
@@ -617,6 +771,170 @@ fn install_signal_handlers() {
 
 #[cfg(not(unix))]
 fn install_signal_handlers() {}
+
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod tests {
+    use super::*;
+    use search_core::{CaseMode, QueryRequest, SearchEngineKind, SearchKind};
+
+    fn make_service(
+        initial_generation: u64,
+        context_epoch: u64,
+    ) -> (tempfile::TempDir, RepoService) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let repo_root = tmp.path().join("repo");
+        std::fs::create_dir_all(&repo_root).expect("create repo root");
+        let index_dir = repo_root.join(".triseek-index");
+        std::fs::create_dir_all(&index_dir).expect("create index dir");
+        let service = RepoService {
+            repo_root,
+            index_dir: index_dir.clone(),
+            engine: RwLock::new(None),
+            frecency: Mutex::new(FrecencyStore::open(&index_dir)),
+            watcher: Mutex::new(None),
+            last_seen_generation: AtomicU64::new(initial_generation),
+            context_epoch: AtomicU64::new(context_epoch),
+            search_change_journal: Arc::new(Mutex::new(VecDeque::new())),
+            memo: Arc::new(MemoState::new(Duration::from_secs(600))),
+        };
+        (tmp, service)
+    }
+
+    fn scoped_request() -> QueryRequest {
+        QueryRequest {
+            kind: SearchKind::Literal,
+            engine: SearchEngineKind::Auto,
+            pattern: "route".into(),
+            case_mode: CaseMode::Sensitive,
+            globs: vec!["src/**/*.rs".into()],
+            ..QueryRequest::default()
+        }
+    }
+
+    #[test]
+    fn search_reuse_stays_fresh_for_unrelated_scope_changes() {
+        let (_tmp, service) = make_service(11, 1);
+        service
+            .search_change_journal
+            .lock()
+            .unwrap()
+            .push_back(SearchChangeBatch {
+                generation: 11,
+                paths: vec!["docs/guide.md".into()],
+            });
+        let response = service.check_search_reuse(&SearchReuseCheckParams {
+            target_root: service.repo_root.display().to_string(),
+            request: scoped_request(),
+            recorded_generation: 10,
+            recorded_context_epoch: 1,
+            matched_paths: vec!["src/lib.rs".into()],
+        });
+        assert!(response.fresh);
+        assert!(matches!(response.reason, SearchReuseReason::Unchanged));
+    }
+
+    #[test]
+    fn search_reuse_invalidates_when_matched_path_changes() {
+        let (_tmp, service) = make_service(11, 1);
+        service
+            .search_change_journal
+            .lock()
+            .unwrap()
+            .push_back(SearchChangeBatch {
+                generation: 11,
+                paths: vec!["src/lib.rs".into()],
+            });
+        let response = service.check_search_reuse(&SearchReuseCheckParams {
+            target_root: service.repo_root.display().to_string(),
+            request: scoped_request(),
+            recorded_generation: 10,
+            recorded_context_epoch: 1,
+            matched_paths: vec!["src/lib.rs".into()],
+        });
+        assert!(!response.fresh);
+        assert!(matches!(
+            response.reason,
+            SearchReuseReason::ChangedMatchedPath
+        ));
+    }
+
+    #[test]
+    fn search_reuse_invalidates_when_context_epoch_changes() {
+        let (_tmp, service) = make_service(10, 2);
+        let response = service.check_search_reuse(&SearchReuseCheckParams {
+            target_root: service.repo_root.display().to_string(),
+            request: scoped_request(),
+            recorded_generation: 10,
+            recorded_context_epoch: 1,
+            matched_paths: vec!["src/lib.rs".into()],
+        });
+        assert!(!response.fresh);
+        assert!(matches!(
+            response.reason,
+            SearchReuseReason::ContextInvalidated
+        ));
+    }
+
+    #[test]
+    fn search_reuse_invalidates_when_journal_window_is_exhausted() {
+        let (_tmp, service) = make_service(25, 1);
+        service
+            .search_change_journal
+            .lock()
+            .unwrap()
+            .push_back(SearchChangeBatch {
+                generation: 20,
+                paths: vec!["src/lib.rs".into()],
+            });
+        let response = service.check_search_reuse(&SearchReuseCheckParams {
+            target_root: service.repo_root.display().to_string(),
+            request: scoped_request(),
+            recorded_generation: 10,
+            recorded_context_epoch: 1,
+            matched_paths: vec!["src/lib.rs".into()],
+        });
+        assert!(!response.fresh);
+        assert!(matches!(
+            response.reason,
+            SearchReuseReason::JournalOverflow
+        ));
+    }
+
+    #[test]
+    fn memo_observe_session_start_bumps_search_context_epoch() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let repo_root = tmp.path().join("repo");
+        std::fs::create_dir_all(&repo_root).expect("create repo root");
+        let repo_root = repo_root.canonicalize().expect("canonicalize repo root");
+        let state = ServerState::new(tmp.path().join("daemon"));
+        let service = state
+            .service_for_root(&repo_root)
+            .expect("create repo service");
+        assert_eq!(service.context_epoch.load(Ordering::SeqCst), 0);
+
+        let response = dispatch(
+            RpcRequest {
+                jsonrpc: "2.0".into(),
+                id: 1,
+                method: "memo_observe".into(),
+                params: serde_json::to_value(MemoObserveParams {
+                    session_id: "s1".into(),
+                    repo_root: repo_root.display().to_string(),
+                    event: MemoEventKind::SessionStart,
+                    path: None,
+                    content_hash: None,
+                    tokens: None,
+                })
+                .expect("serialize params"),
+            },
+            &state,
+            Instant::now(),
+        );
+        assert!(response.error.is_none());
+        assert_eq!(service.context_epoch.load(Ordering::SeqCst), 1);
+    }
+}
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 

@@ -409,8 +409,14 @@ fn watcher_detects_file_modification() {
     SearchEngine::build(&repo_root, Some(&index_dir), &config).expect("build");
 
     // Start the watcher.
-    let handle = start_watcher(repo_root.clone(), index_dir.clone(), config.clone(), None)
-        .expect("watcher starts");
+    let handle = start_watcher(
+        repo_root.clone(),
+        index_dir.clone(),
+        config.clone(),
+        None,
+        None,
+    )
+    .expect("watcher starts");
 
     let gen_before = handle.generation.load(Ordering::SeqCst);
 

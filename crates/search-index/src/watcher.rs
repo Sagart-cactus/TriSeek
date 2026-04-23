@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 /// Consumers (e.g. the server) can compare this to detect when to reload the engine.
 pub type GenerationCounter = Arc<AtomicU64>;
 pub type WatcherChangeCallback = Arc<dyn Fn(&Path) + Send + Sync + 'static>;
+pub type WatcherBatchCallback = Arc<dyn Fn(u64, &[PathBuf]) + Send + Sync + 'static>;
 
 /// Debounce windows.
 const PER_FILE_WAIT: Duration = Duration::from_millis(200);
@@ -66,6 +67,7 @@ pub fn start_watcher(
     index_dir: PathBuf,
     config: BuildConfig,
     on_change: Option<WatcherChangeCallback>,
+    on_index_update: Option<WatcherBatchCallback>,
 ) -> Result<WatcherHandle, SearchIndexError> {
     // Canonicalize so path comparisons work even when symlinks are involved
     // (e.g. /tmp → /private/tmp on macOS).
@@ -98,6 +100,7 @@ pub fn start_watcher(
             shutdown_rx,
             generation_clone,
             on_change,
+            on_index_update,
         );
     });
 
@@ -108,6 +111,7 @@ pub fn start_watcher(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn watcher_loop(
     repo_root: PathBuf,
     index_dir: PathBuf,
@@ -116,6 +120,7 @@ fn watcher_loop(
     shutdown_rx: mpsc::Receiver<()>,
     generation: GenerationCounter,
     on_change: Option<WatcherChangeCallback>,
+    on_index_update: Option<WatcherBatchCallback>,
 ) {
     // Build a gitignore matcher for the repo root.
     let gitignore = {
@@ -239,7 +244,10 @@ fn watcher_loop(
 
         match result {
             Ok(outcome) => {
-                generation.fetch_add(1, Ordering::SeqCst);
+                let new_generation = generation.fetch_add(1, Ordering::SeqCst) + 1;
+                if let Some(ref callback) = on_index_update {
+                    callback(new_generation, &changed_paths);
+                }
                 if outcome.rebuilt_full {
                     eprintln!(
                         "triseek-watcher: full rebuild triggered (delta ratio exceeded threshold)"

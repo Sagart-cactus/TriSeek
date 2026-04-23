@@ -7,6 +7,7 @@ pub mod errors;
 pub mod query_cache;
 pub mod repo_root;
 pub mod schema;
+pub mod search_memo;
 pub mod server;
 pub mod tools;
 

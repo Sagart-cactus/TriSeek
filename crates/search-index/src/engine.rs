@@ -1003,3 +1003,23 @@ fn path_matches_filters(
         .map(|set| set.is_match(relative_path))
         .unwrap_or(true)
 }
+
+pub fn query_matches_path_filters(
+    relative_path: &str,
+    request: &QueryRequest,
+) -> Result<bool, SearchIndexError> {
+    let path = Path::new(relative_path);
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(relative_path);
+    let extension = path.extension().and_then(|ext| ext.to_str());
+    let globset = build_globset(&request.globs)?;
+    Ok(path_matches_filters(
+        relative_path,
+        file_name,
+        extension,
+        request,
+        globset.as_ref(),
+    ))
+}
