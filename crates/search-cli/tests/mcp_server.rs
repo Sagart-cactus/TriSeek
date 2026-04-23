@@ -793,7 +793,7 @@ fn invalid_query_is_returned_as_tool_error() {
 }
 
 // ---------------------------------------------------------------------------
-// Query cache integration tests
+// Search memo integration tests
 // ---------------------------------------------------------------------------
 
 fn handshake(client: &mut McpClient) {
@@ -804,10 +804,64 @@ fn handshake(client: &mut McpClient) {
     client.notify("notifications/initialized", json!({}));
 }
 
+fn fake_status_response(generation: u64, context_epoch: u64) -> Value {
+    json!({
+        "daemon_dir": "/tmp/.triseek/daemon",
+        "uptime_secs": 1,
+        "active_roots": 1,
+        "root": {
+            "target_root": "/tmp/repo",
+            "index_dir": "/tmp/repo/.triseek-index",
+            "index_available": true,
+            "generation": generation,
+            "context_epoch": context_epoch,
+            "delta_docs": 0
+        }
+    })
+}
+
+fn fake_preload_response() -> Value {
+    json!({
+        "preloaded": true,
+        "target_root": "/tmp/repo",
+    })
+}
+
+fn fake_reload_response() -> Value {
+    json!({
+        "reloaded": true,
+    })
+}
+
+fn fake_search_reuse_response(
+    fresh: bool,
+    reason: &str,
+    generation: u64,
+    context_epoch: u64,
+    changed_paths: &[&str],
+) -> Value {
+    json!({
+        "fresh": fresh,
+        "reason": reason,
+        "generation": generation,
+        "context_epoch": context_epoch,
+        "changed_paths": changed_paths,
+    })
+}
+
 #[test]
-fn search_content_cache_miss_then_hit() {
+fn search_content_reuses_prior_result_when_fresh() {
     let fixture = build_fixture_repo();
-    let mut client = McpClient::spawn(fixture.path());
+    let home = tempfile::tempdir().expect("home tempdir");
+    let fake_daemon = FakeDaemon::start(
+        home.path(),
+        vec![
+            fake_preload_response(),
+            fake_status_response(10, 1),
+            fake_search_reuse_response(true, "unchanged", 10, 1, &[]),
+        ],
+    );
+    let mut client = McpClient::spawn_with_home(fixture.path(), Some(home.path()));
     handshake(&mut client);
 
     let args = json!({ "query": "parse_arguments", "mode": "literal", "limit": 5 });
@@ -816,102 +870,171 @@ fn search_content_cache_miss_then_hit() {
     assert_eq!(
         first.get("cache").and_then(Value::as_str),
         Some("miss"),
-        "first call must be a cache miss"
+        "first call must execute"
     );
+    let first_search_id = first
+        .get("search_id")
+        .and_then(Value::as_str)
+        .expect("first search_id")
+        .to_string();
 
     let second = call_tool(&mut client, "search_content", args);
     assert_eq!(
         second.get("cache").and_then(Value::as_str),
         Some("hit"),
-        "second identical call must be a cache hit"
+        "second identical call must reuse prior context"
     );
-
-    // Results must be identical (modulo the cache field itself).
     assert_eq!(
-        first.get("files_with_matches"),
-        second.get("files_with_matches")
+        second.get("reuse_status").and_then(Value::as_str),
+        Some("fresh_duplicate")
     );
-    assert_eq!(first.get("results"), second.get("results"));
+    assert_eq!(second.get("results"), Some(&json!([])));
+    assert_eq!(
+        second.get("search_id").and_then(Value::as_str),
+        Some(first_search_id.as_str())
+    );
+    fake_daemon.wait_for_requests(3, Duration::from_secs(2));
+    let requests = fake_daemon.finish();
+    assert_eq!(requests[0]["method"], json!("preload_root"));
+    assert_eq!(requests[1]["method"], json!("status"));
+    assert_eq!(requests[2]["method"], json!("search_reuse_check"));
 
     client.shutdown();
 }
 
 #[test]
-fn find_files_cache_miss_then_hit() {
+fn search_content_reruns_when_matching_file_changes() {
     let fixture = build_fixture_repo();
-    let mut client = McpClient::spawn(fixture.path());
+    let home = tempfile::tempdir().expect("home tempdir");
+    let fake_daemon = FakeDaemon::start(
+        home.path(),
+        vec![
+            fake_preload_response(),
+            fake_status_response(10, 1),
+            fake_search_reuse_response(
+                false,
+                "changed_matched_path",
+                11,
+                1,
+                &["src/cli/parser.rs"],
+            ),
+            fake_status_response(11, 1),
+        ],
+    );
+    let mut client = McpClient::spawn_with_home(fixture.path(), Some(home.path()));
     handshake(&mut client);
 
-    let args = json!({ "query": "router", "limit": 10 });
+    let args = json!({ "query": "parse_arguments", "mode": "literal", "limit": 5 });
 
-    let first = call_tool(&mut client, "find_files", args.clone());
+    let first = call_tool(&mut client, "search_content", args.clone());
+    assert!(
+        first
+            .get("search_id")
+            .and_then(Value::as_str)
+            .is_some_and(|search_id| !search_id.is_empty())
+    );
+
+    let second = call_tool(&mut client, "search_content", args);
+    assert_eq!(second.get("cache").and_then(Value::as_str), Some("miss"));
+    assert!(second.get("reuse_status").is_none());
+    assert!(
+        second
+            .get("results")
+            .and_then(Value::as_array)
+            .is_some_and(|results| !results.is_empty())
+    );
+    fake_daemon.wait_for_requests(4, Duration::from_secs(2));
+    let requests = fake_daemon.finish();
+    assert_eq!(requests[0]["method"], json!("preload_root"));
+    assert_eq!(requests[2]["method"], json!("search_reuse_check"));
+    assert_eq!(requests[3]["method"], json!("status"));
+
+    client.shutdown();
+}
+
+#[test]
+fn different_meta_session_ids_do_not_share_search_memo() {
+    let fixture = build_fixture_repo();
+    let home = tempfile::tempdir().expect("home tempdir");
+    let fake_daemon = FakeDaemon::start(
+        home.path(),
+        vec![
+            fake_preload_response(),
+            fake_status_response(10, 1),
+            fake_status_response(10, 1),
+        ],
+    );
+    let mut client = McpClient::spawn_with_home(fixture.path(), Some(home.path()));
+    handshake(&mut client);
+
+    let first = call_tool_with_meta(
+        &mut client,
+        "search_content",
+        json!({ "query": "router", "mode": "literal" }),
+        json!({ "sessionId": "session-a" }),
+    );
+    let second = call_tool_with_meta(
+        &mut client,
+        "search_content",
+        json!({ "query": "router", "mode": "literal" }),
+        json!({ "sessionId": "session-b" }),
+    );
     assert_eq!(first.get("cache").and_then(Value::as_str), Some("miss"));
-
-    let second = call_tool(&mut client, "find_files", args);
-    assert_eq!(second.get("cache").and_then(Value::as_str), Some("hit"));
-    assert_eq!(first.get("results"), second.get("results"));
-
-    client.shutdown();
-}
-
-#[test]
-fn different_tool_name_is_different_cache_entry() {
-    // find_files and search_content share the same pattern string but must NOT
-    // share a cache entry because they produce structurally different envelopes.
-    let fixture = build_fixture_repo();
-    let mut client = McpClient::spawn(fixture.path());
-    handshake(&mut client);
-
-    // Both calls use "router" as the pattern.
-    let ff = call_tool(&mut client, "find_files", json!({ "query": "router" }));
-    let sc = call_tool(
-        &mut client,
-        "search_content",
-        json!({ "query": "router", "mode": "literal" }),
-    );
-
-    // Both must be misses (separate keys).
-    assert_eq!(ff.get("cache").and_then(Value::as_str), Some("miss"));
-    assert_eq!(sc.get("cache").and_then(Value::as_str), Some("miss"));
-
-    // Repeat each — both should now be hits.
-    let ff2 = call_tool(&mut client, "find_files", json!({ "query": "router" }));
-    let sc2 = call_tool(
-        &mut client,
-        "search_content",
-        json!({ "query": "router", "mode": "literal" }),
-    );
-    assert_eq!(ff2.get("cache").and_then(Value::as_str), Some("hit"));
-    assert_eq!(sc2.get("cache").and_then(Value::as_str), Some("hit"));
+    assert_eq!(second.get("cache").and_then(Value::as_str), Some("miss"));
+    fake_daemon.wait_for_requests(3, Duration::from_secs(2));
+    let requests = fake_daemon.finish();
+    assert_eq!(requests[0]["method"], json!("preload_root"));
+    assert_eq!(requests[1]["method"], json!("status"));
+    assert_eq!(requests[2]["method"], json!("status"));
 
     client.shutdown();
 }
 
 #[test]
-fn reindex_invalidates_search_cache() {
+fn reindex_invalidates_search_memo() {
     let fixture = build_fixture_repo();
-    let mut client = McpClient::spawn(fixture.path());
+    let home = tempfile::tempdir().expect("home tempdir");
+    let fake_daemon = FakeDaemon::start(
+        home.path(),
+        vec![
+            fake_preload_response(),
+            fake_status_response(10, 1),
+            fake_search_reuse_response(true, "unchanged", 10, 1, &[]),
+            fake_reload_response(),
+            fake_status_response(10, 1),
+        ],
+    );
+    let mut client = McpClient::spawn_with_home(fixture.path(), Some(home.path()));
     handshake(&mut client);
 
     let args = json!({ "query": "route_auth", "mode": "literal", "limit": 5 });
 
-    // Prime the cache.
     let miss = call_tool(&mut client, "search_content", args.clone());
     assert_eq!(miss.get("cache").and_then(Value::as_str), Some("miss"));
-    let hit = call_tool(&mut client, "search_content", args.clone());
-    assert_eq!(hit.get("cache").and_then(Value::as_str), Some("hit"));
+    let reused = call_tool(&mut client, "search_content", args.clone());
+    assert_eq!(reused.get("cache").and_then(Value::as_str), Some("hit"));
+    assert_eq!(
+        reused.get("reuse_status").and_then(Value::as_str),
+        Some("fresh_duplicate")
+    );
 
-    // Reindex flushes the cache.
     let reindex = call_tool(&mut client, "reindex", json!({ "mode": "incremental" }));
     assert_eq!(reindex.get("completed"), Some(&json!(true)));
 
-    // After reindex the same query must be a miss again.
     let after = call_tool(&mut client, "search_content", args);
     assert_eq!(
         after.get("cache").and_then(Value::as_str),
         Some("miss"),
-        "cache must be cleared after reindex"
+        "search memo must be cleared after reindex"
     );
+    assert!(after.get("reuse_status").is_none());
+    fake_daemon.wait_for_requests(5, Duration::from_secs(2));
+    let requests = fake_daemon.finish();
+    assert_eq!(requests[0]["method"], json!("preload_root"));
+    assert_eq!(requests[1]["method"], json!("status"));
+    assert_eq!(requests[2]["method"], json!("search_reuse_check"));
+    assert_eq!(requests[3]["method"], json!("reload"));
+    assert_eq!(requests[4]["method"], json!("status"));
 
     client.shutdown();
 }

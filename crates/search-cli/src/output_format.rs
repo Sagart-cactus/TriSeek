@@ -232,6 +232,11 @@ fn render_search_envelope_digest(
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
+    let reuse_status = envelope.get("reuse_status").and_then(Value::as_str);
+    let search_id = envelope
+        .get("search_id")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
 
     let mut out = String::new();
     let query_part = match query_hint {
@@ -248,6 +253,16 @@ fn render_search_envelope_digest(
         mp = match_plural(total_line_matches as usize),
     )
     .unwrap();
+
+    if matches!(reuse_status, Some("fresh_duplicate")) {
+        writeln!(&mut out).unwrap();
+        writeln!(
+            &mut out,
+            "reuse prior result from context ({search_id}); no relevant files changed since the earlier search"
+        )
+        .unwrap();
+        return out;
+    }
 
     if results.is_empty() {
         writeln!(&mut out).unwrap();
@@ -770,6 +785,25 @@ mod tests {
         let out = render_digest("search_content", &envelope, None);
         assert!(out.contains("fallback"));
         assert!(out.contains("bypass"));
+    }
+
+    #[test]
+    fn render_search_digest_reuse_callout() {
+        let envelope = json!({
+            "strategy": "triseek_indexed",
+            "fallback_used": false,
+            "cache": "hit",
+            "reuse_status": "fresh_duplicate",
+            "search_id": "search-000001",
+            "files_with_matches": 3,
+            "total_line_matches": 5,
+            "results": [],
+            "truncated": false,
+        });
+        let out = render_digest("search_content", &envelope, Some("AuthConfig"));
+        assert!(out.contains("reuse prior result from context"));
+        assert!(out.contains("search-000001"));
+        assert!(!out.contains("no matches"));
     }
 
     #[test]

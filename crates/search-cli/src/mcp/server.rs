@@ -25,6 +25,7 @@ use std::time::Duration;
 
 use crate::mcp::query_cache::QueryCache;
 use crate::mcp::schema::{TOOLS, ToolDescriptor};
+use crate::mcp::search_memo::SearchMemo;
 use crate::mcp::tools::{ToolOutcome, dispatch};
 use crate::output_format;
 
@@ -40,6 +41,7 @@ pub struct McpState {
     index_sync_in_progress: AtomicBool,
     index_mutation_lock: Mutex<()>,
     pub query_cache: QueryCache,
+    pub search_memo: SearchMemo,
 }
 
 pub struct IndexMutationGuard<'a> {
@@ -67,6 +69,7 @@ impl McpState {
             index_sync_in_progress: AtomicBool::new(false),
             index_mutation_lock: Mutex::new(()),
             query_cache: QueryCache::new(Duration::from_secs(ttl_secs), 256),
+            search_memo: SearchMemo::new(256),
         }
     }
 
@@ -112,6 +115,7 @@ impl McpState {
             *guard = None;
         }
         self.query_cache.invalidate_all();
+        self.search_memo.invalidate_all();
     }
 
     pub fn set_index_sync_in_progress(&self, in_progress: bool) {
@@ -480,7 +484,7 @@ fn initialize_result() -> Value {
             "name": SERVER_NAME,
             "version": SERVER_VERSION,
         },
-        "instructions": "TriSeek exposes fast local code search tools for this repository. Prefer `find_files`, `search_content`, and `search_path_and_content` over shell `rg`, `grep`, `sed`, `find`, `ls`, or file globbing for file discovery and exact code search. On Codex, before re-reading a file you already saw in this session, call `memo_check`. If it returns `skip_reread`, do not read the file again and rely on the content already in conversation context."
+        "instructions": "TriSeek exposes fast local code search tools for this repository. Prefer `find_files`, `search_content`, and `search_path_and_content` over shell `rg`, `grep`, `sed`, `find`, `ls`, or file globbing for file discovery and exact code search. When a repeated search result says to reuse a prior result from context, rely on the earlier search output unless you need `force_refresh`. On Codex, before re-reading a file you already saw in this session, call `memo_check`. If it returns `skip_reread`, do not read the file again and rely on the content already in conversation context."
     })
 }
 

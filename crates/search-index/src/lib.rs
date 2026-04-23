@@ -12,7 +12,7 @@ pub use build::{
     apply_incremental_changes, build_index, build_index_with_progress, measure_repository,
     update_index,
 };
-pub use engine::SearchEngine;
+pub use engine::{SearchEngine, query_matches_path_filters};
 pub use error::SearchIndexError;
 pub use model::{
     DeltaSnapshot, DocumentRecord, NamePostingEntry, PersistedIndex, PostingListEntry,
@@ -25,4 +25,6 @@ pub use walker::{
     DEFAULT_SEARCHABLE_HIDDEN_DIRS, DEFAULT_SEARCHABLE_HIDDEN_FILES, ScanOptions, ScanSummary,
     ScannedFile, default_searchable_hidden_roots, scan_repository, walk_repository,
 };
-pub use watcher::{GenerationCounter, WatcherHandle, start_watcher};
+pub use watcher::{
+    GenerationCounter, WatcherBatchCallback, WatcherChangeCallback, WatcherHandle, start_watcher,
+};

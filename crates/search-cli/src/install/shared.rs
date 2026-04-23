@@ -328,6 +328,23 @@ pub fn write_opencode_plugin(plugin_dir: &Path, binary: &str) -> Result<()> {
          const TRISEEK_BIN = '{escaped_bin}';\n\n\
          export const TriseekMemo: Plugin = async (ctx) => {{\n\
            return {{\n\
+             event: async (input) => {{\n\
+               if (input?.event?.type !== 'session.created') return;\n\
+               try {{\n\
+                 const payload = JSON.stringify({{\n\
+                   session_id: String(process.pid),\n\
+                   hook_event_name: 'SessionStart',\n\
+                   cwd: ctx.directory,\n\
+                 }});\n\
+                 execFileSync(TRISEEK_BIN, ['memo-observe', '--event', 'session-start'], {{\n\
+                   input: payload,\n\
+                   timeout: 5000,\n\
+                   stdio: ['pipe', 'ignore', 'ignore'],\n\
+                 }});\n\
+               }} catch {{\n\
+                 // best-effort\n\
+               }}\n\
+             }},\n\
              \"tool.execute.after\": async (input, output) => {{\n\
                const tool = String(input?.tool ?? '').toLowerCase();\n\
                if (!tool || !['read', 'edit', 'write', 'apply_patch'].includes(tool)) return;\n\
@@ -340,6 +357,22 @@ pub fn write_opencode_plugin(plugin_dir: &Path, binary: &str) -> Result<()> {
                    cwd: ctx.directory,\n\
                  }});\n\
                  execFileSync(TRISEEK_BIN, ['memo-observe', '--event', 'post-tool-use'], {{\n\
+                   input: payload,\n\
+                   timeout: 5000,\n\
+                   stdio: ['pipe', 'ignore', 'ignore'],\n\
+                 }});\n\
+               }} catch {{\n\
+                 // best-effort\n\
+               }}\n\
+             }},\n\
+             \"experimental.session.compacting\": async () => {{\n\
+               try {{\n\
+                 const payload = JSON.stringify({{\n\
+                   session_id: String(process.pid),\n\
+                   hook_event_name: 'PreCompact',\n\
+                   cwd: ctx.directory,\n\
+                 }});\n\
+                 execFileSync(TRISEEK_BIN, ['memo-observe', '--event', 'pre-compact'], {{\n\
                    input: payload,\n\
                    timeout: 5000,\n\
                    stdio: ['pipe', 'ignore', 'ignore'],\n\
@@ -739,10 +772,15 @@ args = ["mcp", "serve"]
         write_opencode_plugin(&plugin_dir, "/tmp/triseek binary").unwrap();
         let generated = std::fs::read_to_string(plugin_dir.join("triseek-memo.ts")).unwrap();
         assert!(generated.contains("const TRISEEK_BIN = '/tmp/triseek binary';"));
+        assert!(generated.contains("event: async (input) =>"));
+        assert!(generated.contains("input?.event?.type !== 'session.created'"));
         assert!(generated.contains("\"tool.execute.after\""));
+        assert!(generated.contains("\"experimental.session.compacting\""));
         assert!(generated.contains("['read', 'edit', 'write', 'apply_patch']"));
         assert!(generated.contains("output?.args ?? input?.args ?? {}"));
+        assert!(generated.contains("memo-observe', '--event', 'session-start'"));
         assert!(generated.contains("memo-observe', '--event', 'post-tool-use'"));
+        assert!(generated.contains("memo-observe', '--event', 'pre-compact'"));
     }
 
     #[test]

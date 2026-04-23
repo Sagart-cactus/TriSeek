@@ -18,6 +18,7 @@ pub use protocol::{
     MemoDebugStats, MemoEventKind, MemoFileStatus, MemoFileStatusKind, MemoFileSummary,
     MemoObserveParams, MemoObserveResponse, MemoSessionLifecycleResponse, MemoSessionParams,
     MemoSessionResponse, MemoStatusParams, MemoStatusResponse, RpcError, RpcRequest, RpcResponse,
+    SearchReuseCheckParams, SearchReuseCheckResponse, SearchReuseReason,
 };
 pub use query::{CaseMode, QueryRequest, SearchEngineKind, SearchKind, SessionQuery};
 pub use repo::{

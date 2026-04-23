@@ -5,6 +5,8 @@
 //! a configurable TTL; the whole cache is flushed whenever the index is
 //! rebuilt.
 
+#![allow(dead_code)]
+
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
