@@ -18,7 +18,7 @@ PORT=$(cat ~/.triseek/daemon/daemon.port)
 
 ---
 
-## Codex — active mode (`memo_check`)
+## Codex — hooks plus active fallback (`memo_check`)
 
 ### A. Install
 
@@ -32,6 +32,18 @@ Expected output includes:
 - `memo hooks installed into ~/.codex/hooks.json`
 - `enabled Codex feature flag codex_hooks = true`
 - Note about Bash/MCP file-read Codex hook coverage and `memo_check` usage for non-hooked reads
+
+Inspect the generated hook file:
+
+```bash
+cat ~/.codex/hooks.json
+```
+
+Verify:
+- `PreToolUse`, `PostToolUse`, and `SessionStart` entries are present
+- The tool matcher includes `Bash`
+- The tool matcher includes MCP file-read names such as `mcp__...__read_file`
+- Hook commands call `memo-observe --event pre-tool-use`, `memo-observe --event post-tool-use`, and `memo-observe --event session-start`
 
 ### B. `memo_check` — unknown file (never read)
 
@@ -218,6 +230,7 @@ rm -rf "$TESTDIR"
 | Check | Harness | Result |
 |---|---|---|
 | Daemon starts clean with new binary | — | PASS |
+| Codex hooks contain PreToolUse, PostToolUse, SessionStart, Bash, and MCP file-read matchers | Codex | PASS |
 | Read → redundant Read → `redundant_reads_prevented=1` | OpenCode (simulated) | PASS |
 | Read → redundant Read → `redundant_reads_prevented=1` | Pi (simulated) | PASS |
 | `memo_check` unknown file → `reread` | Codex | PASS |

@@ -251,7 +251,7 @@ code { color: var(--accent-green); font-family: 'JetBrains Mono', monospace; fon
         <p>Pin a specific version:</p>
         <div class="code-block">
           <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell · pinned version</span></div>
-          <pre>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.3.2</pre>
+          <pre>curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.3.3</pre>
         </div>
 
         <p>Install into a different directory:</p>
@@ -276,7 +276,7 @@ code { color: var(--accent-green); font-family: 'JetBrains Mono', monospace; fon
         <p>Install a pinned version after saving the script locally:</p>
         <div class="code-block">
           <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">powershell · pinned version</span></div>
-          <pre>.\install.ps1 -Version v0.3.2</pre>
+          <pre>.\install.ps1 -Version v0.3.3</pre>
         </div>
       </div>
 
@@ -373,7 +373,35 @@ triseek daemon start</pre>
   </section>
 
   <section>
-    <div class="section-num">// 03 — maintenance</div>
+    <div class="section-num">// 03 — validation</div>
+    <h2>Test in <span class="hl">Docker</span></h2>
+    <p class="section-desc">The release-style real harness builds TriSeek, starts an isolated daemon, drives CLI and MCP checks, and verifies install config generation for Claude Code, Codex, OpenCode, and Pi without touching your real local daemon or agent configs.</p>
+    <div class="two-col" style="margin-top: 2rem;">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico gn">◈</div>
+          <h3>Default Harness</h3>
+        </div>
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
+          <pre>scripts/run_real_harness_docker.sh</pre>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico cy">◎</div>
+          <h3>Large Repo Smoke</h3>
+        </div>
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
+          <pre>TRISEEK_LARGE_REPO=/path/to/large/repo scripts/run_real_harness_docker.sh</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-num">// 04 — maintenance</div>
     <h2>Upgrade &amp; <span class="hl">Uninstall</span></h2>
     <div class="two-col" style="margin-top: 2rem;">
       <div class="card">
@@ -405,7 +433,7 @@ triseek daemon start</pre>
   </section>
 
   <footer class="site-footer">
-    <span>TriSeek installers prefer published GitHub Releases. Before the first tagged release exists, they fall back to Cargo when Rust is installed.</span>
+    <span>TriSeek installers prefer published GitHub Releases and fall back to Cargo when no matching archive is available.</span>
     <div style="display:flex;gap:1.25rem;">
       <a href="index.html">← home</a>
       <a href="mcp.html">mcp →</a>

@@ -363,8 +363,8 @@ h2 .hl { color: var(--accent-cyan); }
 
       <a class="doc-card" href="memo.html">
         <div class="doc-card-ico pu">◇</div>
-        <h3>Memo &amp; Caching</h3>
-        <p>Session-aware file freshness tracking and search result caching across Claude Code, Codex, OpenCode, and Pi.</p>
+        <h3>Memo &amp; Search Reuse</h3>
+        <p>Session-aware file freshness tracking and duplicate search-result reuse across Claude Code, Codex, OpenCode, and Pi.</p>
         <div class="doc-card-arrow">read guide →</div>
       </a>
 
@@ -417,13 +417,18 @@ h2 .hl { color: var(--accent-cyan); }
       </div>
       <div class="feature-item">
         <div class="feature-icon">◇</div>
-        <div class="feature-title">Memo &amp; Cache</div>
-        <div class="feature-desc">Tracks file reads per session and caches search results. Prevents redundant re-reads and re-scans across all harnesses.</div>
+        <div class="feature-title">Memo &amp; Search Reuse</div>
+        <div class="feature-desc">Tracks file reads per session and tells agents to reuse unchanged duplicate search results already in context.</div>
       </div>
       <div class="feature-item">
         <div class="feature-icon">◈</div>
         <div class="feature-title">Cross-Platform</div>
         <div class="feature-desc">Pre-built releases for Linux x86_64, macOS x86_64 + aarch64, and Windows x86_64.</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">◎</div>
+        <div class="feature-title">Release Harness</div>
+        <div class="feature-desc">Docker validation covers CLI, MCP, daemon isolation, search reuse, and all four agent installers.</div>
       </div>
     </div>
   </section>

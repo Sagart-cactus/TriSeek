@@ -1,4 +1,4 @@
-# Memo Active Mode — Codex Skill
+# Codex Memo Mode — Hooks and Active Fallback
 
 TriSeek Memo tracks which files your agent has read this session and detects when they change on disk.
 On **Claude Code**, **OpenCode**, and **Pi**, Memo works passively — hooks fire automatically after every Read and Edit tool call.
@@ -6,7 +6,7 @@ On **Claude Code**, **OpenCode**, and **Pi**, Memo works passively — hooks fir
 On **Codex**, TriSeek installs `PreToolUse`, `PostToolUse`, and `SessionStart` hooks.
 Bash-based shell reads are observed automatically when Codex emits parsed command metadata.
 Codex upstream also dispatches hooks for MCP tools, so MCP file-read tools such as `mcp__filesystem__read_file` can be observed and redundant rereads can be blocked when Memo proves the file is unchanged.
-Any file read that your installed Codex does not expose through hooks still needs **active mode**: call `memo_check` yourself before re-reading a file.
+Any file read that your installed Codex does not expose through hooks still needs the active fallback: call `memo_check` yourself before re-reading a file.
 
 ---
 
@@ -53,6 +53,6 @@ Add this to your Codex system prompt or per-session instruction:
 
 ---
 
-## Full passive mode depends on the installed Codex hook surface
+## Passive coverage depends on the installed Codex hook surface
 
 For Codex versions that dispatch MCP tool hooks, MCP file reads are passive. For any non-hooked read path, keep using explicit `memo_check` before re-reading.

@@ -247,7 +247,7 @@ a.text-link:hover { color: var(--accent-green); }
   <div class="hero">
     <div class="hero-badge">⬡ TriSeek MCP</div>
     <h1>Use TriSeek as a<br><span class="hl">local MCP search server</span></h1>
-    <p class="hero-sub">TriSeek exposes a local stdio MCP server for Claude Code, Codex, and other MCP-capable clients. It is local-only, search-only, and routes each query through TriSeek's indexed, direct-scan, or ripgrep fallback path as needed.</p>
+    <p class="hero-sub">TriSeek exposes a local stdio MCP server for Claude Code, Codex, and other MCP-capable clients. It is local-only, search-only, routes each query through the right backend, and returns compact reuse envelopes for duplicate searches when context is still fresh.</p>
   </div>
 
   <section>
@@ -362,7 +362,7 @@ triseek mcp serve</pre>
           <div class="card-ico or">↘</div>
           <h3>Routing Signals</h3>
         </div>
-        <p>Every successful search result includes these fields:</p>
+        <p>Every successful search result includes routing and reuse fields. The first MCP text block is a short digest; the machine-readable envelope is in <code>structuredContent</code>.</p>
         <div class="prop-list" style="margin-top: 0.75rem;">
           <div class="prop-row" style="flex-wrap:wrap; gap: 0.5rem;">
             <span class="prop-key">strategy</span>
@@ -386,6 +386,16 @@ triseek mcp serve</pre>
             <span class="prop-key">truncated</span>
             <span class="prop-sep">·</span>
             <span class="prop-val">whether the result limit clipped output</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-key">cache</span>
+            <span class="prop-sep">·</span>
+            <span class="prop-val"><code>hit</code> for context reuse, <code>miss</code> for executed indexed search, <code>bypass</code> for fallback</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-key">results_omitted</span>
+            <span class="prop-sep">·</span>
+            <span class="prop-val">true when the model should reuse the prior result from context</span>
           </div>
         </div>
       </div>
@@ -443,7 +453,8 @@ triseek mcp serve</pre>
           <pre>{
   <span class="str">"query"</span>: <span class="str">"parse_arguments"</span>,
   <span class="str">"mode"</span>: <span class="str">"literal"</span>,
-  <span class="str">"limit"</span>: 20
+  <span class="str">"limit"</span>: 20,
+  <span class="str">"force_refresh"</span>: false
 }</pre>
         </div>
 
@@ -453,9 +464,11 @@ triseek mcp serve</pre>
   <span class="str">"path_query"</span>: <span class="str">"src/**/*.rs"</span>,
   <span class="str">"content_query"</span>: <span class="str">"Result&lt;"</span>,
   <span class="str">"mode"</span>: <span class="str">"literal"</span>,
-  <span class="str">"limit"</span>: 20
+  <span class="str">"limit"</span>: 20,
+  <span class="str">"force_refresh"</span>: false
 }</pre>
         </div>
+        <p style="margin-top: 0.75rem;"><code>force_refresh: true</code> bypasses duplicate-result reuse when you explicitly need a fresh search execution.</p>
       </div>
     </div>
   </section>
@@ -586,7 +599,7 @@ triseek mcp serve</pre>
             <a class="text-link" href="index.html">← Docs Home</a>
           </li>
           <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
-            <a class="text-link" href="memo.html">Memo &amp; Caching</a>
+            <a class="text-link" href="memo.html">Memo &amp; Search Reuse</a>
           </li>
           <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
             <a class="text-link" href="install.html">Install TriSeek</a>
@@ -603,7 +616,7 @@ triseek mcp serve</pre>
   </section>
 
   <footer class="site-footer">
-    <span>The MCP server is the client-facing integration layer. The background TriSeek daemon is separate and is used by the standalone CLI for repeated searches.</span>
+    <span>The MCP server is the client-facing integration layer. The background TriSeek daemon is separate and provides session freshness for Memo and duplicate-search reuse.</span>
     <div style="display:flex;gap:1.25rem;">
       <a href="install.html">← install</a>
       <a href="triseek-explained.html">how it works →</a>

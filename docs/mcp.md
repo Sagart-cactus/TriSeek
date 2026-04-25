@@ -76,10 +76,10 @@ feed that daemon passively where supported.
 
 ## Tools
 
-All tool responses are returned inside a standard MCP `CallToolResult`. The
-tool output payload is encoded as a single `text` content block containing
-JSON of the shape below. Tool errors set `isError: true` and return a
-structured error envelope (see **Errors**).
+All tool responses are returned inside a standard MCP `CallToolResult`. Search
+tools include a compact human-readable digest in the first `text` content block
+and the machine-readable envelope in `structuredContent`. Tool errors set
+`isError: true` and return a structured error envelope (see **Errors**).
 
 Search success envelopes contain:
 
@@ -88,10 +88,42 @@ Search success envelopes contain:
 - `strategy` — which backend ran: `triseek_indexed`, `triseek_direct_scan`,
   or `ripgrep_fallback`
 - `fallback_used` — `true` when a non-indexed backend was selected
-- `cache` — `hit`, `miss`, or `bypass` for the in-process search query cache
+- `cache` — `hit`, `miss`, or `bypass`; `hit` means a repeated indexed search
+  returned a context-reuse envelope instead of duplicate results
 - `routing_reason` — short machine-readable reason string from the router
 - `results` — the list of results
+- `search_id` — identifier for the result set recorded in this session
 - `truncated` — `true` when results were capped by `limit`
+
+Repeated indexed searches may return a context-reuse envelope:
+
+```json
+{
+  "version": "1",
+  "repo_root": "/repo",
+  "strategy": "triseek_indexed",
+  "fallback_used": false,
+  "cache": "hit",
+  "search_id": "search-0001",
+  "prior_search_id": "search-0001",
+  "reuse_status": "fresh_duplicate",
+  "reuse_reason": "unchanged",
+  "generation": 42,
+  "context_epoch": 0,
+  "files_with_matches": 3,
+  "total_line_matches": 8,
+  "results": [],
+  "results_omitted": true,
+  "truncated": false
+}
+```
+
+When `results_omitted` is `true`, the model should reuse the prior search
+output already in conversation context. Set `force_refresh: true` on
+`find_files`, `search_content`, or `search_path_and_content` when you explicitly
+need TriSeek to execute the search again. Freshness is checked through the
+daemon's generation, context epoch, and change journal; if relevant files
+changed, TriSeek executes the search and returns fresh results.
 
 ### `find_files`
 
@@ -103,7 +135,8 @@ Input:
 ```json
 {
   "query": "router auth",
-  "limit": 20
+  "limit": 20,
+  "force_refresh": false
 }
 ```
 
@@ -132,7 +165,8 @@ Input:
 {
   "query": "parse_arguments",
   "mode": "literal",
-  "limit": 20
+  "limit": 20,
+  "force_refresh": false
 }
 ```
 
@@ -170,7 +204,8 @@ Input:
   "path_query": "src/**/*.rs",
   "content_query": "Result<",
   "mode": "literal",
-  "limit": 20
+  "limit": 20,
+  "force_refresh": false
 }
 ```
 
@@ -258,7 +293,8 @@ Show tracked-file state and aggregate token savings for the current session.
 
 ### `memo_check`
 
-Single-file freshness check used primarily by Codex active mode.
+Single-file freshness check used by any client path that cannot be observed
+passively through hooks.
 
 Input:
 
@@ -289,7 +325,10 @@ Output (example):
 ## Memo modes
 
 - Claude Code, OpenCode, and Pi use passive Memo observation via hooks or generated plugins/extensions.
-- Codex uses passive Memo observation for supported Bash and MCP file reads. For any read path your installed Codex does not expose through hooks, call `memo_check` before re-reading files you already saw in-session.
+- Codex uses passive Memo observation for supported Bash and MCP file reads via
+  `PreToolUse` / `PostToolUse` hooks. For any read path your installed Codex
+  does not expose through hooks, call `memo_check` before re-reading files you
+  already saw in-session.
 
 ## Errors
 

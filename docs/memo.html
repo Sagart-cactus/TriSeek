@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TriSeek — Memo &amp; Caching</title>
+<title>TriSeek — Memo &amp; Search Reuse</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
@@ -257,16 +257,16 @@ a.text-link:hover { color: var(--accent-green); }
 
 <div class="container">
   <div class="hero">
-    <div class="hero-badge">&#9672; Memo &amp; Caching</div>
+    <div class="hero-badge">&#9672; Memo &amp; Search Reuse</div>
     <h1>Stop re-reading<br><span class="hl">unchanged files</span></h1>
-    <p class="hero-sub">Memo tracks which files your agent has read in the current session and tells it when they have changed on disk. The search cache does the same for repeated grep queries. Together they prevent redundant token use across every major AI coding harness.</p>
+    <p class="hero-sub">Memo tracks which files your agent has read in the current session and tells it when they have changed on disk. Search reuse does the same for repeated MCP search outputs by telling the model to reuse earlier context when relevant files are unchanged.</p>
   </div>
 
   <!-- 01 — Overview -->
   <section>
     <div class="section-num">// 01 — overview</div>
-    <h2>Two layers of <span class="hl">caching</span></h2>
-    <p class="section-desc">TriSeek ships two complementary caching systems. Memo handles file reads; the search cache handles grep-style queries. Both are session-scoped and automatically invalidated when files change.</p>
+    <h2>Two layers of <span class="hl">reuse</span></h2>
+    <p class="section-desc">TriSeek ships two complementary session systems. Memo handles file reads; search reuse handles duplicate grep-style MCP queries by emitting a compact reuse envelope. Both are invalidated when files change.</p>
 
     <div class="two-col" style="margin-top: 2rem;">
       <div class="card">
@@ -282,23 +282,23 @@ a.text-link:hover { color: var(--accent-green); }
           <span class="flow-arrow">&rarr;</span>
           <div class="flow-box cy">Second read: skip or re-read?</div>
         </div>
-        <p>Validated at 85%+ redundant-read prevention across Claude Code sessions.</p>
+        <p>Validated at 100% of Memo-eligible redundant re-reads prevented with 0 false negatives across 12 traced Claude Code sessions.</p>
       </div>
 
       <div class="card">
         <div class="card-head">
           <div class="card-ico cy">&#9906;</div>
-          <h3>Search Cache (Grep Cache)</h3>
+          <h3>Search Reuse</h3>
         </div>
-        <p>Repeated identical <code>search_content</code>, <code>find_files</code>, and <code>search_path_and_content</code> queries return cached results instead of re-scanning the index. Each response includes a <code>cache</code> field showing whether it was a hit, miss, or bypass.</p>
+        <p>Repeated identical <code>search_content</code>, <code>find_files</code>, and <code>search_path_and_content</code> queries return a compact <code>fresh_duplicate</code> response when the daemon proves relevant files are unchanged. The model reuses the earlier results already in context instead of receiving duplicate output.</p>
         <div class="flow-row">
           <div class="flow-box cy">Agent greps</div>
           <span class="flow-arrow">&rarr;</span>
-          <div class="flow-box gn">Result cached</div>
+          <div class="flow-box gn">Search recorded</div>
           <span class="flow-arrow">&rarr;</span>
-          <div class="flow-box or">Same grep: instant hit</div>
+          <div class="flow-box or">Same grep: reuse context</div>
         </div>
-        <p>In-process LRU, 256 entries, 60s TTL. Cleared on <code>reindex</code>.</p>
+        <p>Session-scoped metadata LRU, 256 entries. Freshness is checked through daemon generation, context epoch, and the change journal.</p>
       </div>
     </div>
   </section>
@@ -307,7 +307,7 @@ a.text-link:hover { color: var(--accent-green); }
   <section>
     <div class="section-num">// 02 — multi-harness support</div>
     <h2>Works across <span class="hl">every harness</span></h2>
-    <p class="section-desc">Memo runs in passive mode where the harness supports hooks, and active mode where it does not. One <code>triseek install</code> command wires everything up.</p>
+    <p class="section-desc">Memo runs passively where the harness supports hooks or extension events, and falls back to explicit <code>memo_check</code> where a read path is not observable. One <code>triseek install</code> command wires everything up.</p>
 
     <div class="two-col" style="margin-top: 2rem;">
       <div class="card">
@@ -336,6 +336,10 @@ a.text-link:hover { color: var(--accent-green); }
               <td><span class="tag pu">Pi</span></td>
               <td>TS extension at <code>~/.pi/agent/extensions/triseek-memo/</code></td>
             </tr>
+            <tr>
+              <td><span class="tag or">Codex</span></td>
+              <td>Hooks for supported Bash and MCP file-read tools</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -343,9 +347,9 @@ a.text-link:hover { color: var(--accent-green); }
       <div class="card">
         <div class="card-head">
           <div class="card-ico or">&#9888;</div>
-          <h3>Active Mode (Codex)</h3>
+          <h3>Active Fallback</h3>
         </div>
-        <p>TriSeek observes supported Codex Bash and MCP file reads passively. Agents still call <code>memo_check</code> before file rereads that the installed Codex version does not expose through hooks.</p>
+        <p>TriSeek observes supported Codex Bash and MCP file reads passively. Agents still call <code>memo_check</code> before file rereads that the installed Codex version or tool path does not expose through hooks.</p>
         <div class="code-block">
           <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">memo_check input</span></div>
           <pre>{
@@ -447,11 +451,11 @@ a.text-link:hover { color: var(--accent-green); }
     </div>
   </section>
 
-  <!-- 04 — Search cache -->
+  <!-- 04 — Search reuse -->
   <section>
-    <div class="section-num">// 04 — search cache</div>
-    <h2>Search result <span class="hl">caching</span></h2>
-    <p class="section-desc">Every search tool response includes a <code>cache</code> field. Identical queries against an unchanged index return instantly from the in-process LRU cache.</p>
+    <div class="section-num">// 04 — search reuse</div>
+    <h2>Search result <span class="hl">reuse</span></h2>
+    <p class="section-desc">Every search tool response includes a <code>cache</code> field. For repeated indexed queries, <code>cache: hit</code> means TriSeek returned a compact instruction to reuse the prior result already in context.</p>
 
     <div class="two-col" style="margin-top: 2rem;">
       <div class="card">
@@ -461,29 +465,29 @@ a.text-link:hover { color: var(--accent-green); }
         </div>
         <div class="prop-list">
           <div class="prop-row">
-            <span class="prop-key">cache key</span>
+            <span class="prop-key">reuse key</span>
             <span class="prop-sep">&middot;</span>
-            <span class="prop-val"><code>tool_name | limit | QueryRequest</code></span>
+            <span class="prop-val"><code>session | tool_name | limit | QueryRequest</code></span>
           </div>
           <div class="prop-row">
             <span class="prop-key">storage</span>
             <span class="prop-sep">&middot;</span>
-            <span class="prop-val">In-memory LRU, 256 entries max</span>
+            <span class="prop-val">In-memory metadata LRU, 256 entries max</span>
           </div>
           <div class="prop-row">
-            <span class="prop-key">TTL</span>
+            <span class="prop-key">freshness</span>
             <span class="prop-sep">&middot;</span>
-            <span class="prop-val">60 seconds (override: <code>TRISEEK_SEARCH_CACHE_TTL_SECS</code>)</span>
+            <span class="prop-val">Daemon generation, context epoch, and change journal</span>
           </div>
           <div class="prop-row">
             <span class="prop-key">invalidation</span>
             <span class="prop-sep">&middot;</span>
-            <span class="prop-val">Cleared on <code>reindex</code> + TTL expiry</span>
+            <span class="prop-val">Fresh search runs when relevant files changed or context was compacted</span>
           </div>
           <div class="prop-row">
             <span class="prop-key">bypass</span>
             <span class="prop-sep">&middot;</span>
-            <span class="prop-val">ripgrep fallback and direct-scan results are never cached</span>
+            <span class="prop-val">Fallback and direct-scan paths execute normally</span>
           </div>
         </div>
       </div>
@@ -504,15 +508,15 @@ a.text-link:hover { color: var(--accent-green); }
           <tbody>
             <tr>
               <td><span class="tag gn">hit</span></td>
-              <td>Returned from cache. No search executed.</td>
+              <td>Repeated indexed search is fresh. Reuse the previous result from context.</td>
             </tr>
             <tr>
               <td><span class="tag or">miss</span></td>
-              <td>Cache miss. Search ran and result was cached.</td>
+              <td>Search executed and metadata was recorded for future duplicate detection.</td>
             </tr>
             <tr>
               <td><span class="tag yw">bypass</span></td>
-              <td>Fallback path used. Result not eligible for caching.</td>
+              <td>Fallback path used. Result is not eligible for reuse metadata.</td>
             </tr>
           </tbody>
         </table>
@@ -522,19 +526,20 @@ a.text-link:hover { color: var(--accent-green); }
 
     <!-- Example response -->
     <div style="margin-top: 2rem;">
-      <h3 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-secondary);">Example — second call returns instantly</h3>
+      <h3 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-secondary);">Example — second call reuses context</h3>
       <div class="code-block">
-        <div class="code-label">search_content response (cache hit)</div>
+        <div class="code-label">search_content response (reuse hit)</div>
         <pre><code>{
-  "strategy":    "triseek_index",
-  "generation":  42,
-  "cache":       "hit",
-  "results": [
-    { "path": "crates/search-cli/src/mcp/tools.rs", "line": 530,
-      "snippet": "fn run_and_envelope(" }
-  ],
-  "total_results": 1,
-  "truncated":   false
+  "strategy": "triseek_indexed",
+  "cache": "hit",
+  "prior_search_id": "search-0001",
+  "reuse_status": "fresh_duplicate",
+  "reuse_reason": "unchanged",
+  "generation": 42,
+  "context_epoch": 0,
+  "results": [],
+  "results_omitted": true,
+  "truncated": false
 }</code></pre>
       </div>
     </div>
@@ -549,22 +554,22 @@ a.text-link:hover { color: var(--accent-green); }
         <div class="prop-row">
           <span class="prop-key">scope</span>
           <span class="prop-sep">&middot;</span>
-          <span class="prop-val">Per MCP process. Two concurrent agent sessions do not share a cache.</span>
+          <span class="prop-val">Per MCP process and session hint. Two unrelated agent sessions do not share reuse state.</span>
         </div>
         <div class="prop-row">
           <span class="prop-key">max size</span>
           <span class="prop-sep">&middot;</span>
-          <span class="prop-val">256 entries × ~40 KB each ≈ 10 MB worst case</span>
+          <span class="prop-val">256 metadata entries, not full result payloads</span>
         </div>
         <div class="prop-row">
           <span class="prop-key">stale risk</span>
           <span class="prop-sep">&middot;</span>
-          <span class="prop-val">Up to 60 s of staleness after a file changes. Call <code>reindex</code> for instant invalidation.</span>
+          <span class="prop-val">Freshness is checked before reuse; changed files force a new search.</span>
         </div>
         <div class="prop-row">
           <span class="prop-key">key normalisation</span>
           <span class="prop-sep">&middot;</span>
-          <span class="prop-val">Exact match only. Changing <code>limit</code> or any query field is treated as a new entry.</span>
+          <span class="prop-val">Exact match only. Changing <code>limit</code> or any query field is treated as a new search.</span>
         </div>
       </div>
     </div>
@@ -574,7 +579,7 @@ a.text-link:hover { color: var(--accent-green); }
   <section>
     <div class="section-num">// 05 — install</div>
     <h2>One command <span class="hl">setup</span></h2>
-    <p class="section-desc">Each installer wires up both MCP search tools and Memo hooks/plugins. The search cache is built into the MCP server and requires no configuration.</p>
+    <p class="section-desc">Each installer wires up both MCP search tools and Memo hooks/plugins. Search reuse is built into the MCP server and requires no configuration.</p>
 
     <div class="two-col" style="margin-top: 2rem;">
       <div class="card">
@@ -667,9 +672,9 @@ triseek install pi</pre>
       <div class="card">
         <div class="card-head">
           <div class="card-ico or">&#9900;</div>
-          <h3>Codex Active Mode Guide</h3>
+          <h3>Codex Memo Guide</h3>
         </div>
-        <p>For Codex agents that need step-by-step instructions on when and how to call <code>memo_check</code>, see the dedicated skill doc:</p>
+        <p>For Codex agents that need step-by-step instructions on hook coverage and when to call <code>memo_check</code>, see the dedicated skill doc:</p>
         <p style="margin-top: 0.75rem;"><a class="text-link" href="https://github.com/Sagart-cactus/TriSeek/blob/main/docs/codex-memo-skill.md">docs/codex-memo-skill.md</a></p>
         <p>This doc includes a decision table, full response field reference, and an example system prompt addition.</p>
       </div>
@@ -677,7 +682,7 @@ triseek install pi</pre>
   </section>
 
   <footer class="site-footer">
-    <span>Memo and the search cache are part of the TriSeek MCP server and daemon. They require no separate configuration.</span>
+    <span>Memo and search reuse are part of the TriSeek MCP server and daemon. They require no separate configuration.</span>
     <div style="display:flex;gap:1.25rem;">
       <a href="mcp.html">&larr; mcp</a>
       <a href="install.html">install &rarr;</a>

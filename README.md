@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/rust-stable-orange.svg" alt="Rust stable" />
 </p>
 
-**TriSeek** is a local code-search daemon with an MCP server for Claude Code, Codex, OpenCode, and Pi. It keeps a trigram index of your repos, falls back to ripgrep when the index is cold, and — most importantly for agents — tracks which files have been read in the current session so your agent stops re-reading the same file three times per conversation.
+**TriSeek** is a local code-search daemon with an MCP server for Claude Code, Codex, OpenCode, and Pi. It keeps a trigram index of your repos, falls back to ripgrep when the index is cold, and — most importantly for agents — tracks which files and search results are already in the current session so your agent stops re-reading the same file or reprinting the same search output three times per conversation.
 
 On the Linux kernel, a 20-query agent session takes **0.6 s with TriSeek vs 10.3 s with ripgrep** — 16.9× faster, measured. The memo layer on top catches redundant re-reads before they hit disk, with zero false negatives across 12 replayed Claude Code sessions.
 
@@ -34,7 +34,7 @@ That's the whole onboarding. Search works immediately. The index and daemon warm
 - **Indexed where it matters, raw where it doesn't.** Trigram index for repeated queries; ripgrep fallback for weak regex and small repos. You never wait for an index to build before the first search.
 - **Built for AI agents from day one.** First-class MCP server (8 tools), installs into Claude Code / Codex / OpenCode / Pi with one command, and exposes a session-aware memo layer that prevents agents from re-reading files they just saw.
 - **State stays out of your repo.** Indexes, daemon, and session data live under `~/.triseek`, not in repo-local dotfiles. One global daemon serves many roots.
-- **Honest about what ran.** Every MCP response tells you which backend answered (`triseek_indexed`, `triseek_direct_scan`, `ripgrep_fallback`) and whether the result came from the query cache.
+- **Honest about what ran.** Every MCP response tells you which backend answered (`triseek_indexed`, `triseek_direct_scan`, `ripgrep_fallback`) and whether a repeated indexed search reused earlier context (`cache: hit`) or executed again (`miss` / `bypass`).
 
 ---
 
@@ -156,7 +156,9 @@ triseek.memo_check
       "last_read_ago_seconds": 142 }
 ```
 
-**Validation.** We replayed 12 traced Claude Code sessions (ripgrep and serde tasks, six explicit-scope, six cold-start) through the live daemon. 100% of Memo-eligible redundant re-reads were prevented; **0 false negatives** across all 12 runs. Methodology and raw reports: [`memo_validation/`](memo_validation/). The absolute token numbers are small (tens to low hundreds per task on the traces we ran) — treat memo as a correctness-and-hygiene feature, not a headline cost-cutter. If your sessions involve many repeated full-file reads of large files, savings scale accordingly.
+**Validation.** We replayed 12 traced Claude Code sessions (ripgrep and serde tasks, six explicit-scope, six cold-start) through the live daemon. 100% of Memo-eligible redundant re-reads were prevented; **0 false negatives** across all 12 runs. Methodology and raw reports: [`memo_validation/`](memo_validation/). The absolute file-read token numbers are small (tens to low hundreds per task on the traces we ran) — treat memo as a correctness-and-hygiene feature, not a headline cost-cutter. If your sessions involve many repeated full-file reads of large files, savings scale accordingly.
+
+Repeated search reuse is separate from file-read memo. When the same MCP search runs again in the same session and the daemon proves relevant files are unchanged, TriSeek returns a compact `fresh_duplicate` response with `results_omitted: true` and tells the model to reuse the earlier output already in context. The v0.3.2 validation run saved 628 of 679 repeat-search result outputs, for 1124 of 1175 combined file-read plus search opportunities.
 
 **Compaction.** When a harness compacts its conversation context, the model loses the file bodies it previously saw. The memo daemon handles this honestly: on a `PreCompact` event from the harness, it invalidates the session's file map so post-compaction `memo_check` calls return `Reread` rather than a stale `SkipReread`. This matters because a "skip" recommendation is only safe when the model still has the content. The daemon never pretends otherwise.
 
@@ -209,6 +211,8 @@ Every search response includes `strategy`, `fallback_used`, and `cache` (`hit` /
 - `triseek_direct_scan` — in-process walker, used when path filters dominate.
 - `ripgrep_fallback` — shells out to `rg` for weak regex or very small repos.
 
+For indexed repeated searches, `cache: hit` means TriSeek skipped returning duplicate results and emitted a context-reuse envelope. Use `force_refresh: true` on a search tool call when you explicitly need a fresh execution.
+
 Default result cap: 20 results, 200-char previews, dedup on. Keeps responses comfortably under Claude Code's 10,000-token MCP output warning.
 
 ---
@@ -256,13 +260,13 @@ Local index and session data live under `~/.triseek`; remove that directory if y
 - [Docs home](https://sagart-cactus.github.io/TriSeek/)
 - [Installation guide](https://sagart-cactus.github.io/TriSeek/install.html)
 - [MCP server reference](https://sagart-cactus.github.io/TriSeek/mcp.html)
-- [Memo & caching](https://sagart-cactus.github.io/TriSeek/memo.html)
+- [Memo & search reuse](https://sagart-cactus.github.io/TriSeek/memo.html)
 - [How TriSeek works](https://sagart-cactus.github.io/TriSeek/triseek-explained.html)
 - [Architecture](https://sagart-cactus.github.io/TriSeek/triseek-architecture.html)
 
 ## Contributing
 
-Issues and PRs welcome. Start with [good-first-issue](https://github.com/Sagart-cactus/TriSeek/labels/good%20first%20issue). CI runs formatting, clippy, workspace tests, and release-binary smoke builds across Linux, macOS, and Windows.
+Issues and PRs welcome. Start with [good-first-issue](https://github.com/Sagart-cactus/TriSeek/labels/good%20first%20issue). CI runs formatting, clippy, workspace tests, and release-binary smoke builds across Linux, macOS, and Windows. For release-style local validation, `scripts/run_real_harness_docker.sh` builds the binaries in Docker, starts an isolated daemon, exercises CLI and MCP behavior, and verifies install config generation for Claude Code, Codex, OpenCode, and Pi.
 
 ## License
 
