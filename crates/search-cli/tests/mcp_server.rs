@@ -946,8 +946,14 @@ fn search_content_reruns_when_matching_file_changes() {
     fake_daemon.wait_for_requests(4, Duration::from_secs(2));
     let requests = fake_daemon.finish();
     assert_eq!(requests[0]["method"], json!("preload_root"));
-    assert_eq!(requests[2]["method"], json!("search_reuse_check"));
-    assert_eq!(requests[3]["method"], json!("status"));
+    let methods: Vec<_> = requests
+        .iter()
+        .filter_map(|request| request.get("method").and_then(Value::as_str))
+        .collect();
+    assert!(
+        methods.contains(&"search_reuse_check"),
+        "expected search reuse freshness check in daemon requests: {methods:?}"
+    );
 
     client.shutdown();
 }

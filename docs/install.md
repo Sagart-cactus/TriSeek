@@ -25,7 +25,7 @@ The installer also ensures the TriSeek daemon is running. Fresh installs start i
 Pin a version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.3.2
+curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.3.3
 ```
 
 Install to a custom directory:
@@ -89,8 +89,9 @@ triseek install pi
 ```
 
 Claude Code, OpenCode, and Pi get passive Memo observation via hooks or
-plugins. Codex gets the same MCP install plus active-mode guidance for
-`memo_check` until Codex hook coverage improves.
+plugins. Codex gets the same MCP install plus Bash and MCP file-read hook
+coverage when supported by the installed Codex version, with active-mode
+guidance for any remaining non-hooked reads via `memo_check`.
 
 ## Quick Start
 

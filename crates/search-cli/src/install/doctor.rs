@@ -129,8 +129,11 @@ pub fn run() -> Result<()> {
     if let Ok(path) = shared::codex_hooks_json_path() {
         if let Ok(text) = std::fs::read_to_string(&path) {
             match shared::codex_hooks_status(&text) {
-                Ok((post_tool, session_start)) => {
+                Ok((pre_tool, post_tool, session_start)) => {
                     let mut missing = Vec::new();
+                    if !pre_tool {
+                        missing.push("PreToolUse");
+                    }
                     if !post_tool {
                         missing.push("PostToolUse");
                     }
@@ -138,7 +141,7 @@ pub fn run() -> Result<()> {
                         missing.push("SessionStart");
                     }
                     if missing.is_empty() {
-                        println!("[ok] Codex hooks: PostToolUse, SessionStart");
+                        println!("[ok] Codex hooks: PreToolUse, PostToolUse, SessionStart");
                     } else {
                         println!(
                             "[warn] Codex hooks: missing {} ({})",
