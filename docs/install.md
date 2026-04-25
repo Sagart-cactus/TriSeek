@@ -76,6 +76,24 @@ triseek help
 triseek doctor
 ```
 
+## Release-Style Validation
+
+TriSeek includes a Docker real harness for testing release binaries without
+touching your real daemon or agent configs:
+
+```sh
+scripts/run_real_harness_docker.sh
+```
+
+The harness builds `triseek` and `triseek-server`, runs CLI smoke checks, starts
+an isolated daemon, drives MCP stdio tools, verifies search reuse invalidation,
+and checks install/uninstall config generation for Claude Code, Codex, OpenCode,
+and Pi. To include a large-repo smoke test:
+
+```sh
+TRISEEK_LARGE_REPO=/path/to/large/repo scripts/run_real_harness_docker.sh
+```
+
 ## Agent Client Installs
 
 TriSeek can register itself as an MCP server and install Memo helpers for
@@ -89,9 +107,9 @@ triseek install pi
 ```
 
 Claude Code, OpenCode, and Pi get passive Memo observation via hooks or
-plugins. Codex gets the same MCP install plus Bash and MCP file-read hook
-coverage when supported by the installed Codex version, with active-mode
-guidance for any remaining non-hooked reads via `memo_check`.
+plugins. Codex gets the same MCP install plus `PreToolUse`, `PostToolUse`, and
+`SessionStart` hooks for supported Bash and MCP file-read tools, with
+active-mode guidance for any remaining non-hooked reads via `memo_check`.
 
 ## Quick Start
 
