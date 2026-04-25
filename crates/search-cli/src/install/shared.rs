@@ -268,8 +268,14 @@ pub fn upsert_codex_hooks(existing: Option<&str>, binary: &str) -> Result<String
     let command = quote_for_shell(binary);
     upsert_codex_hook_event(
         hooks,
+        "PreToolUse",
+        "^(Bash|mcp__.*__(read|read_file|view|view_file|get_file|open_file))$",
+        &format!("{command} memo-observe --event pre-tool-use"),
+    )?;
+    upsert_codex_hook_event(
+        hooks,
         "PostToolUse",
-        "Bash|Read|Edit|Write",
+        "^(Bash|mcp__.*__(read|read_file|view|view_file|get_file|open_file))$",
         &format!("{command} memo-observe --event post-tool-use"),
     )?;
     upsert_codex_hook_event(
@@ -292,7 +298,7 @@ pub fn remove_codex_hooks(existing: &str) -> Result<Option<String>> {
         return Ok(None);
     };
     let mut changed = false;
-    for event in ["PostToolUse", "SessionStart"] {
+    for event in ["PreToolUse", "PostToolUse", "SessionStart"] {
         if let Some(groups) = hooks.get_mut(event).and_then(Value::as_array_mut) {
             let before = groups.len();
             groups.retain(|group| !is_triseek_hook_group(group));
@@ -307,15 +313,16 @@ pub fn remove_codex_hooks(existing: &str) -> Result<Option<String>> {
     Ok(Some(serde_json::to_string_pretty(&root)? + "\n"))
 }
 
-pub fn codex_hooks_status(existing: &str) -> Result<(bool, bool)> {
+pub fn codex_hooks_status(existing: &str) -> Result<(bool, bool, bool)> {
     let root: Value =
         serde_json::from_str(existing).context("failed to parse existing Codex hooks.json")?;
     let Some(hooks) = root.get("hooks").and_then(Value::as_object) else {
-        return Ok((false, false));
+        return Ok((false, false, false));
     };
+    let pre_tool = has_triseek_hook_in_event(hooks, "PreToolUse");
     let post_tool = has_triseek_hook_in_event(hooks, "PostToolUse");
     let session_start = has_triseek_hook_in_event(hooks, "SessionStart");
-    Ok((post_tool, session_start))
+    Ok((pre_tool, post_tool, session_start))
 }
 
 pub fn write_opencode_plugin(plugin_dir: &Path, binary: &str) -> Result<()> {
@@ -746,16 +753,24 @@ args = ["mcp", "serve"]
     fn upsert_and_remove_codex_hooks_round_trip() {
         let out = upsert_codex_hooks(None, "/bin/triseek").unwrap();
         let parsed: Value = serde_json::from_str(&out).unwrap();
-        let command_hook = &parsed["hooks"]["PostToolUse"][0]["hooks"][0];
-        assert_eq!(codex_hooks_status(&out).unwrap(), (true, true));
-        assert!(out.contains("\"matcher\": \"Bash|Read|Edit|Write\""));
+        let pre_tool_hook = &parsed["hooks"]["PreToolUse"][0]["hooks"][0];
+        let post_tool_hook = &parsed["hooks"]["PostToolUse"][0]["hooks"][0];
+        assert_eq!(codex_hooks_status(&out).unwrap(), (true, true, true));
+        assert!(out.contains(
+            "\"matcher\": \"^(Bash|mcp__.*__(read|read_file|view|view_file|get_file|open_file))$\""
+        ));
         assert_eq!(
-            command_hook["command"],
+            pre_tool_hook["command"],
+            "'/bin/triseek' memo-observe --event pre-tool-use"
+        );
+        assert_eq!(
+            post_tool_hook["command"],
             "'/bin/triseek' memo-observe --event post-tool-use"
         );
-        assert_eq!(command_hook["timeout"], 5);
+        assert_eq!(pre_tool_hook["timeout"], 5);
+        assert_eq!(post_tool_hook["timeout"], 5);
         let removed = remove_codex_hooks(&out).unwrap().unwrap();
-        assert_eq!(codex_hooks_status(&removed).unwrap(), (false, false));
+        assert_eq!(codex_hooks_status(&removed).unwrap(), (false, false, false));
     }
 
     #[test]

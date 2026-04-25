@@ -109,12 +109,17 @@ fn install_hooks(binary: &str) -> Result<()> {
     shared::atomic_write(&path, &merged)
         .with_context(|| format!("failed to write {}", path.display()))?;
     println!("triseek: memo hooks installed into {}", path.display());
-    println!("triseek: note — Codex hooks currently fire only for Bash (upstream issue #16732).");
+    println!(
+        "triseek: Codex hooks are installed for Bash reads and MCP file-read tool calls when supported by your Codex version."
+    );
     println!(
         "triseek: Bash-based shell reads are observed automatically when Codex emits parsed command metadata."
     );
     println!(
-        "triseek: use `mcp__triseek__memo_check {{\"path\":\"<file>\"}}` before re-reading files handled by Codex's built-in Read tool."
+        "triseek: redundant Bash and MCP file rereads can be blocked via PreToolUse when Memo proves the file is unchanged."
+    );
+    println!(
+        "triseek: use `mcp__triseek__memo_check {{\"path\":\"<file>\"}}` before re-reading files through any non-hooked tool."
     );
     println!("triseek: see docs/codex-memo-skill.md for the full decision table.");
     Ok(())

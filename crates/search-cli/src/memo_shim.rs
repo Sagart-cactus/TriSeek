@@ -209,7 +209,8 @@ fn tool_event_kind(payload: &Value) -> Option<MemoEventKind> {
         .or_else(|| find_string_pointer(payload, "/tool"))
         .or_else(|| find_string_pointer(payload, "/name"));
     if let Some(tool_name) = tool_name {
-        match tool_name.to_ascii_lowercase().as_str() {
+        let normalized = tool_name.to_ascii_lowercase();
+        match normalized.as_str() {
             "read" | "view" => return Some(MemoEventKind::Read),
             "edit" | "write" | "multiedit" | "notebookedit" | "apply_patch" => {
                 return Some(MemoEventKind::Edit);
@@ -219,10 +220,28 @@ fn tool_event_kind(payload: &Value) -> Option<MemoEventKind> {
                     return Some(kind);
                 }
             }
-            _ => {}
+            _ => {
+                if let Some(kind) = infer_mcp_tool_event_kind(&normalized) {
+                    return Some(kind);
+                }
+            }
         }
     }
     infer_bash_event_kind(payload)
+}
+
+fn infer_mcp_tool_event_kind(tool_name: &str) -> Option<MemoEventKind> {
+    let name = tool_name.strip_prefix("mcp__")?;
+    let tool = name.rsplit("__").next().unwrap_or(name);
+    match tool {
+        "read" | "read_file" | "view" | "view_file" | "get_file" | "open_file" => {
+            Some(MemoEventKind::Read)
+        }
+        "write" | "write_file" | "edit" | "edit_file" | "replace" | "replace_file" => {
+            Some(MemoEventKind::Edit)
+        }
+        _ => None,
+    }
 }
 
 fn resolve_repo_root(repo_override: Option<&Path>, payload: &Value) -> Result<PathBuf> {
@@ -625,6 +644,19 @@ mod tests {
         });
         let kind = tool_event_kind(&payload).unwrap();
         assert!(matches!(kind, MemoEventKind::Read));
+    }
+
+    #[test]
+    fn infers_mcp_file_read_event() {
+        let payload = json!({
+            "tool_name": "mcp__filesystem__read_file",
+            "tool_input": {
+                "path": "src/lib.rs"
+            }
+        });
+        let kind = tool_event_kind(&payload).unwrap();
+        assert!(matches!(kind, MemoEventKind::Read));
+        assert_eq!(find_path(&payload).as_deref(), Some("src/lib.rs"));
     }
 
     #[test]

@@ -31,7 +31,7 @@ Expected output includes:
 - `wrote [mcp_servers.triseek] to ~/.codex/config.toml` (fallback)
 - `memo hooks installed into ~/.codex/hooks.json`
 - `enabled Codex feature flag codex_hooks = true`
-- Note about issue #16732 and `memo_check` usage
+- Note about Bash/MCP file-read Codex hook coverage and `memo_check` usage for non-hooked reads
 
 ### B. `memo_check` — unknown file (never read)
 

@@ -51,7 +51,7 @@ Installs `triseek` and `triseek-server` into `~/.local/bin`. Prefers prebuilt Gi
 Pin a version or install elsewhere:
 
 ```sh
-curl -fsSL .../install.sh | sh -s -- --version v0.3.2
+curl -fsSL .../install.sh | sh -s -- --version v0.3.3
 curl -fsSL .../install.sh | sh -s -- --install-dir /usr/local/bin
 ```
 
@@ -166,10 +166,10 @@ Hook support varies by client:
 |---|---|---|
 | Claude Code | via `PreToolUse` / `PostToolUse` hooks | **Yes** — memo invalidates correctly |
 | Pi | via `tool_result` extension event | **Yes** — memo invalidates correctly |
-| OpenCode | via `tool.execute.after` plugin hook | No (harness doesn't expose one) |
-| Codex | explicit `memo_check` for file-tool reads; Bash reads via `PostToolUse` when metadata is available | No (harness doesn't expose one) |
+| OpenCode | via companion plugin using `tool.execute.after` | **Yes** — via companion plugin using `experimental.session.compacting` |
+| Codex | explicit `memo_check` for non-hooked file reads; Bash and MCP file reads via `PreToolUse` / `PostToolUse` when supported by the installed Codex version | No (harness doesn't expose one) |
 
-For OpenCode and Codex, dedup is bounded by each harness's own context-management behavior — memo is correct within a single uncompacted segment, and a future content-caching memo daemon (Phase 6) will close that gap. For Claude Code and Pi, memo is compaction-aware end-to-end today.
+OpenCode support works through the plugin sidecar installed by `triseek install opencode`, not through the MCP transport itself. TriSeek installs both the MCP server entry and a companion OpenCode plugin; that plugin listens for `session.created`, `tool.execute.after`, and `experimental.session.compacting`, then forwards those events to `triseek memo-observe`. That gives OpenCode the same compaction-aware memo behavior as Claude Code and Pi for this use case, even though the integration surface is a plugin API rather than Claude Code's JSON hook config. Codex upstream now has hook dispatch for MCP tools, so TriSeek installs Codex matchers for Bash and MCP file-read tools; Codex still lacks an equivalent pre-compact hook surface, so memo correctness is bounded to the current uncompacted segment.
 
 ---
 
@@ -181,8 +181,8 @@ One command per client. All four land TriSeek as a first-class MCP server; the m
 |---|---|---|---|---|
 | Claude Code | `triseek install claude-code [--scope user\|project\|local]` | passive (via hooks) | Yes | `~/.claude/settings.json` · `.mcp.json` · `.claude/settings.local.json` |
 | Pi | `triseek install pi` | passive (via extension) | Yes | MCP config + `~/.pi/agent/extensions/triseek-memo/` |
-| OpenCode | `triseek install opencode` | passive (via plugin) | No (harness doesn't expose a hook) | MCP config + `~/.config/opencode/plugins/triseek-memo.ts` |
-| Codex | `triseek install codex` | active for file-tool reads; passive for supported Bash reads | No (harness doesn't expose a hook) | `~/.codex/config.toml` · `~/.codex/hooks.json` |
+| OpenCode | `triseek install opencode` | passive (via companion plugin events) | Yes | MCP config + `~/.config/opencode/plugins/triseek-memo.ts` |
+| Codex | `triseek install codex` | active for non-hooked file reads; passive for supported Bash and MCP file reads | No (harness doesn't expose a hook) | `~/.codex/config.toml` · `~/.codex/hooks.json` |
 
 Verify any install with `triseek doctor`. Run the server manually (for debugging or CI) with `triseek mcp serve --repo /path/to/repo` — stdout carries framed JSON-RPC, stderr carries logs.
 
@@ -229,7 +229,7 @@ Default result cap: 20 results, 200-char previews, dedup on. Keeps responses com
 
 - **`claude mcp list` doesn't show TriSeek** — re-run `triseek install claude-code --scope <scope>` and reload your Claude Code workspace. `triseek doctor` confirms the `claude` CLI is on `PATH`.
 - **Codex doesn't see TriSeek** — check `~/.codex/config.toml` for `[mcp_servers.triseek]`. Re-run `triseek install codex`.
-- **Codex memo seems inactive** — expected until upstream hook support matures. Use `memo_check` explicitly; see `docs/codex-memo-skill.md`.
+- **Codex memo seems inactive** — Bash and MCP file reads are hook-observed when your Codex version emits those hooks; other file reads still need explicit `memo_check`; see `docs/codex-memo-skill.md`.
 - **`INDEX_UNAVAILABLE` on MCP calls** — run `triseek build .` or call the `reindex` tool.
 - **Daemon crashed / stuck** — `triseek daemon stop` then `triseek daemon start`. Logs: `~/.triseek/daemon/*.log`.
 

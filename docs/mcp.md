@@ -289,7 +289,7 @@ Output (example):
 ## Memo modes
 
 - Claude Code, OpenCode, and Pi use passive Memo observation via hooks or generated plugins/extensions.
-- Codex currently uses active Memo mode because upstream hooks still do not reliably fire for non-Bash tools. Call `memo_check` before re-reading files you already saw in-session.
+- Codex uses passive Memo observation for supported Bash and MCP file reads. For any read path your installed Codex does not expose through hooks, call `memo_check` before re-reading files you already saw in-session.
 
 ## Errors
 
