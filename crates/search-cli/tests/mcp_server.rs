@@ -919,7 +919,11 @@ fn search_content_reruns_when_matching_file_changes() {
             fake_status_response(11, 1),
         ],
     );
-    let mut client = McpClient::spawn_with_home(fixture.path(), Some(home.path()));
+    let mut client = McpClient::spawn_with_home_and_env(
+        fixture.path(),
+        Some(home.path()),
+        &[("TRISEEK_MCP_DISABLE_STARTUP_SYNC", "1")],
+    );
     handshake(&mut client);
 
     let args = json!({ "query": "parse_arguments", "mode": "literal", "limit": 5 });
@@ -968,7 +972,11 @@ fn different_meta_session_ids_do_not_share_search_memo() {
             fake_status_response(10, 1),
         ],
     );
-    let mut client = McpClient::spawn_with_home(fixture.path(), Some(home.path()));
+    let mut client = McpClient::spawn_with_home_and_env(
+        fixture.path(),
+        Some(home.path()),
+        &[("TRISEEK_MCP_DISABLE_STARTUP_SYNC", "1")],
+    );
     handshake(&mut client);
 
     let first = call_tool_with_meta(
