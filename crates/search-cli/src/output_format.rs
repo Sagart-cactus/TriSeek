@@ -9,9 +9,9 @@
 //!   plain-text digest suitable for an LLM to read directly. Never emits
 //!   ANSI codes.
 //!
-//! Both treat results identically: group by file, show a per-file match
-//! count, then indented `line:col  preview` rows, and trim previews to a
-//! sensible width with a trailing `…`.
+//! The CLI renders search results as a compact table and trims long paths or
+//! previews to the available terminal width. The MCP digest keeps a prose,
+//! grouped-by-file shape for LLM readability.
 //!
 //! The JSON envelope schema (`version: "1"`) is unchanged; this module only
 //! touches presentation.
@@ -23,16 +23,17 @@ use std::fmt::Write as _;
 /// Fallback column count when we can't detect the terminal width.
 const DEFAULT_CLI_COLS: usize = 120;
 
-/// Minimum width we reserve for a match preview, regardless of terminal.
-const MIN_PREVIEW_WIDTH: usize = 40;
+/// Minimum table preview width for narrow terminals.
+const MIN_TABLE_PREVIEW_WIDTH: usize = 20;
+
+/// Maximum path column width before paths are middle-truncated.
+const MAX_TABLE_PATH_WIDTH: usize = 40;
 
 /// ANSI escape codes. Emitted only when `RenderOpts::color` is true.
 mod ansi {
     pub const RESET: &str = "\x1b[0m";
     pub const BOLD: &str = "\x1b[1m";
     pub const DIM: &str = "\x1b[2m";
-    pub const CYAN: &str = "\x1b[36m";
-    pub const YELLOW: &str = "\x1b[33m";
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -92,44 +93,8 @@ pub fn render_human(response: &SearchResponse, opts: RenderOpts) -> String {
         return out;
     }
 
-    // Gutter width: the `line:col` column needs to fit the widest value we
-    // expect. Compute it up front so every row aligns.
-    let gutter = compute_gutter(&response.hits);
-    let prefix_overhead = 2 /* indent */ + gutter + 2 /* double space */;
-    let preview_width = opts
-        .max_line_width
-        .saturating_sub(prefix_overhead)
-        .max(MIN_PREVIEW_WIDTH);
-
-    for hit in &response.hits {
-        writeln!(&mut out).unwrap();
-        match hit {
-            SearchHit::Content { path, lines } => {
-                writeln!(
-                    &mut out,
-                    "{path}  {count}",
-                    path = style.cyan_bold(path),
-                    count = style.dim(&format!("({})", lines.len())),
-                )
-                .unwrap();
-                for line in lines {
-                    let loc = format!("{}:{}", line.line_number, line.column);
-                    let preview = trim_preview(&line.line_text, preview_width);
-                    writeln!(
-                        &mut out,
-                        "  {:>gutter$}  {}",
-                        style.yellow(&loc),
-                        preview,
-                        gutter = gutter + style.yellow_overhead(),
-                    )
-                    .unwrap();
-                }
-            }
-            SearchHit::Path { path } => {
-                writeln!(&mut out, "{}", style.cyan_bold(path)).unwrap();
-            }
-        }
-    }
+    writeln!(&mut out).unwrap();
+    write_search_table(&mut out, &response.hits, opts.max_line_width);
 
     // Footer: truncation hint, only when the summary counted more than we
     // actually have room to display. This mirrors MCP's `truncated` logic.
@@ -192,6 +157,28 @@ pub fn trim_preview(text: &str, max_chars: usize) -> String {
     }
     let head: String = trimmed.chars().take(max_chars.saturating_sub(1)).collect();
     format!("{head}…")
+}
+
+fn truncate_middle(text: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= max_chars {
+        return text.to_string();
+    }
+    if max_chars <= 1 {
+        return "…".to_string();
+    }
+
+    let left = (max_chars - 1) / 2;
+    let right = max_chars - 1 - left;
+    let mut truncated = String::new();
+    for ch in &chars[..left] {
+        truncated.push(*ch);
+    }
+    truncated.push('…');
+    for ch in &chars[chars.len() - right..] {
+        truncated.push(*ch);
+    }
+    truncated
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +306,184 @@ fn render_search_envelope_digest(
     out
 }
 
+fn write_search_table(out: &mut String, hits: &[SearchHit], max_line_width: usize) {
+    let rows = table_rows(hits);
+    let widths = table_widths(&rows, max_line_width);
+
+    write_table_border(out, '┌', '┬', '┐', &widths);
+    write_table_row(
+        out,
+        &[
+            ("Path", widths.path, Align::Left),
+            ("Line", widths.line, Align::Right),
+            ("Col", widths.column, Align::Right),
+            ("Preview", widths.preview, Align::Left),
+        ],
+    );
+    write_table_border(out, '├', '┼', '┤', &widths);
+
+    for (index, row) in rows.iter().enumerate() {
+        let line = row.line.map(|n| n.to_string()).unwrap_or_default();
+        let column = row.column.map(|n| n.to_string()).unwrap_or_default();
+        let path = truncate_middle(&row.path, widths.path);
+        let preview = trim_preview(&row.preview, widths.preview);
+        write_table_row(
+            out,
+            &[
+                (&path, widths.path, Align::Left),
+                (&line, widths.line, Align::Right),
+                (&column, widths.column, Align::Right),
+                (&preview, widths.preview, Align::Left),
+            ],
+        );
+        let (left, mid, right) = if index + 1 == rows.len() {
+            ('└', '┴', '┘')
+        } else {
+            ('├', '┼', '┤')
+        };
+        write_table_border(out, left, mid, right, &widths);
+    }
+}
+
+#[derive(Debug)]
+struct SearchTableRow {
+    path: String,
+    line: Option<usize>,
+    column: Option<usize>,
+    preview: String,
+}
+
+fn table_rows(hits: &[SearchHit]) -> Vec<SearchTableRow> {
+    let mut rows = Vec::new();
+    for hit in hits {
+        match hit {
+            SearchHit::Content { path, lines } => {
+                for line in lines {
+                    rows.push(SearchTableRow {
+                        path: path.clone(),
+                        line: Some(line.line_number),
+                        column: Some(line.column),
+                        preview: line.line_text.clone(),
+                    });
+                }
+            }
+            SearchHit::Path { path } => rows.push(SearchTableRow {
+                path: path.clone(),
+                line: None,
+                column: None,
+                preview: String::new(),
+            }),
+        }
+    }
+    rows
+}
+
+#[derive(Clone, Copy)]
+struct SearchTableWidths {
+    path: usize,
+    line: usize,
+    column: usize,
+    preview: usize,
+}
+
+fn table_widths(rows: &[SearchTableRow], max_line_width: usize) -> SearchTableWidths {
+    let line_width = rows
+        .iter()
+        .filter_map(|row| row.line)
+        .map(digit_count)
+        .max()
+        .unwrap_or(4)
+        .max(4);
+    let column_width = rows
+        .iter()
+        .filter_map(|row| row.column)
+        .map(digit_count)
+        .max()
+        .unwrap_or(3)
+        .max(3);
+    let table_width = max_line_width.max(60);
+    let available = table_width.saturating_sub(table_overhead(4));
+    let remaining = available.saturating_sub(line_width + column_width);
+    let max_path_width = rows
+        .iter()
+        .map(|row| display_width(&row.path))
+        .max()
+        .unwrap_or(4)
+        .clamp(4, MAX_TABLE_PATH_WIDTH);
+    let path_width = if remaining > MIN_TABLE_PREVIEW_WIDTH + 16 {
+        max_path_width.min(remaining - MIN_TABLE_PREVIEW_WIDTH)
+    } else {
+        (remaining / 2).max(4)
+    };
+    let preview_width = remaining
+        .saturating_sub(path_width)
+        .max(MIN_TABLE_PREVIEW_WIDTH);
+
+    SearchTableWidths {
+        path: path_width,
+        line: line_width,
+        column: column_width,
+        preview: preview_width,
+    }
+}
+
+fn table_overhead(columns: usize) -> usize {
+    (columns * 3) + 1
+}
+
+#[derive(Clone, Copy)]
+enum Align {
+    Left,
+    Right,
+}
+
+fn write_table_border(
+    out: &mut String,
+    left: char,
+    mid: char,
+    right: char,
+    widths: &SearchTableWidths,
+) {
+    out.push(left);
+    for (index, width) in [widths.path, widths.line, widths.column, widths.preview]
+        .iter()
+        .enumerate()
+    {
+        for _ in 0..(width + 2) {
+            out.push('─');
+        }
+        out.push(if index == 3 { right } else { mid });
+    }
+    out.push('\n');
+}
+
+fn write_table_row(out: &mut String, cells: &[(&str, usize, Align)]) {
+    out.push('│');
+    for (content, width, align) in cells {
+        out.push(' ');
+        write_aligned(out, content, *width, *align);
+        out.push(' ');
+        out.push('│');
+    }
+    out.push('\n');
+}
+
+fn write_aligned(out: &mut String, content: &str, width: usize, align: Align) {
+    let text_width = display_width(content);
+    let padding = width.saturating_sub(text_width);
+    if matches!(align, Align::Right) {
+        for _ in 0..padding {
+            out.push(' ');
+        }
+    }
+    out.push_str(content);
+    if matches!(align, Align::Left) {
+        for _ in 0..padding {
+            out.push(' ');
+        }
+    }
+}
+
 fn render_index_status_digest(envelope: &Value) -> String {
     let present = envelope
         .get("index_present")
@@ -419,21 +584,6 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
-fn compute_gutter(hits: &[SearchHit]) -> usize {
-    let mut max = 5; // min gutter "L1:1 " width
-    for hit in hits {
-        if let SearchHit::Content { lines, .. } = hit {
-            for line in lines {
-                let w = digit_count(line.line_number) + 1 + digit_count(line.column);
-                if w > max {
-                    max = w;
-                }
-            }
-        }
-    }
-    max
-}
-
 fn compute_gutter_from_envelope(lines: &[Value]) -> usize {
     let mut max = 5;
     for line in lines {
@@ -459,6 +609,10 @@ fn digit_count(n: usize) -> usize {
         }
         c
     }
+}
+
+fn display_width(text: &str) -> usize {
+    text.chars().count()
 }
 
 fn is_truncated(response: &SearchResponse) -> bool {
@@ -518,32 +672,6 @@ impl Style {
             format!("{}{}{}", ansi::DIM, s, ansi::RESET)
         } else {
             s.to_string()
-        }
-    }
-
-    fn cyan_bold(&self, s: &str) -> String {
-        if self.color {
-            format!("{}{}{}{}", ansi::BOLD, ansi::CYAN, s, ansi::RESET)
-        } else {
-            s.to_string()
-        }
-    }
-
-    fn yellow(&self, s: &str) -> String {
-        if self.color {
-            format!("{}{}{}", ansi::YELLOW, s, ansi::RESET)
-        } else {
-            s.to_string()
-        }
-    }
-
-    /// Extra byte width introduced by ANSI wrapping of yellow text. Used so
-    /// the `>gutter$` width specifier still produces visual alignment.
-    fn yellow_overhead(&self) -> usize {
-        if self.color {
-            ansi::YELLOW.len() + ansi::RESET.len()
-        } else {
-            0
         }
     }
 }
@@ -624,7 +752,7 @@ mod tests {
     }
 
     #[test]
-    fn render_human_groups_by_file() {
+    fn render_human_content_hits_as_table() {
         let hits = vec![
             SearchHit::Content {
                 path: "src/lib.rs".into(),
@@ -652,13 +780,16 @@ mod tests {
         ];
         let resp = sample_response(hits, 2, 3);
         let out = render_human(&resp, RenderOpts::human(Some(120), false));
+        assert!(out.contains("┌"));
+        assert!(out.contains("│ Path"));
+        assert!(out.contains("│ Line"));
+        assert!(out.contains("│ Col"));
+        assert!(out.contains("│ Preview"));
         assert!(out.contains("src/lib.rs"));
-        assert!(out.contains("(2)"));
-        assert!(out.contains("42:7"));
-        assert!(out.contains("89:11"));
+        assert!(out.contains("42"));
+        assert!(out.contains("89"));
         assert!(out.contains("src/query.rs"));
-        assert!(out.contains("(1)"));
-        assert!(out.contains("15:5"));
+        assert!(out.contains("15"));
         assert!(!out.contains("\x1b["));
     }
 
@@ -675,7 +806,7 @@ mod tests {
         let resp = sample_response(hits, 1, 1);
         let out = render_human(&resp, RenderOpts::human(Some(120), true));
         assert!(out.contains("\x1b[1m"));
-        assert!(out.contains("\x1b[36m"));
+        assert!(out.contains("\x1b[2m"));
     }
 
     #[test]

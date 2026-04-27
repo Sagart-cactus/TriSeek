@@ -861,7 +861,11 @@ fn search_content_reuses_prior_result_when_fresh() {
             fake_search_reuse_response(true, "unchanged", 10, 1, &[]),
         ],
     );
-    let mut client = McpClient::spawn_with_home(fixture.path(), Some(home.path()));
+    let mut client = McpClient::spawn_with_home_and_env(
+        fixture.path(),
+        Some(home.path()),
+        &[("TRISEEK_MCP_DISABLE_STARTUP_SYNC", "1")],
+    );
     handshake(&mut client);
 
     let args = json!({ "query": "parse_arguments", "mode": "literal", "limit": 5 });
