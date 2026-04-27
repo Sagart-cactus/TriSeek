@@ -827,12 +827,6 @@ fn fake_preload_response() -> Value {
     })
 }
 
-fn fake_reload_response() -> Value {
-    json!({
-        "reloaded": true,
-    })
-}
-
 fn fake_search_reuse_response(
     fresh: bool,
     reason: &str,
@@ -1010,14 +1004,17 @@ fn reindex_invalidates_search_memo() {
             fake_preload_response(),
             fake_status_response(10, 1),
             fake_search_reuse_response(true, "unchanged", 10, 1, &[]),
-            fake_reload_response(),
             fake_status_response(10, 1),
         ],
     );
-    let mut client = McpClient::spawn_with_home(fixture.path(), Some(home.path()));
+    let mut client = McpClient::spawn_with_home_and_env(
+        fixture.path(),
+        Some(home.path()),
+        &[("TRISEEK_MCP_DISABLE_STARTUP_SYNC", "1")],
+    );
     handshake(&mut client);
 
-    let args = json!({ "query": "route_auth", "mode": "literal", "limit": 5 });
+    let args = json!({ "query": "parse_arguments", "mode": "literal", "limit": 5 });
 
     let miss = call_tool(&mut client, "search_content", args.clone());
     assert_eq!(miss.get("cache").and_then(Value::as_str), Some("miss"));
@@ -1038,13 +1035,12 @@ fn reindex_invalidates_search_memo() {
         "search memo must be cleared after reindex"
     );
     assert!(after.get("reuse_status").is_none());
-    fake_daemon.wait_for_requests(5, Duration::from_secs(2));
+    fake_daemon.wait_for_requests(4, Duration::from_secs(2));
     let requests = fake_daemon.finish();
     assert_eq!(requests[0]["method"], json!("preload_root"));
     assert_eq!(requests[1]["method"], json!("status"));
     assert_eq!(requests[2]["method"], json!("search_reuse_check"));
-    assert_eq!(requests[3]["method"], json!("reload"));
-    assert_eq!(requests[4]["method"], json!("status"));
+    assert_eq!(requests[3]["method"], json!("status"));
 
     client.shutdown();
 }
