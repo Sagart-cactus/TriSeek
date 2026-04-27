@@ -25,7 +25,7 @@ The installer also ensures the TriSeek daemon is running. Fresh installs start i
 Pin a version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.3.3
+curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.4.0
 ```
 
 Install to a custom directory:
