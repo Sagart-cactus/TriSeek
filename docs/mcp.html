@@ -238,6 +238,7 @@ a.text-link:hover { color: var(--accent-green); }
     <a href="install.html">install</a>
     <a href="mcp.html" class="active">mcp</a>
     <a href="memo.html">memo</a>
+    <a href="context-pack.html">context&#8209;pack</a>
     <a href="triseek-explained.html">how it works</a>
     <a href="triseek-architecture.html">architecture</a>
   </div>
@@ -439,6 +440,10 @@ triseek mcp serve</pre>
               <td><span class="tag cy">reindex</span></td>
               <td>Run incremental update or full rebuild</td>
             </tr>
+            <tr>
+              <td><span class="tag or">context_pack</span></td>
+              <td>Intent-aware ranked trailhead for a bugfix or review task — ranked paths, clipped snippets, reason tags, and next-step hints</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -469,6 +474,15 @@ triseek mcp serve</pre>
 }</pre>
         </div>
         <p style="margin-top: 0.75rem;"><code>force_refresh: true</code> bypasses duplicate-result reuse when you explicitly need a fresh search execution.</p>
+
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">context_pack</span></div>
+          <pre>{
+  <span class="str">"intent"</span>: <span class="str">"fix the auth timeout bug"</span>,
+  <span class="str">"limit"</span>: 10
+}</pre>
+        </div>
+        <p style="margin-top: 0.75rem;"><code>context_pack</code> is the recommended first call at the start of a bugfix or review session. See the <a class="text-link" href="context-pack.html">context packs guide</a> for the full output envelope.</p>
       </div>
     </div>
   </section>
@@ -565,7 +579,45 @@ triseek mcp serve</pre>
   </section>
 
   <section>
-    <div class="section-num">// 05 — troubleshooting</div>
+    <div class="section-num">// 05 — search behavior</div>
+    <h2>Search <span class="hl">defaults</span></h2>
+    <div class="two-col" style="margin-top: 2rem;">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico gn">&#9646;</div>
+          <h3>Hidden path allowlist</h3>
+        </div>
+        <p>By default, TriSeek includes important hidden repo paths in all search backends (indexed, direct scan, and ripgrep fallback). These are allowlisted rather than excluded:</p>
+        <ul>
+          <li><code>.github</code> / <code>.gitlab</code> — CI and workflow files</li>
+          <li><code>.claude</code> / <code>.codex</code> — agent config and hook files</li>
+          <li><code>.editorconfig</code>, <code>.gitignore</code>, <code>.gitattributes</code> — repo-authored dotfiles</li>
+          <li>Other high-signal hidden paths under the repo root</li>
+        </ul>
+        <p style="margin-top: 0.75rem;">Noisy hidden directories (e.g. <code>.git</code>, <code>node_modules</code>) remain excluded. Use <code>--include-hidden</code> to search everything.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico cy">&#9492;</div>
+          <h3>CLI table output (v0.4.0+)</h3>
+        </div>
+        <p>Human CLI search results render as a bordered table with <strong>Path</strong>, <strong>Line</strong>, <strong>Col</strong>, and <strong>Preview</strong> columns. The table is terminal-width aware and truncates long paths and previews to keep output scannable.</p>
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell · table output</span></div>
+          <pre>triseek "AuthConfig" /path/to/repo</pre>
+        </div>
+        <p>For scripts, use <code>--json</code> to receive the stable machine-readable envelope. JSON output and MCP prose digests are unchanged.</p>
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell · json output</span></div>
+          <pre>triseek "AuthConfig" /path/to/repo --json</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-num">// 06 — troubleshooting</div>
     <h2>When things go <span class="hl">wrong</span></h2>
     <div class="two-col" style="margin-top: 2rem;">
       <div class="card">
@@ -597,6 +649,9 @@ triseek mcp serve</pre>
         <ul style="list-style:none;margin:0;padding:0;">
           <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
             <a class="text-link" href="index.html">← Docs Home</a>
+          </li>
+          <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
+            <a class="text-link" href="context-pack.html">Context Packs</a>
           </li>
           <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
             <a class="text-link" href="memo.html">Memo &amp; Search Reuse</a>

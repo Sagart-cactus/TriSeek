@@ -250,6 +250,7 @@ a.text-link:hover { color: var(--accent-green); }
     <a href="install.html">install</a>
     <a href="mcp.html">mcp</a>
     <a href="memo.html" class="active">memo</a>
+    <a href="context-pack.html">context&#8209;pack</a>
     <a href="triseek-explained.html">how it works</a>
     <a href="triseek-architecture.html">architecture</a>
   </div>
@@ -338,7 +339,7 @@ a.text-link:hover { color: var(--accent-green); }
             </tr>
             <tr>
               <td><span class="tag or">Codex</span></td>
-              <td>Hooks for supported Bash and MCP file-read tools</td>
+              <td><code>PreToolUse</code>, <code>PostToolUse</code>, and <code>SessionStart</code> hooks for Bash reads and MCP file-read tools (e.g. <code>mcp__filesystem__read_file</code>)</td>
             </tr>
           </tbody>
         </table>
@@ -349,7 +350,7 @@ a.text-link:hover { color: var(--accent-green); }
           <div class="card-ico or">&#9888;</div>
           <h3>Active Fallback</h3>
         </div>
-        <p>TriSeek observes supported Codex Bash and MCP file reads passively. Agents still call <code>memo_check</code> before file rereads that the installed Codex version or tool path does not expose through hooks.</p>
+        <p>TriSeek observes Codex Bash reads and MCP file-read tools passively via <code>PreToolUse</code> hooks. Agents still call <code>memo_check</code> before rereads that the installed Codex version does not expose through hooks. Session file map is also invalidated on <code>PreCompact</code> so context boundaries are handled correctly.</p>
         <div class="code-block">
           <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">memo_check input</span></div>
           <pre>{
