@@ -126,11 +126,111 @@ pub fn render_digest(tool_name: &str, envelope: &Value, query_hint: Option<&str>
         "find_files" | "search_content" | "search_path_and_content" => {
             render_search_envelope_digest(tool_name, envelope, query_hint)
         }
+        "context_pack" => render_context_pack_digest(envelope),
         "index_status" => render_index_status_digest(envelope),
         "reindex" => render_reindex_digest(envelope),
         "memo_status" | "memo_session" | "memo_check" => render_memo_digest(tool_name, envelope),
         _ => envelope.to_string(),
     }
+}
+
+fn render_context_pack_digest(envelope: &Value) -> String {
+    let intent = envelope
+        .get("intent")
+        .and_then(Value::as_str)
+        .unwrap_or("bugfix");
+    let goal = envelope.get("goal").and_then(Value::as_str).unwrap_or("");
+    let budget_tokens = envelope
+        .get("budget_tokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let estimated_tokens = envelope
+        .get("estimated_tokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let items = envelope
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let truncated = envelope
+        .get("truncated")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let mut out = String::new();
+    writeln!(
+        &mut out,
+        "context_pack: \"{goal}\" ({intent}) — {} item{}, ~{estimated_tokens}/{budget_tokens} tokens",
+        items.len(),
+        plural(items.len()),
+    )
+    .unwrap();
+
+    if items.is_empty() {
+        writeln!(&mut out).unwrap();
+        writeln!(
+            &mut out,
+            "no strong candidates — try a more specific symbol, error message, or changed file"
+        )
+        .unwrap();
+        return out;
+    }
+
+    for item in &items {
+        let path = item
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or("<unknown>");
+        let score = item.get("score").and_then(Value::as_f64).unwrap_or(0.0);
+        let reasons = item
+            .get("reasons")
+            .and_then(Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        writeln!(&mut out).unwrap();
+        writeln!(&mut out, "{path} (score {score:.1})").unwrap();
+        writeln!(&mut out, "  reasons: {reasons}").unwrap();
+        if let Some(snippets) = item.get("snippets").and_then(Value::as_array) {
+            for snippet in snippets {
+                let line = snippet.get("line").and_then(Value::as_u64).unwrap_or(0);
+                let column = snippet.get("column").and_then(Value::as_u64).unwrap_or(0);
+                let preview = snippet.get("preview").and_then(Value::as_str).unwrap_or("");
+                writeln!(&mut out, "  L{line}:{column}  {preview}").unwrap();
+            }
+        }
+    }
+
+    if let Some(steps) = envelope
+        .get("suggested_next_steps")
+        .and_then(Value::as_array)
+        .filter(|steps| !steps.is_empty())
+    {
+        writeln!(&mut out).unwrap();
+        writeln!(&mut out, "next:").unwrap();
+        for step in steps {
+            if let Some(step) = step.as_str() {
+                writeln!(&mut out, "- {step}").unwrap();
+            }
+        }
+    }
+
+    if truncated {
+        writeln!(&mut out).unwrap();
+        writeln!(
+            &mut out,
+            "[truncated: more candidates available — raise `budget_tokens`/`max_files` or narrow the goal]"
+        )
+        .unwrap();
+    }
+
+    out
 }
 
 /// Format an MCP tool error body as a one-line prose message.

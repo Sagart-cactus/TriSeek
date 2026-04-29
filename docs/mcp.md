@@ -209,6 +209,56 @@ Input:
 }
 ```
 
+### `context_pack`
+
+Builds a tiny, intent-aware starting set for a task. This is a trailhead, not
+a broad context dump: it returns ranked paths, clipped snippets, reason tags,
+and next-step hints under a hard budget.
+
+Input:
+
+```json
+{
+  "goal": "fix auth panic for service accounts",
+  "intent": "bugfix",
+  "budget_tokens": 1200,
+  "max_files": 4,
+  "changed_files": []
+}
+```
+
+Allowed `intent` values: `bugfix`, `review`. Defaults are `bugfix`, 1200
+estimated tokens, and 4 files. Hard caps are 4000 estimated tokens and 12
+files.
+
+Output (example):
+
+```json
+{
+  "version": "1",
+  "repo_root": "/repo",
+  "intent": "bugfix",
+  "goal": "fix auth panic for service accounts",
+  "budget_tokens": 1200,
+  "max_files": 4,
+  "estimated_tokens": 180,
+  "items": [
+    {
+      "path": "src/auth/router.rs",
+      "score": 28.0,
+      "reasons": ["content_match", "path_match"],
+      "snippets": [
+        { "line": 42, "column": 5, "preview": "panic!(\"auth panic\");" }
+      ]
+    }
+  ],
+  "suggested_next_steps": [
+    "Start with the highest-ranked source file and its snippets."
+  ],
+  "truncated": false
+}
+```
+
 ### `index_status`
 
 Reports whether the TriSeek index is present and healthy for the current repo.

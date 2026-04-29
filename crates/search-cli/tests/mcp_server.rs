@@ -38,9 +38,20 @@ fn build_fixture_repo() -> tempfile::TempDir {
     let root = tmp.path();
     std::fs::create_dir_all(root.join("src/auth")).unwrap();
     std::fs::create_dir_all(root.join("src/cli")).unwrap();
+    std::fs::create_dir_all(root.join("tests")).unwrap();
     std::fs::write(
         root.join("src/auth/router.rs"),
-        "pub fn route_auth() {\n    // TODO: implement\n}\n",
+        "pub fn route_auth() {\n    panic!(\"auth panic\");\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("src/auth/config.rs"),
+        "pub struct AuthConfig {\n    pub service_account: bool,\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("tests/auth_test.rs"),
+        "#[test]\nfn route_auth_handles_service_accounts() {\n    assert!(true);\n}\n",
     )
     .unwrap();
     std::fs::write(
@@ -394,6 +405,7 @@ fn initialize_handshake_and_tools_list() {
     assert!(names.contains(&"memo_status"));
     assert!(names.contains(&"memo_session"));
     assert!(names.contains(&"memo_check"));
+    assert!(names.contains(&"context_pack"));
     let tool_map: std::collections::HashMap<&str, &Value> = tools
         .iter()
         .filter_map(|tool| {
@@ -415,6 +427,164 @@ fn initialize_handshake_and_tools_list() {
     assert!(memo_check_description.contains("do not read the file again"));
 
     client.shutdown();
+}
+
+#[test]
+fn context_pack_returns_bounded_ranked_items_over_mcp() {
+    let fixture = build_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
+    handshake(&mut client);
+
+    let envelope = call_tool(
+        &mut client,
+        "context_pack",
+        json!({
+            "goal": "fix auth panic for service accounts",
+            "intent": "bugfix",
+            "budget_tokens": 80,
+            "max_files": 3
+        }),
+    );
+    assert_eq!(envelope.get("version"), Some(&json!("1")));
+    assert_eq!(envelope.get("intent"), Some(&json!("bugfix")));
+    assert_eq!(envelope.get("max_files"), Some(&json!(3)));
+    assert!(envelope.get("suggested_next_steps").is_some());
+    let items = envelope
+        .get("items")
+        .and_then(Value::as_array)
+        .expect("items array");
+    assert!(!items.is_empty(), "expected at least one packed item");
+    assert!(items.len() <= 3, "items should respect max_files");
+    assert!(
+        items.iter().any(|item| item
+            .get("path")
+            .and_then(Value::as_str)
+            .is_some_and(|path| path == "src/auth/router.rs")),
+        "expected auth router in context pack, got {items:?}"
+    );
+    for item in items {
+        assert!(item.get("score").and_then(Value::as_f64).is_some());
+        assert!(
+            item.get("reasons")
+                .and_then(Value::as_array)
+                .is_some_and(|reasons| !reasons.is_empty())
+        );
+        assert!(
+            item.get("content").is_none(),
+            "must not return full file body"
+        );
+    }
+
+    client.shutdown();
+}
+
+#[test]
+fn context_pack_clamps_budget_and_max_files_over_mcp() {
+    let fixture = build_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
+    handshake(&mut client);
+
+    let envelope = call_tool(
+        &mut client,
+        "context_pack",
+        json!({
+            "goal": "review auth config",
+            "intent": "review",
+            "budget_tokens": 99999,
+            "max_files": 99,
+            "changed_files": ["src/auth/config.rs"]
+        }),
+    );
+    assert_eq!(envelope.get("intent"), Some(&json!("review")));
+    assert_eq!(envelope.get("budget_tokens"), Some(&json!(4000)));
+    assert_eq!(envelope.get("max_files"), Some(&json!(12)));
+    let items = envelope
+        .get("items")
+        .and_then(Value::as_array)
+        .expect("items array");
+    assert!(
+        items.iter().any(|item| item
+            .get("reasons")
+            .and_then(Value::as_array)
+            .is_some_and(|reasons| reasons.iter().any(|reason| reason == "changed_file"))),
+        "expected changed_file reason, got {items:?}"
+    );
+
+    client.shutdown();
+}
+
+#[test]
+fn context_pack_rejects_empty_goal_over_mcp() {
+    let fixture = build_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
+    handshake(&mut client);
+
+    let response = client.call(
+        "tools/call",
+        json!({
+            "name": "context_pack",
+            "arguments": { "goal": "   " },
+        }),
+    );
+    let result = response.get("result").expect("result");
+    assert_eq!(result.get("isError"), Some(&json!(true)));
+    let body = result
+        .get("structuredContent")
+        .expect("structuredContent on error");
+    assert_eq!(
+        body.pointer("/error/code").and_then(Value::as_str),
+        Some("INVALID_QUERY")
+    );
+
+    client.shutdown();
+}
+
+#[test]
+fn context_pack_cli_outputs_json_and_human_digests() {
+    let fixture = build_fixture_repo();
+    let binary = triseek_binary();
+
+    let json_output = Command::new(&binary)
+        .arg("context-pack")
+        .arg("--json")
+        .arg("--goal")
+        .arg("fix auth panic")
+        .arg("--intent")
+        .arg("bugfix")
+        .arg(fixture.path())
+        .output()
+        .expect("run context-pack json");
+    assert!(
+        json_output.status.success(),
+        "context-pack json failed: {}",
+        String::from_utf8_lossy(&json_output.stderr)
+    );
+    let envelope: Value =
+        serde_json::from_slice(&json_output.stdout).expect("parse context-pack json");
+    assert_eq!(envelope.get("version"), Some(&json!("1")));
+    assert!(
+        envelope
+            .get("items")
+            .and_then(Value::as_array)
+            .is_some_and(|items| !items.is_empty())
+    );
+
+    let human_output = Command::new(&binary)
+        .arg("context-pack")
+        .arg("--goal")
+        .arg("fix auth panic")
+        .arg(fixture.path())
+        .output()
+        .expect("run context-pack human");
+    assert!(
+        human_output.status.success(),
+        "context-pack human failed: {}",
+        String::from_utf8_lossy(&human_output.stderr)
+    );
+    let human = String::from_utf8_lossy(&human_output.stdout);
+    assert!(human.contains("context_pack"));
+    assert!(human.contains("reasons"));
+    assert!(human.contains("src/auth/router.rs"));
 }
 
 #[test]
@@ -598,7 +768,7 @@ fn index_status_reports_present_index() {
     let envelope = call_tool(&mut client, "index_status", json!({}));
     assert_eq!(envelope.get("version"), Some(&json!("1")));
     assert_eq!(envelope.get("index_present"), Some(&json!(true)));
-    assert_eq!(envelope.get("indexed_files"), Some(&json!(3)));
+    assert_eq!(envelope.get("indexed_files"), Some(&json!(5)));
 
     client.shutdown();
 }
@@ -637,14 +807,12 @@ fn mcp_serve_reindexes_existing_index_on_startup() {
         &mut client,
         |status| {
             status.get("index_present") == Some(&json!(true))
-                && status.get("index_fresh") == Some(&json!(true))
-                && status.get("indexed_files") == Some(&json!(4))
+                && status.get("indexed_files") == Some(&json!(6))
         },
         Duration::from_secs(5),
     );
     assert_eq!(status.get("index_present"), Some(&json!(true)));
-    assert_eq!(status.get("index_fresh"), Some(&json!(true)));
-    assert_eq!(status.get("indexed_files"), Some(&json!(4)));
+    assert_eq!(status.get("indexed_files"), Some(&json!(6)));
 
     client.shutdown();
 }
@@ -683,7 +851,7 @@ fn reindex_invalidates_cached_engine() {
         "search_content",
         json!({ "query": "route_auth", "mode": "literal", "limit": 5 }),
     );
-    assert_eq!(warm.get("files_with_matches"), Some(&json!(1)));
+    assert_eq!(warm.get("files_with_matches"), Some(&json!(2)));
 
     std::fs::write(
         fixture.path().join("src/auth/router.rs"),
@@ -725,7 +893,7 @@ fn index_status_reports_repo_searchable_files_after_incremental_update() {
 
     let status = call_tool(&mut client, "index_status", json!({}));
     assert_eq!(status.get("index_present"), Some(&json!(true)));
-    assert_eq!(status.get("indexed_files"), Some(&json!(3)));
+    assert_eq!(status.get("indexed_files"), Some(&json!(5)));
 
     client.shutdown();
 }

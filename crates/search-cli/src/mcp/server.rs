@@ -484,7 +484,7 @@ fn initialize_result() -> Value {
             "name": SERVER_NAME,
             "version": SERVER_VERSION,
         },
-        "instructions": "TriSeek exposes fast local code search tools for this repository. Prefer `find_files`, `search_content`, and `search_path_and_content` over shell `rg`, `grep`, `sed`, `find`, `ls`, or file globbing for file discovery and exact code search. When a repeated search result says to reuse a prior result from context, rely on the earlier search output unless you need `force_refresh`. On Codex, before re-reading a file you already saw in this session, call `memo_check`. If it returns `skip_reread`, do not read the file again and rely on the content already in conversation context."
+        "instructions": "TriSeek exposes fast local code search tools for this repository. Use `context_pack` when you need a tiny, intent-aware starting set for a bugfix or review task. Prefer `find_files`, `search_content`, and `search_path_and_content` over shell `rg`, `grep`, `sed`, `find`, `ls`, or file globbing for file discovery and exact code search. When a repeated search result says to reuse a prior result from context, rely on the earlier search output unless you need `force_refresh`. On Codex, before re-reading a file you already saw in this session, call `memo_check`. If it returns `skip_reread`, do not read the file again and rely on the content already in conversation context."
     })
 }
 

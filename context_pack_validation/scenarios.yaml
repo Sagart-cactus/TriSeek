@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "smoke_best_auth_panic",
+      "group": "best",
+      "repo": "fixture:best_auth",
+      "agent_prompt": "Fix the auth panic for service accounts. Before opening multiple files, ask TriSeek for a tiny context pack and use it as the first working set.",
+      "goal": "fix auth panic for service accounts",
+      "intent": "bugfix",
+      "oracle": {
+        "required_files": ["src/auth.rs"],
+        "helpful_files": ["tests/auth_test.rs"],
+        "bad_files": []
+      },
+      "baseline_steps": [
+        {"tool": "search_content", "arguments": {"query": "auth panic", "mode": "literal", "limit": 10}},
+        {"tool": "find_files", "arguments": {"query": "auth", "limit": 10}},
+        {"tool": "search_path_and_content", "arguments": {"path_query": "tests/**/*.rs", "content_query": "service_account", "mode": "literal", "limit": 10}}
+      ]
+    },
+    {
+      "id": "best_review_changed_file",
+      "group": "best",
+      "repo": "fixture:review_payments",
+      "agent_prompt": "Review the payment processor change. Ask TriSeek for a review context pack using the changed file before doing broader searches.",
+      "goal": "review payment processor change",
+      "intent": "review",
+      "changed_files": ["src/payments/processor.rs"],
+      "oracle": {
+        "required_files": ["src/payments/processor.rs"],
+        "helpful_files": ["tests/payments_test.rs"],
+        "bad_files": []
+      },
+      "baseline_steps": [
+        {"tool": "find_files", "arguments": {"query": "payment", "limit": 10}},
+        {"tool": "search_path_and_content", "arguments": {"path_query": "tests/**/*.rs", "content_query": "payment", "mode": "literal", "limit": 10}}
+      ]
+    },
+    {
+      "id": "normal_retry_config",
+      "group": "normal",
+      "repo": "fixture:normal_config",
+      "agent_prompt": "Find where retry backoff config behavior is implemented and where it is tested. Start with a TriSeek context pack.",
+      "goal": "find retry backoff config behavior",
+      "intent": "bugfix",
+      "oracle": {
+        "required_files": ["src/server/config.rs", "src/server/client.rs"],
+        "helpful_files": ["tests/retry_config_test.rs"],
+        "bad_files": []
+      },
+      "baseline_steps": [
+        {"tool": "search_content", "arguments": {"query": "retry", "mode": "literal", "limit": 10}},
+        {"tool": "find_files", "arguments": {"query": "config", "limit": 10}},
+        {"tool": "search_path_and_content", "arguments": {"path_query": "tests/**/*.rs", "content_query": "retry", "mode": "literal", "limit": 10}}
+      ]
+    },
+    {
+      "id": "worst_vague_update",
+      "group": "worst",
+      "repo": "fixture:worst_vague",
+      "agent_prompt": "Update the thing. Try a TriSeek context pack first, even though the task wording is vague.",
+      "goal": "update the thing",
+      "intent": "bugfix",
+      "oracle": {
+        "required_files": ["src/core/real_target.rs"],
+        "helpful_files": [],
+        "bad_files": ["docs/update_0.md", "docs/update_1.md", "docs/update_2.md"]
+      },
+      "baseline_steps": [
+        {"tool": "search_content", "arguments": {"query": "customer_state_transition", "mode": "literal", "limit": 10}}
+      ]
+    },
+    {
+      "id": "worst_tiny_overhead",
+      "group": "worst",
+      "repo": "fixture:tiny_overhead",
+      "agent_prompt": "Fix the small bug in this tiny repo. Try a context pack first and compare it with a direct search.",
+      "goal": "small bug",
+      "intent": "bugfix",
+      "oracle": {
+        "required_files": ["src/lib.rs"],
+        "helpful_files": [],
+        "bad_files": []
+      },
+      "baseline_steps": [
+        {"tool": "search_content", "arguments": {"query": "small bug", "mode": "literal", "limit": 10}}
+      ]
+    }
+  ]
+}
