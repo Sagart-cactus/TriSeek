@@ -122,6 +122,13 @@ class TriseekMcpClient:
             "is_error": bool(result.get("isError")),
         }
 
+    def list_tools(self) -> list[dict[str, Any]]:
+        result = self._request("tools/list", {})
+        tools = result.get("tools") or []
+        if not isinstance(tools, list):
+            raise RuntimeError(f"Unexpected tools/list response: {result}")
+        return tools
+
     def wait_until_ready(self, timeout_secs: float = 30.0) -> None:
         deadline = time.monotonic() + timeout_secs
         while time.monotonic() < deadline:
@@ -134,6 +141,7 @@ class TriseekMcpClient:
 
     def close(self) -> None:
         if self._proc.poll() is not None:
+            self._close_pipes()
             return
         if self._proc.stdin is not None:
             try:
@@ -146,6 +154,15 @@ class TriseekMcpClient:
         except subprocess.TimeoutExpired:
             self._proc.kill()
             self._proc.wait(timeout=5)
+        self._close_pipes()
+
+    def _close_pipes(self) -> None:
+        for pipe in (self._proc.stdout, self._proc.stderr):
+            if pipe is not None:
+                try:
+                    pipe.close()
+                except Exception:
+                    pass
 
     def __enter__(self) -> "TriseekMcpClient":
         return self

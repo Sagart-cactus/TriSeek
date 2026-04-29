@@ -192,6 +192,7 @@ Verify any install with `triseek doctor`. Run the server manually (for debugging
 
 | Tool | Purpose |
 |---|---|
+| `context_pack` | Tiny intent-aware starting set for bugfix/review tasks |
 | `find_files` | Path / filename substring search |
 | `search_content` | Literal or regex content search |
 | `search_path_and_content` | Narrow by path glob, then search content |
@@ -202,6 +203,22 @@ Verify any install with `triseek doctor`. Run the server manually (for debugging
 | `memo_check` | Single-file skip-or-reread decision |
 
 Full schemas and error codes: [MCP reference](https://sagart-cactus.github.io/TriSeek/mcp.html).
+
+### Context packs
+
+`context_pack` and `triseek context-pack` provide a small task trailhead for
+agents before they chain broad searches. The first version is heuristic-only:
+exact search plus path, test, config, fixture, and changed-file signals. It
+returns ranked paths, clipped snippets, reason tags, and follow-up hints; it
+does not return full file bodies.
+
+```sh
+triseek context-pack --goal "fix auth panic for service accounts" --intent bugfix --json
+```
+
+Defaults are intentionally small: `bugfix`, 1200 estimated tokens, and 4 files.
+Use `--intent review --changed-file <path>` to bias the pack around a review
+surface.
 
 ### How routing works
 

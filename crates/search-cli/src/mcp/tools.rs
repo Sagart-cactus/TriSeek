@@ -6,6 +6,7 @@
 //! enforced here: default limit, hard cap, preview truncation, dedupe, and
 //! `truncated` flag.
 
+use crate::context_pack::{self, ContextPackRequest};
 use crate::mcp::errors::McpToolError;
 use crate::mcp::search_memo::SearchMemoEntry;
 use crate::mcp::server::McpState;
@@ -48,6 +49,7 @@ pub fn dispatch(
         "find_files" => find_files(state, arguments, session_id_hint),
         "search_content" => search_content(state, arguments, session_id_hint),
         "search_path_and_content" => search_path_and_content(state, arguments, session_id_hint),
+        "context_pack" => context_pack_tool(state, arguments),
         "index_status" => index_status(state, arguments),
         "reindex" => reindex(state, arguments),
         "memo_status" => memo_status(state, arguments, session_id_hint),
@@ -55,6 +57,57 @@ pub fn dispatch(
         "memo_check" => memo_check(state, arguments, session_id_hint),
         other => ToolOutcome::Error(McpToolError::invalid_query(format!(
             "unknown tool `{other}`"
+        ))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// context_pack
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct ContextPackArgs {
+    goal: String,
+    #[serde(default)]
+    intent: Option<String>,
+    #[serde(default)]
+    budget_tokens: Option<usize>,
+    #[serde(default)]
+    max_files: Option<usize>,
+    #[serde(default)]
+    changed_files: Vec<String>,
+}
+
+fn context_pack_tool(state: &McpState, arguments: &Value) -> ToolOutcome {
+    let args: ContextPackArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    if args.goal.trim().is_empty() {
+        return ToolOutcome::Error(McpToolError::invalid_query(
+            "`goal` must not be empty for context_pack",
+        ));
+    }
+    let intent = match context_pack::ContextPackIntent::parse(args.intent.as_deref()) {
+        Ok(intent) => intent,
+        Err(err) => return ToolOutcome::Error(McpToolError::invalid_query(err.to_string())),
+    };
+    match context_pack::build_context_pack(
+        &state.repo_root(),
+        &state.index_dir(),
+        ContextPackRequest {
+            goal: args.goal,
+            intent,
+            budget_tokens: args.budget_tokens,
+            max_files: args.max_files,
+            changed_files: args.changed_files,
+        },
+    ) {
+        Ok(envelope) => ToolOutcome::Success(
+            serde_json::to_value(envelope).unwrap_or_else(|_| json!({"version": ENVELOPE_VERSION})),
+        ),
+        Err(err) => ToolOutcome::Error(McpToolError::backend_failure(format!(
+            "context pack failed: {err}"
         ))),
     }
 }

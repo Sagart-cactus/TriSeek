@@ -1,4 +1,5 @@
 mod build_output;
+mod context_pack;
 mod install;
 mod mcp;
 mod memo_shim;
@@ -48,6 +49,7 @@ enum Commands {
     Update(UpdateArgs),
     Measure(MeasureArgs),
     Search(SearchArgs),
+    ContextPack(ContextPackArgs),
     Session(SessionArgs),
     Stats(StatsArgs),
     FrecencySelect(FrecencySelectArgs),
@@ -176,6 +178,28 @@ struct SearchArgs {
     no_daemon: bool,
     #[arg(value_name = "PATTERN")]
     pattern: String,
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct ContextPackArgs {
+    #[arg(long, hide = true)]
+    repo: Option<PathBuf>,
+    #[arg(long)]
+    index_dir: Option<PathBuf>,
+    #[arg(long)]
+    goal: String,
+    #[arg(long, default_value = "bugfix")]
+    intent: String,
+    #[arg(long, default_value_t = context_pack::DEFAULT_BUDGET_TOKENS)]
+    budget_tokens: usize,
+    #[arg(long, default_value_t = context_pack::DEFAULT_MAX_FILES)]
+    max_files: usize,
+    #[arg(long = "changed-file")]
+    changed_files: Vec<String>,
+    #[arg(long)]
+    json: bool,
     #[arg(value_name = "PATH")]
     path: Option<PathBuf>,
 }
@@ -386,6 +410,7 @@ fn main() -> Result<()> {
         Commands::Update(args) => handle_update(args),
         Commands::Measure(args) => handle_measure(args),
         Commands::Search(args) => handle_search(args).map(|_| ()),
+        Commands::ContextPack(args) => handle_context_pack(args),
         Commands::Session(args) => handle_session(args).map(|_| ()),
         Commands::Stats(args) => handle_stats(args),
         Commands::FrecencySelect(args) => handle_frecency_select(args),
@@ -555,6 +580,38 @@ fn handle_search(args: SearchArgs) -> Result<SearchResponse> {
         print_human_search(&response);
     }
     Ok(response)
+}
+
+fn handle_context_pack(args: ContextPackArgs) -> Result<()> {
+    let repo_root = resolve_cli_root(
+        args.path.as_deref(),
+        args.repo.as_deref(),
+        args.index_dir.as_deref(),
+    )?;
+    let index_dir = resolve_index_dir(&repo_root, args.index_dir.as_deref())?;
+    let intent = context_pack::ContextPackIntent::parse(Some(args.intent.as_str()))?;
+    let envelope = context_pack::build_context_pack(
+        &repo_root,
+        &index_dir,
+        context_pack::ContextPackRequest {
+            goal: args.goal,
+            intent,
+            budget_tokens: Some(args.budget_tokens),
+            max_files: Some(args.max_files),
+            changed_files: args.changed_files,
+        },
+    )?;
+
+    if args.json {
+        print_json(&envelope)
+    } else {
+        let value = serde_json::to_value(&envelope)?;
+        println!(
+            "{}",
+            output_format::render_digest("context_pack", &value, None)
+        );
+        Ok(())
+    }
 }
 
 fn handle_session(args: SessionArgs) -> Result<SessionOutput> {
@@ -827,6 +884,7 @@ where
             | "update"
             | "measure"
             | "search"
+            | "context-pack"
             | "session"
             | "stats"
             | "frecency-select"

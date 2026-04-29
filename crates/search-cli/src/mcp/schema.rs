@@ -33,6 +33,12 @@ pub const TOOLS: &[ToolDescriptor] = &[
         input_schema: search_path_and_content_schema,
     },
     ToolDescriptor {
+        name: "context_pack",
+        title: "Build an intent-aware context pack",
+        description: "Return a tiny, bounded starting set of ranked files/snippets for a bugfix or review goal. Use this before chaining several broad searches.",
+        input_schema: context_pack_schema,
+    },
+    ToolDescriptor {
         name: "index_status",
         title: "Report TriSeek index status",
         description: "Report whether the TriSeek index exists and is healthy for this repository.",
@@ -151,6 +157,45 @@ pub fn search_path_and_content_schema() -> Value {
             }
         },
         "required": ["path_query", "content_query"],
+        "additionalProperties": false
+    })
+}
+
+pub fn context_pack_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "goal": {
+                "type": "string",
+                "description": "Natural-language task goal, such as `fix auth panic`."
+            },
+            "intent": {
+                "type": "string",
+                "enum": ["bugfix", "review"],
+                "default": "bugfix",
+                "description": "Task intent used to tune ranking heuristics."
+            },
+            "budget_tokens": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4000,
+                "default": 1200,
+                "description": "Approximate output token budget. Hard-capped at 4000."
+            },
+            "max_files": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 12,
+                "default": 4,
+                "description": "Maximum ranked files to include. Hard-capped at 12."
+            },
+            "changed_files": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Optional repository-relative paths to boost, especially for review intent."
+            }
+        },
+        "required": ["goal"],
         "additionalProperties": false
     })
 }

@@ -24,3 +24,6 @@ target
 .triseek-index/
 .DS_Store
 validation_results/
+context_pack_validation/results/
+__pycache__/
+*.pyc

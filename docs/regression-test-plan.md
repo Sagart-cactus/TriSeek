@@ -546,8 +546,14 @@ Validate:
 - `search_content` literal mode
 - `search_content` regex mode
 - `search_path_and_content`
+- `context_pack` for `bugfix` and `review`, including bounded item count,
+  reason tags, clipped snippets, and no full-file body fields
 - `index_status`
 - `reindex` incremental and full
+
+Context-pack validation must run alongside the existing CLI and MCP search
+checks. It is not a replacement for `find_files`, `search_content`,
+`search_path_and_content`, memo, or search-reuse coverage.
 
 ### 9.4 MCP error discipline
 
