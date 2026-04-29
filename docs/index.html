@@ -288,6 +288,7 @@ h2 .hl { color: var(--accent-cyan); }
     <a href="install.html">install</a>
     <a href="mcp.html">mcp</a>
     <a href="memo.html">memo</a>
+    <a href="context-pack.html">context&#8209;pack</a>
     <a href="triseek-explained.html">how it works</a>
     <a href="triseek-architecture.html">architecture</a>
   </div>
@@ -298,7 +299,7 @@ h2 .hl { color: var(--accent-cyan); }
   <div class="container">
     <div class="hero-badge">
       <div class="hero-badge-dot"></div>
-      trigram-indexed · local · mcp-native
+      trigram-indexed · local · mcp-native · v0.4.1
     </div>
     <h1>Search code at<br><span class="hl">index speed</span></h1>
     <p class="hero-sub">Published documentation for TriSeek. Start with install and standalone CLI usage, then jump into MCP integration or the deeper architecture walkthroughs.</p>
@@ -381,6 +382,13 @@ h2 .hl { color: var(--accent-cyan); }
         <p>Code-oriented walkthrough of the workspace, crates, data flow, and runtime components.</p>
         <div class="doc-card-arrow">read guide →</div>
       </a>
+
+      <a class="doc-card" href="context-pack.html">
+        <div class="doc-card-ico or">&#9678;</div>
+        <h3>Context Packs</h3>
+        <p>Intent-aware starting sets for bugfix and review tasks — ranked paths, clipped snippets, reason tags, and next-step hints. No LLM, no embeddings.</p>
+        <div class="doc-card-arrow">read guide →</div>
+      </a>
     </div>
   </section>
 
@@ -421,6 +429,16 @@ h2 .hl { color: var(--accent-cyan); }
         <div class="feature-desc">Tracks file reads per session and tells agents to reuse unchanged duplicate search results already in context.</div>
       </div>
       <div class="feature-item">
+        <div class="feature-icon">&#9678;</div>
+        <div class="feature-title">Context Packs</div>
+        <div class="feature-desc">Intent-aware trailheads for bugfix and review tasks — ranked paths, snippets, reason tags, and hints. CLI and MCP.</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">▤</div>
+        <div class="feature-title">Table CLI Output</div>
+        <div class="feature-desc">Search results render as a bordered table with Path, Line, Col, and Preview columns. Terminal-width aware with <code>--json</code> for scripts.</div>
+      </div>
+      <div class="feature-item">
         <div class="feature-icon">◈</div>
         <div class="feature-title">Cross-Platform</div>
         <div class="feature-desc">Pre-built releases for Linux x86_64, macOS x86_64 + aarch64, and Windows x86_64.</div>
@@ -428,7 +446,7 @@ h2 .hl { color: var(--accent-cyan); }
       <div class="feature-item">
         <div class="feature-icon">◎</div>
         <div class="feature-title">Release Harness</div>
-        <div class="feature-desc">Docker validation covers CLI, MCP, daemon isolation, search reuse, and all four agent installers.</div>
+        <div class="feature-desc">Docker validation covers CLI, MCP, daemon isolation, search reuse, context packs, and all four agent installers.</div>
       </div>
     </div>
   </section>
