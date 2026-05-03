@@ -257,8 +257,8 @@ async function runRecording() {
     page,
     claudeScreen({
       status: "new session",
-      user: "Please inspect the portability work and make a small change in this session.",
-      assistant: "I will inspect the portability layer and leave a concrete trail in the TriSeek session.",
+      user: "Step 1: inspect the handoff implementation and identify the files Codex will need.",
+      assistant: "I will map the snapshot, briefing, and resume flow first so the handoff has useful context.",
     }),
     900,
   );
@@ -272,36 +272,38 @@ async function runRecording() {
   await setTerminal(
     page,
     claudeScreen({
-      status: "working context captured",
-      user: "Please inspect the portability work and make a small change in this session.",
-      assistant: "I found the portability surface and saved notes for the next agent.",
+      status: "step 1 complete",
+      user: "Step 1: inspect the handoff implementation and identify the files Codex will need.",
+      assistant: "I found the handoff path and captured the important files for the next agent.",
       tools: [
         "OK triseek daemon start",
         "OK session_open: demo-handoff",
-        "OK search: session_snapshot_create",
-        "OK wrote claude-session-notes.md",
+        "OK search: render_handoff_block",
+        "OK search: session_resume",
+        "OK wrote handoff-checklist draft",
       ],
     }),
     1400,
   );
   run("python3", [join(__dirname, "session_rpc.py"), "open", sessionId, "Demo Claude to Codex handoff"]);
-  run("python3", [join(__dirname, "session_rpc.py"), "record-search", sessionId, "session_snapshot_create"]);
+  run("python3", [join(__dirname, "session_rpc.py"), "record-search", sessionId, "render_handoff_block"]);
+  run("python3", [join(__dirname, "session_rpc.py"), "record-search", sessionId, "session_resume"]);
   writeFileSync(
     join(outDir, "claude-session-notes.md"),
-    "# Claude session notes\n\n- Goal: make TriSeek handoff portable between Claude and Codex.\n- Relevant files: protocol.rs, snapshot.rs, hydrate.rs, CLI resume/brief commands.\n",
+    "# Claude session notes\n\n- Step 1 complete: mapped the handoff implementation.\n- Relevant files: handoff.rs, main.rs, shared.rs, protocol.rs, snapshot.rs, hydrate.rs.\n- Step 2 for Codex: verify the target harness resume command and polish the demo checklist.\n",
   );
 
   await setTerminal(
     page,
     claudeScreen({
       status: "ready for handoff",
-      user: "Create a handoff for Codex.",
-      assistant: "I will package the session so Codex can resume with the goal, touched files, and search history.",
+      user: "Step 2 should happen in Codex. Create a handoff.",
+      assistant: "I will package the goal, files, and searches so Codex can continue without rediscovery.",
       tools: [
         "OK triseek daemon start",
         "OK session_open: demo-handoff",
-        "OK search: session_snapshot_create",
-        "RUN triseek snapshot create",
+        "OK search: render_handoff_block",
+        "RUN triseek handoff codex",
       ],
     }),
     900,
@@ -327,12 +329,12 @@ async function runRecording() {
     page,
     claudeScreen({
       status: "handoff ready",
-      user: "Create a handoff for Codex.",
-      assistant: `Handoff ready for Codex. Snapshot: ${shortId(snapshotId)}`,
+      user: "Step 2 should happen in Codex. Create a handoff.",
+      assistant: `Handoff ready for Codex. Snapshot: ${shortId(snapshotId)}. In Codex, paste: $triseek resume ${shortId(snapshotId)}`,
       tools: [
         "OK triseek daemon start",
         "OK session_open: demo-handoff",
-        "OK search: session_snapshot_create",
+        "OK search: render_handoff_block",
         `OK snapshot create: ${shortId(snapshotId)}`,
         "OK brief --mode no-inference",
       ],
@@ -342,12 +344,12 @@ async function runRecording() {
 
   await typeOnTerminal(page, `${claudeScreen({
     status: "handoff ready",
-    user: "Create a handoff for Codex.",
-    assistant: `Handoff ready for Codex. Snapshot: ${shortId(snapshotId)}`,
+    user: "Step 2 should happen in Codex. Create a handoff.",
+    assistant: `Handoff ready for Codex. Snapshot: ${shortId(snapshotId)}. In Codex, paste: $triseek resume ${shortId(snapshotId)}`,
     tools: [
       "OK triseek daemon start",
       "OK session_open: demo-handoff",
-      "OK search: session_snapshot_create",
+      "OK search: render_handoff_block",
       `OK snapshot create: ${shortId(snapshotId)}`,
       "OK brief --mode no-inference",
     ],
@@ -358,8 +360,8 @@ async function runRecording() {
     page,
     codexScreen({
       status: "new session",
-      user: "Restore the Claude handoff.",
-      assistant: "I will restore Claude's snapshot before doing any new work.",
+      user: `$triseek resume ${shortId(snapshotId)}`,
+      assistant: "I will restore Claude's snapshot before doing step 2.",
     }),
     900,
   );
@@ -371,8 +373,8 @@ async function runRecording() {
     page,
     codexScreen({
       status: "handoff restored",
-      user: "Restore the Claude handoff.",
-      assistant: "The handoff is loaded. I have the session goal, relevant files, and warm context.",
+      user: `$triseek resume ${shortId(snapshotId)}`,
+      assistant: "The handoff is loaded. I have Claude's goal, relevant files, and search history.",
       tools: [`OK triseek resume: ${shortId(snapshotId)}`, "OK snapshot show", "OK wrote resume-AGENTS.md"],
     }),
     1500,
@@ -387,27 +389,27 @@ async function runRecording() {
   await setTerminal(
     page,
     codexScreen({
-      status: "continued from context",
-      user: "Continue the work from that context.",
-      assistant: "Continuation complete. I used Claude's handoff instead of starting cold.",
+      status: "step 2 complete",
+      user: "Continue with step 2: verify the target command and polish the demo checklist.",
+      assistant: "Step 2 complete. Codex used Claude's restored context and confirmed the Codex command is $triseek.",
       tools: [
         `OK triseek resume: ${shortId(snapshotId)}`,
         "OK snapshot show",
         "OK verified TriSeek Hydration Payload",
-        "OK wrote codex-continuation.md",
+        "OK updated handoff checklist",
       ],
     }),
     1800,
   );
   await typeOnTerminal(page, `${codexScreen({
-    status: "continued from context",
-    user: "Continue the work from that context.",
-    assistant: "Continuation complete. I used Claude's handoff instead of starting cold.",
+    status: "step 2 complete",
+    user: "Continue with step 2: verify the target command and polish the demo checklist.",
+    assistant: "Step 2 complete. Codex used Claude's restored context and confirmed the Codex command is $triseek.",
     tools: [
       `OK triseek resume: ${shortId(snapshotId)}`,
       "OK snapshot show",
       "OK verified TriSeek Hydration Payload",
-      "OK wrote codex-continuation.md",
+      "OK updated handoff checklist",
     ],
   })}`, "/quit", 1200);
   await setTerminal(page, "$ ", 1200);

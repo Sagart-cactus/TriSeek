@@ -20,6 +20,14 @@ pub fn harness_display(canonical: &str) -> &'static str {
     }
 }
 
+pub fn resume_command_for_harness(canonical: &str, snapshot_id: &str) -> String {
+    match canonical {
+        "codex" => format!("$triseek resume {snapshot_id}"),
+        "claude_code" => format!("/triseek resume {snapshot_id}"),
+        _ => format!("triseek resume {snapshot_id}"),
+    }
+}
+
 pub fn render_handoff_block(
     source_harness: Option<&str>,
     target_harness: &str,
@@ -27,10 +35,11 @@ pub fn render_handoff_block(
     snapshot_id: &str,
     briefing_path: &Path,
 ) -> String {
-    let from = source_harness.unwrap_or("unknown");
+    let from_display = source_harness.map(harness_display).unwrap_or("unknown");
     let target_display = harness_display(target_harness);
+    let resume_command = resume_command_for_harness(target_harness, snapshot_id);
     format!(
-        "TriSeek handoff ready\n\nFrom: {from}\nTo: {target_harness}\nSession: {session_id}\nSnapshot: {snapshot_id}\nBrief: {}\n\nIn {target_display}, paste:\n  /triseek resume {snapshot_id}",
+        "TriSeek handoff ready\n\nFrom: {from_display}\nTo: {target_display}\nSession: {session_id}\nSnapshot: {snapshot_id}\nBrief: {}\n\nIn {target_display}, paste:\n  {resume_command}",
         briefing_path.display()
     )
 }
@@ -57,7 +66,19 @@ mod tests {
             &PathBuf::from("/tmp/briefing.md"),
         );
         assert!(block.contains("TriSeek handoff ready"));
-        assert!(block.contains("In Codex, paste:\n  /triseek resume snap_123"));
+        assert!(block.contains("In Codex, paste:\n  $triseek resume snap_123"));
         assert!(block.contains("Session: session_demo"));
+    }
+
+    #[test]
+    fn handoff_block_uses_slash_command_for_claude_target() {
+        let block = render_handoff_block(
+            Some("codex"),
+            "claude_code",
+            "session_demo",
+            "snap_456",
+            &PathBuf::from("/tmp/briefing.md"),
+        );
+        assert!(block.contains("In Claude, paste:\n  /triseek resume snap_456"));
     }
 }

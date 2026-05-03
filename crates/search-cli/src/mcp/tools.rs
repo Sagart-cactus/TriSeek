@@ -16,9 +16,9 @@ use search_core::{
     MemoSessionParams, MemoStatusParams, PinnedSnippetSpec, PortabilitySessionStatus,
     PortabilitySessionStatusParams, QueryRequest, RpcRequest, RpcResponse, SearchEngineKind,
     SearchHit, SearchKind, SearchReuseCheckParams, SearchReuseReason, SessionCloseParams,
-    SessionListParams, SessionOpenParams, SessionRecordActionParams, SessionResumePrepareParams,
-    SessionSnapshotCreateParams, SessionSnapshotDiffParams, SessionSnapshotGetParams,
-    SessionSnapshotListParams,
+    SessionListParams, SessionListResponse, SessionOpenParams, SessionRecordActionParams,
+    SessionResumePrepareParams, SessionSnapshotCreateParams, SessionSnapshotDiffParams,
+    SessionSnapshotGetParams, SessionSnapshotListParams,
 };
 use search_index::{BuildConfig, SearchEngine, daemon_dir, index_exists, read_index_metadata};
 use serde::Deserialize;
@@ -692,11 +692,16 @@ fn session_snapshot(state: &McpState, arguments: &Value) -> ToolOutcome {
         Ok(args) => args,
         Err(err) => return ToolOutcome::Error(err),
     };
-    let Some(session_id) = args.session_id.or_else(|| state.current_session_id()) else {
+    let Some(session_id) = args
+        .session_id
+        .or_else(|| state.current_session_id())
+        .or_else(|| newest_open_session_id(state).ok().flatten())
+    else {
         return ToolOutcome::Error(McpToolError::invalid_query(
             "`session_id` is required when no current session is open",
         ));
     };
+    state.set_current_session_id(Some(session_id.clone()));
     match daemon_rpc(
         "session_snapshot_create",
         json!(SessionSnapshotCreateParams {
@@ -855,6 +860,23 @@ fn session_handoff(state: &McpState, arguments: &Value) -> ToolOutcome {
         );
     }
     ToolOutcome::Success(snapshot)
+}
+
+fn newest_open_session_id(state: &McpState) -> Result<Option<String>, McpToolError> {
+    let value = daemon_rpc(
+        "session_list",
+        json!(SessionListParams {
+            target_root: state.repo_root().display().to_string(),
+        }),
+    )?;
+    let response: SessionListResponse = serde_json::from_value(value).map_err(|error| {
+        McpToolError::backend_failure(format!("invalid session_list response: {error}"))
+    })?;
+    Ok(response
+        .sessions
+        .into_iter()
+        .find(|session| session.status == PortabilitySessionStatus::Open)
+        .map(|session| session.session_id))
 }
 
 // ---------------------------------------------------------------------------

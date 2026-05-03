@@ -21,8 +21,8 @@ For `handoff <target-harness>`:
 3. If the MCP result does not include a briefing path, create one with:
    `triseek brief <snapshot_id> --mode no-inference`
 4. End by prominently showing the exact target command:
-   `In <Target>, paste:`
-   `/triseek resume <snapshot_id>`
+   - For Codex: `In Codex, paste: $triseek resume <snapshot_id>`
+   - For Claude: `In Claude, paste: /triseek resume <snapshot_id>`
 
 For `resume <snapshot_id>`:
 1. Call the TriSeek MCP tool `session_resume` for the snapshot id.

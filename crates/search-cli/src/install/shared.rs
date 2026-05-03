@@ -574,8 +574,8 @@ For `handoff <target-harness>`:
 3. If the MCP result does not include a briefing path, create one with:
    `triseek brief <snapshot_id> --mode no-inference`
 4. End by prominently showing the exact target command:
-   `In <Target>, paste:`
-   `/triseek resume <snapshot_id>`
+   - For Codex: `In Codex, paste: $triseek resume <snapshot_id>`
+   - For Claude: `In Claude, paste: /triseek resume <snapshot_id>`
 
 For `resume <snapshot_id>`:
 1. Call the TriSeek MCP tool `session_resume` for the snapshot id.
@@ -892,7 +892,8 @@ args = ["mcp", "serve"]
         assert!(generated.contains("handoff <codex|claude> | resume <snapshot_id>"));
         assert!(generated.contains("session_handoff"));
         assert!(generated.contains("session_resume"));
-        assert!(generated.contains("/triseek resume <snapshot_id>"));
+        assert!(generated.contains("In Codex, paste: $triseek resume <snapshot_id>"));
+        assert!(generated.contains("In Claude, paste: /triseek resume <snapshot_id>"));
     }
 
     #[test]
@@ -906,7 +907,8 @@ args = ["mcp", "serve"]
         assert!(manifest.contains("\"name\": \"triseek\""));
         assert!(command.contains("Current harness: `codex`"));
         assert!(command.contains("`$ARGUMENTS`"));
-        assert!(command.contains("/triseek resume <snapshot_id>"));
+        assert!(command.contains("In Codex, paste: $triseek resume <snapshot_id>"));
+        assert!(command.contains("In Claude, paste: /triseek resume <snapshot_id>"));
     }
 
     #[test]
