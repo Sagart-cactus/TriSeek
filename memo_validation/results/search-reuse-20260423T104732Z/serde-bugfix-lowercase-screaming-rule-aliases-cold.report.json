@@ -1,0 +1,34 @@
+{
+  "run_id": "serde-bugfix-lowercase-screaming-rule-aliases-cold",
+  "task": "serde cold-start bugfix: lowercase screaming rename aliases",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-serde-bugfix-lowercase-screaming-rule-aliases-cold/536bcb78-d821-42ce-8b78-94a31aa37a72.jsonl",
+  "compact_at_turn": null,
+  "file_replay": {
+    "session_id": "c5f3de64-cc92-4a1f-a55c-75e727304ea3",
+    "tokens_saved": 59,
+    "eligible_tokens": 59,
+    "false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_navigation_tokens": 5288,
+    "optimized_navigation_tokens": 5229
+  },
+  "search_replay": {
+    "session_id": "a9d9bb08-6b7c-472b-9059-d73cff3e60b8",
+    "total_search_calls": 7,
+    "duplicate_search_calls": 0,
+    "search_reuse_hits": 0,
+    "search_tokens_saved": 0,
+    "search_eligible_tokens": 0,
+    "search_false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_search_tokens": 1102,
+    "replay_search_tokens": 1420
+  },
+  "combined": {
+    "actual_navigation_tokens": 6390,
+    "optimized_navigation_tokens": 6649,
+    "combined_eligible_tokens": 59,
+    "combined_tokens_saved": 59
+  },
+  "verdict": "PASS"
+}

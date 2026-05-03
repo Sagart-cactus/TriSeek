@@ -81,6 +81,8 @@ pub struct DaemonRootStatus {
 pub struct DaemonSearchParams {
     pub target_root: String,
     pub request: QueryRequest,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -274,4 +276,259 @@ pub struct MemoCheckResponse {
     /// Seconds elapsed since the last read observe. `None` if unknown.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_read_ago_seconds: Option<u64>,
+}
+
+pub const PORTABILITY_SCHEMA_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PortabilitySessionStatus {
+    Open,
+    Resolved,
+    Abandoned,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionStateRecord {
+    pub schema_version: u32,
+    pub session_id: String,
+    pub goal: String,
+    pub repo_root: String,
+    pub status: PortabilitySessionStatus,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ActionKind {
+    Search,
+    Read,
+    FrecencySelect,
+    MemoCheck,
+    ContextPack,
+    Other(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActionLogEntry {
+    pub schema_version: u32,
+    pub entry_id: u64,
+    pub session_id: String,
+    pub ts: i64,
+    pub kind: ActionKind,
+    pub payload: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionOpenParams {
+    pub target_root: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub goal: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionOpenResponse {
+    pub session: SessionStateRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionListParams {
+    pub target_root: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionListResponse {
+    pub sessions: Vec<SessionStateRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortabilitySessionStatusParams {
+    pub target_root: String,
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortabilitySessionStatusResponse {
+    pub session: SessionStateRecord,
+    pub action_log_size: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionCloseParams {
+    pub target_root: String,
+    pub session_id: String,
+    pub status: PortabilitySessionStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionCloseResponse {
+    pub session: SessionStateRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionRecordActionParams {
+    pub target_root: String,
+    pub session_id: String,
+    pub kind: ActionKind,
+    pub payload: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionRecordActionResponse {
+    pub entry_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PinnedSnippetSpec {
+    pub path: String,
+    pub line_start: usize,
+    pub line_end: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotManifest {
+    pub schema_version: u32,
+    pub snapshot_id: String,
+    pub session_id: String,
+    pub created_at: i64,
+    pub repo_root: String,
+    pub repo_commit: Option<String>,
+    pub repo_dirty_files: Vec<String>,
+    pub source_harness: Option<String>,
+    pub source_model: Option<String>,
+    pub generation: u64,
+    pub context_epoch: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileReadRef {
+    pub path: String,
+    pub sha: String,
+    pub line_start: Option<usize>,
+    pub line_end: Option<usize>,
+    pub last_read_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchRef {
+    pub search_id: String,
+    pub query: String,
+    pub kind: String,
+    pub result_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkingSet {
+    pub schema_version: u32,
+    pub files_read: Vec<FileReadRef>,
+    pub searches_run: Vec<SearchRef>,
+    pub frecency_top_n: Vec<(String, f64)>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PinnedSnippet {
+    pub sha: String,
+    pub source_path: String,
+    pub line_start: usize,
+    pub line_end: usize,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FullSnapshot {
+    pub manifest: SnapshotManifest,
+    pub working_set: WorkingSet,
+    pub action_log: Vec<ActionLogEntry>,
+    pub pinned_snippets: Vec<PinnedSnippet>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotDiff {
+    pub added_files: Vec<String>,
+    pub removed_files: Vec<String>,
+    pub changed_files: Vec<String>,
+    pub added_searches: Vec<String>,
+    pub removed_searches: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionSnapshotCreateParams {
+    pub target_root: String,
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_harness: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_model: Option<String>,
+    #[serde(default)]
+    pub pinned_snippet_paths: Vec<PinnedSnippetSpec>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionSnapshotCreateResponse {
+    pub snapshot_id: String,
+    pub snapshot_dir: String,
+    pub manifest: SnapshotManifest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionSnapshotListParams {
+    pub target_root: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionSnapshotListResponse {
+    pub snapshots: Vec<SnapshotManifest>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionSnapshotGetParams {
+    pub target_root: String,
+    pub snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionSnapshotGetResponse {
+    pub snapshot: FullSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionSnapshotDiffParams {
+    pub target_root: String,
+    pub snapshot_a: String,
+    pub snapshot_b: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionSnapshotDiffResponse {
+    pub diff: SnapshotDiff,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionResumePrepareParams {
+    pub target_root: String,
+    pub snapshot_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_tokens: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HydrationReport {
+    pub files_primed: usize,
+    pub searches_warmed: usize,
+    pub frecency_entries_restored: usize,
+    pub stale_files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionResumePrepareResponse {
+    pub session_id: String,
+    pub payload_markdown: String,
+    pub payload_token_estimate: usize,
+    pub hydration_report: HydrationReport,
+    pub searches: Vec<SearchRef>,
 }

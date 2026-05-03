@@ -1,0 +1,34 @@
+{
+  "run_id": "serde-refactor-multiname-accessors-cold",
+  "task": "serde cold-start refactor: clearer serializer/deserializer name accessors",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-serde-refactor-multiname-accessors-cold/6a11db62-4ca9-4496-affb-ca104347849c.jsonl",
+  "compact_at_turn": 1,
+  "file_replay": {
+    "session_id": "acf4252b-3436-4b23-851a-4db296a1d77a",
+    "tokens_saved": 0,
+    "eligible_tokens": 0,
+    "false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_navigation_tokens": 2239,
+    "optimized_navigation_tokens": 2239
+  },
+  "search_replay": {
+    "session_id": "78361652-7b51-47b3-8508-db606fb293f2",
+    "total_search_calls": 2,
+    "duplicate_search_calls": 0,
+    "search_reuse_hits": 0,
+    "search_tokens_saved": 0,
+    "search_eligible_tokens": 0,
+    "search_false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_search_tokens": 686,
+    "replay_search_tokens": 234
+  },
+  "combined": {
+    "actual_navigation_tokens": 2925,
+    "optimized_navigation_tokens": 2473,
+    "combined_eligible_tokens": 0,
+    "combined_tokens_saved": 0
+  },
+  "verdict": "PASS"
+}

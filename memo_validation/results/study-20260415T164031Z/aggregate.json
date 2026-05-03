@@ -1,0 +1,9 @@
+{
+  "total_runs": 12,
+  "false_negatives_total": 0,
+  "avg_rust_reduction_ratio": 0.02244329533111545,
+  "meets_80pct_target": false,
+  "pass_count": 0,
+  "marginal_count": 0,
+  "fail_count": 12
+}

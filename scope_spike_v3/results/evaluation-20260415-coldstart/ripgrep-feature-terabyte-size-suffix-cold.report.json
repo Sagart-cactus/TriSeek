@@ -1,0 +1,315 @@
+{
+  "run_id": "ripgrep-feature-terabyte-size-suffix-cold",
+  "task": "ripgrep cold-start feature: next larger byte unit",
+  "prompt": "Ripgrep has a CLI parser for options that accept human-readable byte limits. It currently tops out below terabytes. Extend it to support the next larger unit in both upper- and lower-case spellings, update any help or docs that enumerate accepted units, add focused tests, and verify the relevant CLI test target before finishing.",
+  "repo_root": "/Users/trivedi/Documents/Projects/Triseek-bench/repos/BurntSushi_ripgrep",
+  "ground_truth_files": [
+    "crates/cli/src/human.rs",
+    "crates/core/flags/defs.rs"
+  ],
+  "actual_navigation_tokens": 3462,
+  "lexical": {
+    "metrics": {
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "precision_at_5": 0.4,
+      "precision_at_10": 0.2,
+      "first_hit_rank": 3,
+      "mrr": 0.3333333333333333,
+      "full_coverage_at_5": true,
+      "full_coverage_at_10": true
+    },
+    "top_files": [
+      {
+        "path": "crates/core/flags/doc/help.rs",
+        "score": 1.0,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "/// Wraps `std::write!` and asserts there is no failure. | /// | /// We only write to `String` in this module. | /// Generate short documentation, i.e., for `-h`.",
+        "feature_scores": {
+          "lexical": 1.0
+        }
+      },
+      {
+        "path": "ci/test-complete",
+        "score": 0.9885219250471244,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "# Compares options in `rg --help` output to options in zsh completion function | # Technically there are many options that the completion system sets that | # our function may rely on, but we'll trust that we've got it mostly right | # Our ",
+        "feature_scores": {
+          "lexical": 0.9885219250471244
+        }
+      },
+      {
+        "path": "crates/cli/src/human.rs",
+        "score": 0.8271226472944548,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "/// An error that occurs when parsing a human readable size description. | /// | /// This error provides an end user friendly message describing why the | /// description couldn't be parsed and what the expected format is.",
+        "feature_scores": {
+          "lexical": 0.8271226472944548
+        }
+      },
+      {
+        "path": "crates/core/flags/defs.rs",
+        "score": 0.7317038437806387,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "/// A list of all flags in ripgrep via implementations of `Flag`. | /// | /// The order of these flags matter. It determines the order of the flags in | /// the generated documentation (`-h`, `--help` and the man page) within each",
+        "feature_scores": {
+          "lexical": 0.7317038437806387
+        }
+      },
+      {
+        "path": "CHANGELOG.md",
+        "score": 0.6581449886824239,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "TBD | === | Unreleased changes. Release notes have not yet been written. | Bug fixes:",
+        "feature_scores": {
+          "lexical": 0.6581449886824239
+        }
+      },
+      {
+        "path": "tests/binary.rs",
+        "score": 0.6272332922859107,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "// This file contains a smattering of tests specifically for checking ripgrep's | // handling of binary files. There's quite a bit of discussion on this in this | // bug report: https://github.com/BurntSushi/ripgrep/issues/306 | // Our hays",
+        "feature_scores": {
+          "lexical": 0.6272332922859107
+        }
+      },
+      {
+        "path": "crates/ignore/src/walk.rs",
+        "score": 0.6169971952250433,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "/// A directory entry with a possible error attached. | /// | /// The error typically refers to a problem parsing ignore files in a | /// particular directory.",
+        "feature_scores": {
+          "lexical": 0.6169971952250433
+        }
+      },
+      {
+        "path": "crates/cli/src/lib.rs",
+        "score": 0.6028161702121664,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "# Standard I/O | # Coloring and buffering | # Escaping | // Note the use of a raw string!",
+        "feature_scores": {
+          "lexical": 0.6028161702121664
+        }
+      },
+      {
+        "path": "benchsuite/benchsuite",
+        "score": 0.5811718659286023,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "# Some constants for identifying the corpora we use to run tests. | # We establish two very different kinds of corpora: a small number of large | # files and a large number of small files. These are vastly different use cases | # not only b",
+        "feature_scores": {
+          "lexical": 0.5811718659286023
+        }
+      },
+      {
+        "path": "crates/searcher/src/searcher/glue.rs",
+        "score": 0.5752065940871257,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "fn consume_remaining(&mut self) { | fn fill(&mut self) -> Result<bool, S::Error> { | // If rolling the buffer didn't result in consuming anything and if | // re-filling the buffer didn't add any bytes, then the only thing in",
+        "feature_scores": {
+          "lexical": 0.5752065940871257
+        }
+      }
+    ],
+    "top5_read_budget": 91506,
+    "top10_read_budget": 142268
+  },
+  "scope": {
+    "metrics": {
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "precision_at_5": 0.4,
+      "precision_at_10": 0.2,
+      "first_hit_rank": 3,
+      "mrr": 0.3333333333333333,
+      "full_coverage_at_5": true,
+      "full_coverage_at_10": true
+    },
+    "top_files": [
+      {
+        "path": "crates/core/flags/doc/help.rs",
+        "score": 0.7322805971711047,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// Wraps `std::write!` and asserts there is no failure. | /// | /// We only write to `String` in this module. | /// Generate short documentation, i.e., for `-h`.",
+        "feature_scores": {
+          "lexical": 1.0,
+          "graph": 0.32498705947719203,
+          "cochange": 0.8347801105537231,
+          "mirror": 0.0,
+          "lexical_raw": 31.46006525616211
+        }
+      },
+      {
+        "path": "ci/test-complete",
+        "score": 0.6798177148754967,
+        "reasons": [
+          "path/keyword match",
+          "git co-change signal"
+        ],
+        "summary": "# Compares options in `rg --help` output to options in zsh completion function | # Technically there are many options that the completion system sets that | # our function may rely on, but we'll trust that we've got it mostly right | # Our ",
+        "feature_scores": {
+          "lexical": 0.9885219250471244,
+          "graph": 0.0,
+          "cochange": 0.8366765168284933,
+          "mirror": 0.0,
+          "lexical_raw": 31.098964269129524
+        }
+      },
+      {
+        "path": "crates/cli/src/human.rs",
+        "score": 0.661402906297717,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// An error that occurs when parsing a human readable size description. | /// | /// This error provides an end user friendly message describing why the | /// description couldn't be parsed and what the expected format is.",
+        "feature_scores": {
+          "lexical": 0.8271226472944548,
+          "graph": 0.567995956876537,
+          "cochange": 0.8633428876554983,
+          "mirror": 0.0,
+          "lexical_raw": 26.021332458733106
+        }
+      },
+      {
+        "path": "crates/core/flags/defs.rs",
+        "score": 0.6237446704405277,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// A list of all flags in ripgrep via implementations of `Flag`. | /// | /// The order of these flags matter. It determines the order of the flags in | /// the generated documentation (`-h`, `--help` and the man page) within each",
+        "feature_scores": {
+          "lexical": 0.7317038437806387,
+          "graph": 0.7125689253619999,
+          "cochange": 0.8791079718231469,
+          "mirror": 0.0,
+          "lexical_raw": 23.01945067352354
+        }
+      },
+      {
+        "path": "crates/ignore/src/walk.rs",
+        "score": 0.5601850456423204,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// A directory entry with a possible error attached. | /// | /// The error typically refers to a problem parsing ignore files in a | /// particular directory.",
+        "feature_scores": {
+          "lexical": 0.6169971952250433,
+          "graph": 0.7557285805249511,
+          "cochange": 0.8980597916162553,
+          "mirror": 0.0,
+          "lexical_raw": 19.410772024648853
+        }
+      },
+      {
+        "path": "crates/printer/src/json.rs",
+        "score": 0.5554513808480698,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// The configuration for the JSON printer. | /// | /// This is manipulated by the JSONBuilder and then referenced by the actual | /// implementation. Once a printer is build, the configuration is frozen and",
+        "feature_scores": {
+          "lexical": 0.5597375132716521,
+          "graph": 0.9172437329974681,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 17.60937869384808
+        }
+      },
+      {
+        "path": "crates/searcher/src/searcher/glue.rs",
+        "score": 0.5481573650097266,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "fn consume_remaining(&mut self) { | fn fill(&mut self) -> Result<bool, S::Error> { | // If rolling the buffer didn't result in consuming anything and if | // re-filling the buffer didn't add any bytes, then the only thing in",
+        "feature_scores": {
+          "lexical": 0.5752065940871257,
+          "graph": 0.7966376905407758,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 18.096036985755724
+        }
+      },
+      {
+        "path": "crates/ignore/src/dir.rs",
+        "score": 0.5318474789221737,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "// This module provides a data structure, `Ignore`, that connects \"directory | // traversal\" with \"ignore matchers.\" Specifically, it knows about gitignore | // semantics and precedence, and is organized based on directory hierarchy. | // N",
+        "feature_scores": {
+          "lexical": 0.5242702013331849,
+          "graph": 0.9057139578257073,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 16.493574745803244
+        }
+      },
+      {
+        "path": "crates/core/flags/hiargs.rs",
+        "score": 0.5298361753734732,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// A high level representation of CLI arguments. | /// | /// The distinction between low and high level arguments is somewhat arbitrary | /// and wishy washy. The main idea here is that high level arguments generally",
+        "feature_scores": {
+          "lexical": 0.5388304411025376,
+          "graph": 0.826866442070713,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 16.95164083909245
+        }
+      },
+      {
+        "path": "crates/cli/src/lib.rs",
+        "score": 0.5272483040041361,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "# Standard I/O | # Coloring and buffering | # Escaping | // Note the use of a raw string!",
+        "feature_scores": {
+          "lexical": 0.6028161702121664,
+          "graph": 0.5819289725178826,
+          "cochange": 0.9004027790011178,
+          "mirror": 0.0,
+          "lexical_raw": 18.96463605234448
+        }
+      }
+    ],
+    "top5_read_budget": 85196,
+    "top10_read_budget": 132311
+  }
+}

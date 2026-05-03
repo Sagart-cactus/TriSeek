@@ -1,0 +1,13 @@
+run_id,verdict,file_tokens_saved,file_eligible_tokens,file_false_negatives,search_tokens_saved,search_eligible_tokens,search_false_negatives,search_reuse_hits,duplicate_search_calls,combined_tokens_saved,combined_eligible_tokens
+ripgrep-bugfix-lowercase-size-suffixes,PASS,0,0,0,0,0,0,0,0,0,0
+ripgrep-feature-terabyte-size-suffix,PASS,202,202,0,0,0,0,0,0,202,202
+ripgrep-refactor-parse-human-size,PASS,0,0,0,0,0,0,0,0,0,0
+serde-bugfix-lowercase-screaming-rule-aliases,PASS,130,130,0,0,0,0,0,0,130,130
+serde-feature-train-case-rule,PASS,0,0,0,0,0,0,0,0,0,0
+serde-refactor-multiname-accessors,PASS,0,0,0,0,0,0,0,1,0,0
+ripgrep-bugfix-lowercase-size-suffixes-cold,PASS,0,0,0,0,0,0,0,0,0,0
+ripgrep-feature-terabyte-size-suffix-cold,PASS,105,105,0,0,0,0,0,0,105,105
+ripgrep-refactor-parse-human-size-cold,PASS,0,0,0,0,0,0,0,0,0,0
+serde-bugfix-lowercase-screaming-rule-aliases-cold,PASS,59,59,0,0,0,0,0,0,59,59
+serde-feature-train-case-rule-cold,PASS,0,0,0,0,0,0,0,0,0,0
+serde-refactor-multiname-accessors-cold,PASS,0,0,0,0,0,0,0,0,0,0

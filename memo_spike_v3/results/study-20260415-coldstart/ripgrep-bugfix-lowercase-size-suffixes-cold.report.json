@@ -1,0 +1,61 @@
+{
+  "run_id": "ripgrep-bugfix-lowercase-size-suffixes-cold",
+  "task": "ripgrep cold-start bugfix: lowercase unit spellings",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-bugfix-lowercase-size-suffixes-cold/5933dca0-4fee-4794-81aa-eca77979ee59.jsonl",
+  "policies": [
+    {
+      "policy": "conservative",
+      "actual_navigation_tokens": 2485,
+      "memo_navigation_tokens": 2485,
+      "saved_navigation_tokens": 0,
+      "navigation_reduction_ratio": 0.0,
+      "actual_total_tokens": 6930,
+      "memo_total_tokens": 6930,
+      "saved_total_tokens": 0,
+      "total_reduction_ratio": 0.0,
+      "first_reads": 1,
+      "unchanged_rereads": 0,
+      "changed_rereads": 0,
+      "cached_searches": 0,
+      "changed_searches": 0,
+      "passthrough_tokens": 718,
+      "top_saved_files": []
+    },
+    {
+      "policy": "default",
+      "actual_navigation_tokens": 2485,
+      "memo_navigation_tokens": 2485,
+      "saved_navigation_tokens": 0,
+      "navigation_reduction_ratio": 0.0,
+      "actual_total_tokens": 6930,
+      "memo_total_tokens": 6930,
+      "saved_total_tokens": 0,
+      "total_reduction_ratio": 0.0,
+      "first_reads": 1,
+      "unchanged_rereads": 0,
+      "changed_rereads": 0,
+      "cached_searches": 0,
+      "changed_searches": 0,
+      "passthrough_tokens": 718,
+      "top_saved_files": []
+    },
+    {
+      "policy": "aggressive",
+      "actual_navigation_tokens": 2485,
+      "memo_navigation_tokens": 2485,
+      "saved_navigation_tokens": 0,
+      "navigation_reduction_ratio": 0.0,
+      "actual_total_tokens": 6930,
+      "memo_total_tokens": 6930,
+      "saved_total_tokens": 0,
+      "total_reduction_ratio": 0.0,
+      "first_reads": 1,
+      "unchanged_rereads": 0,
+      "changed_rereads": 0,
+      "cached_searches": 0,
+      "changed_searches": 0,
+      "passthrough_tokens": 718,
+      "top_saved_files": []
+    }
+  ]
+}

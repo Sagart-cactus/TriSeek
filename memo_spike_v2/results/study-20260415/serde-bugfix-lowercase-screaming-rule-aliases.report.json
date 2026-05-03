@@ -1,0 +1,84 @@
+{
+  "run_id": "serde-bugfix-lowercase-screaming-rule-aliases",
+  "task": "serde bugfix: lowercase screaming rename-rule aliases",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-serde-bugfix-lowercase-screaming-rule-aliases/2b8b66f8-8503-4d71-96d3-5bf45fbe6dde.jsonl",
+  "policies": [
+    {
+      "policy": "conservative",
+      "actual_navigation_tokens": 3658,
+      "memo_navigation_tokens": 3615,
+      "saved_navigation_tokens": 43,
+      "navigation_reduction_ratio": 0.011755057408419901,
+      "actual_total_tokens": 27540,
+      "memo_total_tokens": 27497,
+      "saved_total_tokens": 43,
+      "total_reduction_ratio": 0.0015613652868554828,
+      "first_reads": 3,
+      "unchanged_rereads": 1,
+      "changed_rereads": 2,
+      "cached_searches": 0,
+      "changed_searches": 0,
+      "passthrough_tokens": 337,
+      "top_saved_files": [
+        {
+          "path": "test_suite/tests/test_macros.rs",
+          "saved_tokens": 43
+        }
+      ]
+    },
+    {
+      "policy": "default",
+      "actual_navigation_tokens": 3658,
+      "memo_navigation_tokens": 3573,
+      "saved_navigation_tokens": 85,
+      "navigation_reduction_ratio": 0.023236741388737013,
+      "actual_total_tokens": 27540,
+      "memo_total_tokens": 27455,
+      "saved_total_tokens": 85,
+      "total_reduction_ratio": 0.0030864197530864196,
+      "first_reads": 3,
+      "unchanged_rereads": 1,
+      "changed_rereads": 2,
+      "cached_searches": 0,
+      "changed_searches": 0,
+      "passthrough_tokens": 337,
+      "top_saved_files": [
+        {
+          "path": "test_suite/tests/test_macros.rs",
+          "saved_tokens": 64
+        },
+        {
+          "path": "serde_derive/src/internals/case.rs",
+          "saved_tokens": 21
+        }
+      ]
+    },
+    {
+      "policy": "aggressive",
+      "actual_navigation_tokens": 3658,
+      "memo_navigation_tokens": 3544,
+      "saved_navigation_tokens": 114,
+      "navigation_reduction_ratio": 0.03116457080371788,
+      "actual_total_tokens": 27540,
+      "memo_total_tokens": 27426,
+      "saved_total_tokens": 114,
+      "total_reduction_ratio": 0.004139433551198257,
+      "first_reads": 3,
+      "unchanged_rereads": 1,
+      "changed_rereads": 2,
+      "cached_searches": 0,
+      "changed_searches": 0,
+      "passthrough_tokens": 337,
+      "top_saved_files": [
+        {
+          "path": "test_suite/tests/test_macros.rs",
+          "saved_tokens": 77
+        },
+        {
+          "path": "serde_derive/src/internals/case.rs",
+          "saved_tokens": 37
+        }
+      ]
+    }
+  ]
+}

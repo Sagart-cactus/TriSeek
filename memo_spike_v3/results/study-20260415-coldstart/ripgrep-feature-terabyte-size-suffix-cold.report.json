@@ -1,0 +1,76 @@
+{
+  "run_id": "ripgrep-feature-terabyte-size-suffix-cold",
+  "task": "ripgrep cold-start feature: next larger byte unit",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-feature-terabyte-size-suffix-cold/491ac634-ab18-436c-864e-11cd9d639d69.jsonl",
+  "policies": [
+    {
+      "policy": "conservative",
+      "actual_navigation_tokens": 3466,
+      "memo_navigation_tokens": 3420,
+      "saved_navigation_tokens": 46,
+      "navigation_reduction_ratio": 0.013271783035199077,
+      "actual_total_tokens": 13731,
+      "memo_total_tokens": 13685,
+      "saved_total_tokens": 46,
+      "total_reduction_ratio": 0.0033500837520938024,
+      "first_reads": 2,
+      "unchanged_rereads": 2,
+      "changed_rereads": 0,
+      "cached_searches": 0,
+      "changed_searches": 0,
+      "passthrough_tokens": 793,
+      "top_saved_files": [
+        {
+          "path": "crates/core/flags/defs.rs",
+          "saved_tokens": 46
+        }
+      ]
+    },
+    {
+      "policy": "default",
+      "actual_navigation_tokens": 3466,
+      "memo_navigation_tokens": 3397,
+      "saved_navigation_tokens": 69,
+      "navigation_reduction_ratio": 0.019907674552798616,
+      "actual_total_tokens": 13731,
+      "memo_total_tokens": 13662,
+      "saved_total_tokens": 69,
+      "total_reduction_ratio": 0.005025125628140704,
+      "first_reads": 2,
+      "unchanged_rereads": 2,
+      "changed_rereads": 0,
+      "cached_searches": 0,
+      "changed_searches": 0,
+      "passthrough_tokens": 793,
+      "top_saved_files": [
+        {
+          "path": "crates/core/flags/defs.rs",
+          "saved_tokens": 69
+        }
+      ]
+    },
+    {
+      "policy": "aggressive",
+      "actual_navigation_tokens": 3466,
+      "memo_navigation_tokens": 3383,
+      "saved_navigation_tokens": 83,
+      "navigation_reduction_ratio": 0.023946912867859205,
+      "actual_total_tokens": 13731,
+      "memo_total_tokens": 13648,
+      "saved_total_tokens": 83,
+      "total_reduction_ratio": 0.006044716335299687,
+      "first_reads": 2,
+      "unchanged_rereads": 2,
+      "changed_rereads": 0,
+      "cached_searches": 0,
+      "changed_searches": 0,
+      "passthrough_tokens": 793,
+      "top_saved_files": [
+        {
+          "path": "crates/core/flags/defs.rs",
+          "saved_tokens": 83
+        }
+      ]
+    }
+  ]
+}

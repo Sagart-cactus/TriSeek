@@ -1,0 +1,56 @@
+[
+  {
+    "run_id": "ripgrep-bugfix-lowercase-size-suffixes-cold",
+    "repo_slug": "BurntSushi_ripgrep",
+    "repo_path": "../Triseek-bench/repos/BurntSushi_ripgrep",
+    "task_type": "bugfix",
+    "title": "ripgrep cold-start bugfix: lowercase unit spellings",
+    "prompt": "One of ripgrep's CLI options accepts human-readable byte sizes like uppercase unit suffixes, but lowercase unit spellings are rejected even though users reasonably try them. Fix the parser so lowercase common unit suffixes behave the same as uppercase ones, preserve existing invalid-input behavior, add focused tests, and verify the relevant CLI test target before finishing.",
+    "verification_command": "cargo test -p grep-cli"
+  },
+  {
+    "run_id": "ripgrep-feature-terabyte-size-suffix-cold",
+    "repo_slug": "BurntSushi_ripgrep",
+    "repo_path": "../Triseek-bench/repos/BurntSushi_ripgrep",
+    "task_type": "feature",
+    "title": "ripgrep cold-start feature: next larger byte unit",
+    "prompt": "Ripgrep has a CLI parser for options that accept human-readable byte limits. It currently tops out below terabytes. Extend it to support the next larger unit in both upper- and lower-case spellings, update any help or docs that enumerate accepted units, add focused tests, and verify the relevant CLI test target before finishing.",
+    "verification_command": "cargo test -p grep-cli"
+  },
+  {
+    "run_id": "ripgrep-refactor-parse-human-size-cold",
+    "repo_slug": "BurntSushi_ripgrep",
+    "repo_path": "../Triseek-bench/repos/BurntSushi_ripgrep",
+    "task_type": "refactor",
+    "title": "ripgrep cold-start refactor: shorten verbose size-parser API",
+    "prompt": "Within ripgrep's CLI crate there is a public helper for parsing human-readable byte limits whose current name is longer than it needs to be. Rename that API to a shorter, cleaner name everywhere it is re-exported or called, keep behavior unchanged, update any affected docs, and verify the relevant CLI test target before finishing.",
+    "verification_command": "cargo test -p grep-cli"
+  },
+  {
+    "run_id": "serde-bugfix-lowercase-screaming-rule-aliases-cold",
+    "repo_slug": "serde-rs_serde",
+    "repo_path": "../Triseek-bench/repos/serde-rs_serde",
+    "task_type": "bugfix",
+    "title": "serde cold-start bugfix: lowercase screaming rename aliases",
+    "prompt": "Serde derive accepts the loud uppercase `rename_all` styles, but the lowercase spellings of those same styles are rejected. Treat the lowercase spellings as aliases while keeping the existing canonical spellings and behavior intact. Add focused tests and verify the relevant derive test target before finishing.",
+    "verification_command": "cargo test -p serde_derive"
+  },
+  {
+    "run_id": "serde-feature-train-case-rule-cold",
+    "repo_slug": "serde-rs_serde",
+    "repo_path": "../Triseek-bench/repos/serde-rs_serde",
+    "task_type": "feature",
+    "title": "serde cold-start feature: dashed title-case rename style",
+    "prompt": "Add a new `rename_all` convention in serde derive that outputs title-cased words separated by dashes. It should transform both snake_case field names and PascalCase enum variants correctly. Wire it through parsing, case transformation, and focused tests, then verify the relevant derive test target before finishing.",
+    "verification_command": "cargo test -p serde_derive"
+  },
+  {
+    "run_id": "serde-refactor-multiname-accessors-cold",
+    "repo_slug": "serde-rs_serde",
+    "repo_path": "../Triseek-bench/repos/serde-rs_serde",
+    "task_type": "refactor",
+    "title": "serde cold-start refactor: clearer serializer/deserializer name accessors",
+    "prompt": "Inside `serde_derive`, an internal naming helper exposes separate accessor methods for serializer-facing and deserializer-facing names, but the current method names read awkwardly. Rename those methods to clearer query-style names everywhere they are used, keep behavior unchanged, and verify the relevant derive test target before finishing.",
+    "verification_command": "cargo test -p serde_derive"
+  }
+]

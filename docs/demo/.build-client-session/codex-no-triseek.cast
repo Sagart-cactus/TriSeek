@@ -1,0 +1,8 @@
+{"version":3,"term":{"cols":90,"rows":20},"timestamp":1775750995,"command":"/Users/trivedi/Documents/Projects/TriSeek/scripts/demo/client_session_panel.sh codex no-triseek","env":{"SHELL":"/bin/zsh"}}
+[5.866, "o", "\u001bc\u001b[38;5;203m\u001b[1mCodex CLI\u001b[0m\r\n\u001b[2mworkspace: torvalds/linux\u001b[0m\r\n\u001b[2msession: No TriSeek installed\u001b[0m\r\n\r\n"]
+[0.402, "o", "\u001b[1m$ codex mcp list\u001b[0m\r\n(no triseek server configured)\r\n\r\n"]
+[0.607, "o", "\u001b[38;5;39m\u001b[1mUser Prompt\u001b[0m\r\nFind where AEGIS_BLOCK_SIZE is defined in torvalds/linux.\r\nSearch the full repo and return the first file + line,\r\nmatching files, and total line matches.\r\nUse repo search only.\r\n\r\n"]
+[0.606, "o", "\u001b[38;5;39m\u001b[1mAssistant\u001b[0m\r\nTriSeek is unavailable in this session, falling back to raw grep.\r\n\r\n"]
+[0.407, "o", "\u001b[38;5;221mtool\u001b[0m  bash -lc \"rg --json --fixed-strings --max-count 100 AEGIS_BLOCK_SIZE torvalds_linux\"\r\n"]
+[5.337, "o", "\u001b[38;5;221mstatus\u001b[0m \u001b[38;5;203mcompleted\u001b[0m in 5.335s\r\n\u001b[38;5;221manswer\u001b[0m crypto/aegis.h:16\r\n\u001b[38;5;221mstats\u001b[0m  3 files, 60 line matches\r\n\u001b[38;5;221mroute\u001b[0m  raw_rg_scan\r\n\r\n\u001b[38;5;39m\u001b[1mResult\u001b[0m\r\nTask complete.\r\n"]
+[2.521, "x", "0"]

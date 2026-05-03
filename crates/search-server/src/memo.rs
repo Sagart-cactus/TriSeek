@@ -440,7 +440,7 @@ mod tests {
         let repo = temp.path();
         fs::write(repo.join("x.rs"), "fn x() {}\n").unwrap();
         let hash = read_disk_hash(&repo.join("x.rs")).unwrap();
-        let memo = MemoState::new(Duration::from_millis(1));
+        let memo = MemoState::new(Duration::from_millis(50));
 
         memo.observe(&MemoObserveParams {
             session_id: "a".to_string(),
@@ -474,7 +474,7 @@ mod tests {
         });
         assert_eq!(session_b.tracked_files, 1);
 
-        std::thread::sleep(Duration::from_millis(5));
+        std::thread::sleep(Duration::from_millis(75));
         let session_c = memo.session(&MemoSessionParams {
             session_id: "c".to_string(),
             repo_root: None,

@@ -13,6 +13,7 @@ pub fn install() -> Result<()> {
     install_mcp(&binary_str)?;
     install_hooks(&binary_str)?;
     enable_hooks_flag()?;
+    install_command_plugin()?;
     Ok(())
 }
 
@@ -66,6 +67,7 @@ fn install_mcp(binary_str: &str) -> Result<()> {
 pub fn uninstall() -> Result<()> {
     uninstall_mcp()?;
     uninstall_hooks()?;
+    uninstall_command_plugin()?;
     Ok(())
 }
 
@@ -152,6 +154,37 @@ fn enable_hooks_flag() -> Result<()> {
     shared::atomic_write(&path, &updated)
         .with_context(|| format!("failed to write {}", path.display()))?;
     println!("triseek: enabled Codex feature flag `codex_hooks = true`");
+    Ok(())
+}
+
+fn install_command_plugin() -> Result<()> {
+    let plugin_dir = shared::codex_triseek_plugin_dir()?;
+    shared::write_codex_triseek_plugin(&plugin_dir).with_context(|| {
+        format!(
+            "failed to write Codex TriSeek plugin at {}",
+            plugin_dir.display()
+        )
+    })?;
+    println!(
+        "triseek: installed Codex command plugin into {}. Use `$triseek handoff claude` or `$triseek resume <snapshot_id>`.",
+        plugin_dir.display()
+    );
+    Ok(())
+}
+
+fn uninstall_command_plugin() -> Result<()> {
+    let plugin_dir = shared::codex_triseek_plugin_dir()?;
+    if shared::remove_triseek_owned_plugin_dir(&plugin_dir)? {
+        println!(
+            "triseek: removed Codex command plugin from {}",
+            plugin_dir.display()
+        );
+    } else {
+        println!(
+            "triseek: no TriSeek-owned Codex command plugin found at {}",
+            plugin_dir.display()
+        );
+    }
     Ok(())
 }
 

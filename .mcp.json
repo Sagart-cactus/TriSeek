@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "triseek": {
+      "args": [
+        "mcp",
+        "serve"
+      ],
+      "command": "/Users/trivedi/.local/bin/triseek",
+      "env": {}
+    }
+  }
+}

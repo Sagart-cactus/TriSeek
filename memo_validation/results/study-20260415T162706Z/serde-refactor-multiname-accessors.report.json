@@ -1,0 +1,25 @@
+{
+  "run_id": "serde-refactor-multiname-accessors",
+  "task": "serde refactor: rename MultiName accessors",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-serde-refactor-multiname-accessors/e9eb0dff-4ff9-4cd1-80f2-c2290fb52890.jsonl",
+  "rust_replay": {
+    "session_id": "31a0d4b4-03cd-4365-9c0e-fe7c33429d13",
+    "total_reads": 2,
+    "redundant_reads_prevented": 0,
+    "tokens_saved": 0,
+    "false_negatives": 0,
+    "actual_navigation_tokens": 276,
+    "memo_navigation_tokens": 276,
+    "reduction_ratio_vs_redundant": 0.0
+  },
+  "oracle": {
+    "elimination_ratio": 0.9860869565217392,
+    "eliminated_tokens": 1134,
+    "redundant_read_tokens": 912
+  },
+  "python_simulation": {
+    "saved_navigation_tokens": 0,
+    "navigation_reduction_ratio": 0.0
+  },
+  "verdict": "FAIL"
+}

@@ -1,0 +1,34 @@
+{
+  "run_id": "ripgrep-feature-terabyte-size-suffix",
+  "task": "ripgrep feature: terabyte size suffix",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-feature-terabyte-size-suffix/0bfd0fa4-dbe5-4137-b473-fddb6fda0daa.jsonl",
+  "compact_at_turn": 6,
+  "file_replay": {
+    "session_id": "c90e356b-10e5-4e05-b1fb-55fea7adf7e0",
+    "tokens_saved": 202,
+    "eligible_tokens": 202,
+    "false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_navigation_tokens": 1603,
+    "optimized_navigation_tokens": 1401
+  },
+  "search_replay": {
+    "session_id": "f241e07b-7837-4ba3-9de4-5a8f8b03e1a2",
+    "total_search_calls": 7,
+    "duplicate_search_calls": 0,
+    "search_reuse_hits": 0,
+    "search_tokens_saved": 0,
+    "search_eligible_tokens": 0,
+    "search_false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_search_tokens": 4369,
+    "replay_search_tokens": 2185
+  },
+  "combined": {
+    "actual_navigation_tokens": 5972,
+    "optimized_navigation_tokens": 3586,
+    "combined_eligible_tokens": 202,
+    "combined_tokens_saved": 202
+  },
+  "verdict": "PASS"
+}

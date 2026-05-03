@@ -1,0 +1,163 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - link "▲ TriSeek" [ref=e3] [cursor=pointer]:
+      - /url: index.html
+    - generic [ref=e4]:
+      - link "home" [ref=e5] [cursor=pointer]:
+        - /url: index.html
+      - link "install" [ref=e6] [cursor=pointer]:
+        - /url: install.html
+      - link "mcp" [ref=e7] [cursor=pointer]:
+        - /url: mcp.html
+      - link "how it works" [ref=e8] [cursor=pointer]:
+        - /url: triseek-explained.html
+      - link "architecture" [ref=e9] [cursor=pointer]:
+        - /url: triseek-architecture.html
+  - generic [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]: ◈ TriSeek Setup
+      - heading "Install TriSeek with one command" [level=1] [ref=e13]:
+        - text: Install TriSeek with
+        - text: one command
+      - paragraph [ref=e14]: The recommended path is a prebuilt GitHub Release archive. Use the shell installer on macOS or Linux, the PowerShell installer on Windows, and keep Cargo as the fallback when you already have Rust installed.
+    - generic [ref=e15]:
+      - generic [ref=e16]: // 01 — platform installers
+      - heading "Choose your platform" [level=2] [ref=e17]
+      - generic [ref=e18]:
+        - generic [ref=e19]:
+          - generic [ref=e20]:
+            - generic [ref=e21]: ⌘
+            - heading "macOS and Linux" [level=3] [ref=e22]
+          - paragraph [ref=e23]:
+            - text: This downloads the latest release archive and installs
+            - code [ref=e24]: triseek
+            - text: and
+            - code [ref=e25]: triseek-server
+            - text: into
+            - code [ref=e26]: ~/.local/bin
+            - text: . If a matching release is not published yet, the script falls back to
+            - code [ref=e27]: cargo install
+            - text: when Rust is available.
+          - generic [ref=e28]:
+            - generic [ref=e34]: shell · recommended
+            - generic [ref=e35]: curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh
+          - paragraph [ref=e36]: "Pin a specific version:"
+          - generic [ref=e37]:
+            - generic [ref=e43]: shell · pinned version
+            - generic [ref=e44]: curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --version v0.2.1
+          - paragraph [ref=e45]: "Install into a different directory:"
+          - generic [ref=e46]:
+            - generic [ref=e52]: shell · custom install dir
+            - generic [ref=e53]: curl -fsSL https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.sh | sh -s -- --install-dir /usr/local/bin
+        - generic [ref=e54]:
+          - generic [ref=e55]:
+            - generic [ref=e56]: ⊞
+            - heading "Windows PowerShell" [level=3] [ref=e57]
+          - paragraph [ref=e58]:
+            - text: This downloads the latest Windows release archive, installs
+            - code [ref=e59]: triseek.exe
+            - text: and
+            - code [ref=e60]: triseek-server.exe
+            - text: ", and updates the user"
+            - code [ref=e61]: PATH
+            - text: unless you opt out with
+            - code [ref=e62]: "-SkipPathUpdate"
+            - text: . If no matching release exists, it falls back to
+            - code [ref=e63]: cargo install
+            - text: when Rust is available.
+          - generic [ref=e64]:
+            - generic [ref=e70]: powershell · recommended
+            - generic [ref=e71]: powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Sagart-cactus/TriSeek/main/scripts/install.ps1 | iex"
+          - paragraph [ref=e72]: "Install a pinned version after saving the script locally:"
+          - generic [ref=e73]:
+            - generic [ref=e79]: powershell · pinned version
+            - generic [ref=e80]: .\install.ps1 -Version v0.2.1
+        - generic [ref=e81]:
+          - generic [ref=e82]:
+            - generic [ref=e83]: ⚙
+            - heading "Cargo Fallback" [level=3] [ref=e84]
+          - paragraph [ref=e85]: If Rust is already installed, you can install TriSeek directly from GitHub.
+          - generic [ref=e86]:
+            - generic [ref=e92]: cargo · from github
+            - generic [ref=e93]: cargo install --git https://github.com/Sagart-cactus/TriSeek.git triseek --locked cargo install --git https://github.com/Sagart-cactus/TriSeek.git search-server --locked
+          - paragraph [ref=e94]: "From a local checkout:"
+          - generic [ref=e95]:
+            - generic [ref=e101]: cargo · local checkout
+            - generic [ref=e102]: cargo install --path crates/search-cli --locked cargo install --path crates/search-server --locked
+        - generic [ref=e103]:
+          - generic [ref=e104]:
+            - generic [ref=e105]: ◈
+            - heading "Supported Release Targets" [level=3] [ref=e106]
+          - paragraph [ref=e107]: Pre-built archives are published for the following targets. If your platform is not in this list, use the Cargo install path instead.
+          - generic [ref=e108]:
+            - generic [ref=e109]: linux-x86_64
+            - generic [ref=e111]: macos-x86_64
+            - generic [ref=e113]: macos-aarch64
+            - generic [ref=e115]: windows-x86_64
+    - generic [ref=e117]:
+      - generic [ref=e118]: // 02 — first steps
+      - heading "Get running" [level=2] [ref=e119]
+      - paragraph [ref=e120]: After installation, verify the binary is reachable and run your first search.
+      - generic [ref=e121]:
+        - generic [ref=e122]:
+          - generic [ref=e123]: "01"
+          - generic [ref=e124]:
+            - heading "Verify the install" [level=3] [ref=e125]
+            - generic [ref=e126]:
+              - generic [ref=e132]: shell
+              - generic [ref=e133]: triseek help
+        - generic [ref=e134]:
+          - generic [ref=e135]: "02"
+          - generic [ref=e136]:
+            - heading "Search immediately" [level=3] [ref=e137]
+            - generic [ref=e138]:
+              - generic [ref=e144]: shell
+              - generic [ref=e145]: triseek "AuthConfig" /path/to/repo
+        - generic [ref=e146]:
+          - generic [ref=e147]: "03"
+          - generic [ref=e148]:
+            - heading "Index for repeated speed" [level=3] [ref=e149]
+            - generic [ref=e150]:
+              - generic [ref=e156]: shell
+              - generic [ref=e157]: triseek build /path/to/repo triseek "AuthConfig" /path/to/repo
+        - generic [ref=e158]:
+          - generic [ref=e159]: "04"
+          - generic [ref=e160]:
+            - heading "Keep the index fresh" [level=3] [ref=e161]
+            - generic [ref=e162]:
+              - generic [ref=e168]: shell
+              - generic [ref=e169]: triseek update /path/to/repo triseek daemon start
+            - paragraph [ref=e170]:
+              - text: Default TriSeek state lives under
+              - code [ref=e171]: ~/.triseek
+              - text: ", not in the searched repo root."
+    - generic [ref=e172]:
+      - generic [ref=e173]: // 03 — maintenance
+      - heading "Upgrade & Uninstall" [level=2] [ref=e174]
+      - generic [ref=e175]:
+        - generic [ref=e176]:
+          - generic [ref=e177]:
+            - generic [ref=e178]: ↑
+            - heading "Upgrade" [level=3] [ref=e179]
+          - paragraph [ref=e180]: Rerun the same installer command. The latest installer always replaces the old binary in place.
+        - generic [ref=e181]:
+          - generic [ref=e182]:
+            - generic [ref=e183]: ✕
+            - heading "Uninstall" [level=3] [ref=e184]
+          - paragraph [ref=e185]:
+            - text: Delete the installed binary and remove
+            - code [ref=e186]: ~/.triseek
+            - text: if you also want to remove local index data.
+          - generic [ref=e187]:
+            - generic [ref=e193]: macOS / Linux
+            - generic [ref=e194]: rm -f ~/.local/bin/triseek ~/.local/bin/triseek-server
+          - generic [ref=e195]:
+            - generic [ref=e201]: Windows PowerShell
+            - generic [ref=e202]: Remove-Item "$HOME\AppData\Local\Programs\TriSeek\bin\triseek.exe","$HOME\AppData\Local\Programs\TriSeek\bin\triseek-server.exe"
+    - contentinfo [ref=e203]:
+      - generic [ref=e204]: TriSeek installers prefer published GitHub Releases. Before the first tagged release exists, they fall back to Cargo when Rust is installed.
+      - generic [ref=e205]:
+        - link "← home" [ref=e206] [cursor=pointer]:
+          - /url: index.html
+        - link "mcp →" [ref=e207] [cursor=pointer]:
+          - /url: mcp.html

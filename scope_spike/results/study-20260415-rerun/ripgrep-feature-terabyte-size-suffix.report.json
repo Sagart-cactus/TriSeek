@@ -1,0 +1,1126 @@
+{
+  "label": "ripgrep-feature-terabyte-size-suffix",
+  "task": "ripgrep feature: terabyte size suffix",
+  "repository": "/Users/trivedi/Documents/Projects/TriSeek/scope_spike/workdirs/ripgrep-feature-terabyte-size-suffix",
+  "tokenizer": {
+    "name": "cl100k_base",
+    "exact": true
+  },
+  "actual": {
+    "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-feature-terabyte-size-suffix/0bfd0fa4-dbe5-4137-b473-fddb6fda0daa.jsonl",
+    "session_id": "0bfd0fa4-dbe5-4137-b473-fddb6fda0daa",
+    "repo_root": "/Users/trivedi/Documents/Projects/TriSeek/scope_spike/workdirs/ripgrep-feature-terabyte-size-suffix",
+    "assistant_input_tokens": 48,
+    "assistant_output_tokens": 12404,
+    "reasoning_tokens": 12404,
+    "total_tokens": 20402,
+    "navigation_tokens": 7998,
+    "navigation_overhead_tokens": 4196,
+    "wasted_read_tokens": 2322,
+    "redundant_read_tokens": 1457,
+    "useful_read_tokens": 1480,
+    "files_read": 89,
+    "files_useful": 2,
+    "files_wasted": 87,
+    "edited_files": [
+      "crates/cli/src/human.rs",
+      "crates/core/flags/defs.rs"
+    ],
+    "assistant_messages": 36,
+    "tool_counts": {
+      "Bash": 3,
+      "ToolSearch": 1,
+      "mcp__triseek__search_content": 2,
+      "Grep": 5,
+      "Read": 4,
+      "Edit": 6
+    },
+    "file_details": [
+      {
+        "path": "crates/cli/src/human.rs",
+        "tokens": 1051,
+        "first_read_tokens": 7,
+        "redundant_tokens": 1044,
+        "tool": "Grep",
+        "tools": [
+          "Grep",
+          "Read"
+        ],
+        "was_useful": true,
+        "read_count": 3
+      },
+      {
+        "path": "crates/core/flags/defs.rs",
+        "tokens": 429,
+        "first_read_tokens": 35,
+        "redundant_tokens": 394,
+        "tool": "Bash",
+        "tools": [
+          "Bash",
+          "Grep",
+          "Read"
+        ],
+        "was_useful": true,
+        "read_count": 5
+      },
+      {
+        "path": "crates/core/flags/complete/rg.zsh",
+        "tokens": 49,
+        "first_read_tokens": 38,
+        "redundant_tokens": 11,
+        "tool": "Bash",
+        "tools": [
+          "Bash",
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 2
+      },
+      {
+        "path": "crates/core/flags/doc/help.rs",
+        "tokens": 43,
+        "first_read_tokens": 35,
+        "redundant_tokens": 8,
+        "tool": "Bash",
+        "tools": [
+          "Bash",
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 2
+      },
+      {
+        "path": "crates/core/flags/complete/encodings.sh",
+        "tokens": 38,
+        "first_read_tokens": 38,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/complete/powershell.rs",
+        "tokens": 38,
+        "first_read_tokens": 38,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/complete/prelude.fish",
+        "tokens": 38,
+        "first_read_tokens": 38,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/doc/template.rg.1",
+        "tokens": 38,
+        "first_read_tokens": 38,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/globset/benches/bench.rs",
+        "tokens": 38,
+        "first_read_tokens": 38,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/complete/fish.rs",
+        "tokens": 37,
+        "first_read_tokens": 37,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/complete/zsh.rs",
+        "tokens": 37,
+        "first_read_tokens": 37,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/src/searcher/glue.rs",
+        "tokens": 37,
+        "first_read_tokens": 37,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/src/searcher/mmap.rs",
+        "tokens": 37,
+        "first_read_tokens": 37,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/complete/bash.rs",
+        "tokens": 36,
+        "first_read_tokens": 36,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/complete/mod.rs",
+        "tokens": 36,
+        "first_read_tokens": 36,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/doc/template.long.help",
+        "tokens": 36,
+        "first_read_tokens": 36,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/doc/template.short.help",
+        "tokens": 36,
+        "first_read_tokens": 36,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/hiargs.rs",
+        "tokens": 36,
+        "first_read_tokens": 36,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/lowargs.rs",
+        "tokens": 36,
+        "first_read_tokens": 36,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/globset/Cargo.toml",
+        "tokens": 36,
+        "first_read_tokens": 36,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/globset/src/pathutil.rs",
+        "tokens": 36,
+        "first_read_tokens": 36,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/examples/search-stdin.rs",
+        "tokens": 36,
+        "first_read_tokens": 36,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/src/line_buffer.rs",
+        "tokens": 36,
+        "first_read_tokens": 36,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/src/searcher/core.rs",
+        "tokens": 36,
+        "first_read_tokens": 36,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/src/searcher/mod.rs",
+        "tokens": 36,
+        "first_read_tokens": 36,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/doc/man.rs",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/doc/mod.rs",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/doc/version.rs",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/parse.rs",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/globset/COPYING",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/globset/LICENSE-MIT",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/globset/README.md",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/globset/UNLICENSE",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/Cargo.toml",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/src/lines.rs",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/src/macros.rs",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/src/sink.rs",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/src/testutil.rs",
+        "tokens": 35,
+        "first_read_tokens": 35,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/config.rs",
+        "tokens": 34,
+        "first_read_tokens": 34,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/flags/mod.rs",
+        "tokens": 34,
+        "first_read_tokens": 34,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/haystack.rs",
+        "tokens": 34,
+        "first_read_tokens": 34,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/LICENSE-MIT",
+        "tokens": 34,
+        "first_read_tokens": 34,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/README.md",
+        "tokens": 34,
+        "first_read_tokens": 34,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/UNLICENSE",
+        "tokens": 34,
+        "first_read_tokens": 34,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/searcher/src/lib.rs",
+        "tokens": 34,
+        "first_read_tokens": 34,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/README.md",
+        "tokens": 33,
+        "first_read_tokens": 33,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/logger.rs",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/main.rs",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/messages.rs",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/core/search.rs",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "Cargo.toml",
+        "tokens": 31,
+        "first_read_tokens": 31,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-12-24-archlinux-cheetah-musl-jemalloc/raw.csv",
+        "tokens": 25,
+        "first_read_tokens": 25,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-12-24-archlinux-cheetah-musl-jemalloc/summary",
+        "tokens": 25,
+        "first_read_tokens": 25,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-12-24-archlinux-cheetah-glibc-jemalloc/raw.csv",
+        "tokens": 24,
+        "first_read_tokens": 24,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-12-24-archlinux-cheetah-glibc-jemalloc/summary",
+        "tokens": 24,
+        "first_read_tokens": 24,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-12-24-archlinux-cheetah-musl-system/raw.csv",
+        "tokens": 23,
+        "first_read_tokens": 23,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-12-24-archlinux-cheetah-musl-system/summary",
+        "tokens": 23,
+        "first_read_tokens": 23,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-12-24-archlinux-cheetah-glibc-system/raw.csv",
+        "tokens": 22,
+        "first_read_tokens": 22,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-12-24-archlinux-cheetah-glibc-system/summary",
+        "tokens": 22,
+        "first_read_tokens": 22,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-09-17-ubuntu1604-ec2/raw.csv",
+        "tokens": 20,
+        "first_read_tokens": 20,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-09-17-ubuntu1604-ec2/summary",
+        "tokens": 20,
+        "first_read_tokens": 20,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-09-20-ubuntu1604-ec2/raw.csv",
+        "tokens": 20,
+        "first_read_tokens": 20,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-09-20-ubuntu1604-ec2/summary",
+        "tokens": 20,
+        "first_read_tokens": 20,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-09-22-archlinux-cheetah/raw.csv",
+        "tokens": 19,
+        "first_read_tokens": 19,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-09-22-archlinux-cheetah/summary",
+        "tokens": 19,
+        "first_read_tokens": 19,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-12-24-archlinux-cheetah/raw.csv",
+        "tokens": 19,
+        "first_read_tokens": 19,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-12-24-archlinux-cheetah/summary",
+        "tokens": 19,
+        "first_read_tokens": 19,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-12-30-archlinux-cheetah/raw.csv",
+        "tokens": 19,
+        "first_read_tokens": 19,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2016-12-30-archlinux-cheetah/summary",
+        "tokens": 19,
+        "first_read_tokens": 19,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2018-01-08-archlinux-cheetah/raw.csv",
+        "tokens": 19,
+        "first_read_tokens": 19,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2018-01-08-archlinux-cheetah/summary",
+        "tokens": 19,
+        "first_read_tokens": 19,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2020-10-14-archlinux-frink/raw.csv",
+        "tokens": 18,
+        "first_read_tokens": 18,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2020-10-14-archlinux-frink/summary",
+        "tokens": 18,
+        "first_read_tokens": 18,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2022-12-16-archlinux-duff/raw.csv",
+        "tokens": 18,
+        "first_read_tokens": 18,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/runs/2022-12-16-archlinux-duff/summary",
+        "tokens": 18,
+        "first_read_tokens": 18,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/globset/src/glob.rs",
+        "tokens": 9,
+        "first_read_tokens": 9,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/globset/src/lib.rs",
+        "tokens": 8,
+        "first_read_tokens": 8,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/ignore/src/gitignore.rs",
+        "tokens": 8,
+        "first_read_tokens": 8,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/ignore/src/overrides.rs",
+        "tokens": 8,
+        "first_read_tokens": 8,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/printer/src/standard.rs",
+        "tokens": 8,
+        "first_read_tokens": 8,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/regex/src/literal.rs",
+        "tokens": 8,
+        "first_read_tokens": 8,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/printer/src/util.rs",
+        "tokens": 7,
+        "first_read_tokens": 7,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "crates/cli/src/lib.rs",
+        "tokens": 6,
+        "first_read_tokens": 6,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "benchsuite/benchsuite",
+        "tokens": 5,
+        "first_read_tokens": 5,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "tests/regression.rs",
+        "tokens": 4,
+        "first_read_tokens": 4,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "CHANGELOG.md",
+        "tokens": 3,
+        "first_read_tokens": 3,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "GUIDE.md",
+        "tokens": 3,
+        "first_read_tokens": 3,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "tests/misc.rs",
+        "tokens": 3,
+        "first_read_tokens": 3,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "tests/util.rs",
+        "tokens": 3,
+        "first_read_tokens": 3,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      }
+    ]
+  },
+  "oracle": {
+    "recommended_files": [
+      "crates/cli/src/human.rs",
+      "crates/core/flags/defs.rs"
+    ],
+    "recommended_tokens": 42,
+    "eliminated_tokens": 7956,
+    "elimination_ratio": 0.994748687171793,
+    "reduction_factor": 190.43,
+    "verdict": "PASS"
+  },
+  "verdict": "PASS"
+}

@@ -107,6 +107,39 @@ impl FrecencyStore {
         }
     }
 
+    /// Return the highest-scoring entries using the current decayed score.
+    pub fn top_n(&self, limit: usize) -> Vec<(String, f64)> {
+        let now = now_secs();
+        let mut entries = self
+            .data
+            .entries
+            .keys()
+            .map(|path| (path.clone(), self.score_at(path, now)))
+            .collect::<Vec<_>>();
+        entries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        entries.truncate(limit);
+        entries
+    }
+
+    /// Merge portable frecency scores from a snapshot into this store.
+    pub fn restore_scores(&mut self, entries: &[(String, f64)]) {
+        let now = now_secs();
+        for (path, score) in entries {
+            let entry = self
+                .data
+                .entries
+                .entry(path.clone())
+                .or_insert_with(|| FrecencyEntry {
+                    score: 0.0,
+                    last_access_secs: now,
+                    result_count: 0,
+                    select_count: 0,
+                });
+            entry.score = entry.score.max(*score);
+            entry.last_access_secs = now;
+        }
+    }
+
     /// Log a query event to the ring buffer (capped at 500 entries).
     pub fn record_query(&mut self, event: QueryEvent) {
         self.data.recent_queries.push_back(event);

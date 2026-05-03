@@ -68,6 +68,66 @@ pub const TOOLS: &[ToolDescriptor] = &[
         description: "Before re-reading a file you already saw in this Codex session, call this tool. If `recommendation` is `skip_reread`, do not read the file again and rely on prior context. Only re-read when it returns `reread_with_diff` or `reread`.",
         input_schema: memo_check_schema,
     },
+    ToolDescriptor {
+        name: "session_open",
+        title: "Open a portable session",
+        description: "Declare a session for cross-agent context capture and set it as the current MCP session.",
+        input_schema: session_open_schema,
+    },
+    ToolDescriptor {
+        name: "session_status",
+        title: "Inspect current session",
+        description: "Return session state and action-log size for a portable session.",
+        input_schema: session_id_schema,
+    },
+    ToolDescriptor {
+        name: "session_list",
+        title: "List portable sessions",
+        description: "List portable sessions for the current repository.",
+        input_schema: empty_object_schema,
+    },
+    ToolDescriptor {
+        name: "session_close",
+        title: "Close portable session",
+        description: "Mark a portable session as resolved or abandoned.",
+        input_schema: session_close_schema,
+    },
+    ToolDescriptor {
+        name: "session_snapshot",
+        title: "Create session snapshot",
+        description: "Persist a session snapshot directory under the TriSeek daemon snapshots directory.",
+        input_schema: session_snapshot_schema,
+    },
+    ToolDescriptor {
+        name: "session_snapshot_list",
+        title: "List session snapshots",
+        description: "List snapshot manifests, optionally filtered by session id.",
+        input_schema: snapshot_list_schema,
+    },
+    ToolDescriptor {
+        name: "session_snapshot_get",
+        title: "Get session snapshot",
+        description: "Return a full session snapshot including manifest, working set, action log, and pinned snippets.",
+        input_schema: snapshot_get_schema,
+    },
+    ToolDescriptor {
+        name: "session_snapshot_diff",
+        title: "Diff session snapshots",
+        description: "Compare two snapshots and report changed files and searches.",
+        input_schema: snapshot_diff_schema,
+    },
+    ToolDescriptor {
+        name: "session_resume",
+        title: "Prepare session resume",
+        description: "Hydrate daemon state from a snapshot and return a markdown payload for the new harness.",
+        input_schema: session_resume_schema,
+    },
+    ToolDescriptor {
+        name: "session_handoff",
+        title: "Create handoff snapshot",
+        description: "Convenience wrapper that creates a session snapshot and closes the current session as resolved.",
+        input_schema: session_snapshot_schema,
+    },
 ];
 
 pub fn find_files_schema() -> Value {
@@ -167,13 +227,13 @@ pub fn context_pack_schema() -> Value {
         "properties": {
             "goal": {
                 "type": "string",
-                "description": "Natural-language task goal, such as `fix auth panic`."
+                "description": "Natural-language session goal, such as `fix auth panic`."
             },
             "intent": {
                 "type": "string",
                 "enum": ["bugfix", "review"],
                 "default": "bugfix",
-                "description": "Task intent used to tune ranking heuristics."
+                "description": "Session intent used to tune ranking heuristics."
             },
             "budget_tokens": {
                 "type": "integer",
@@ -269,6 +329,102 @@ pub fn memo_check_schema() -> Value {
             }
         },
         "required": ["path"],
+        "additionalProperties": false
+    })
+}
+
+pub fn session_open_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "session_id": {"type": "string"},
+            "goal": {"type": "string", "default": ""}
+        },
+        "additionalProperties": false
+    })
+}
+
+pub fn session_id_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {"session_id": {"type": "string"}},
+        "additionalProperties": false
+    })
+}
+
+pub fn session_close_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "session_id": {"type": "string"},
+            "status": {"type": "string", "enum": ["resolved", "abandoned"], "default": "resolved"}
+        },
+        "additionalProperties": false
+    })
+}
+
+pub fn session_snapshot_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "session_id": {"type": "string"},
+            "source_harness": {"type": "string"},
+            "source_model": {"type": "string"},
+            "pinned_snippet_paths": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "line_start": {"type": "integer", "minimum": 1},
+                        "line_end": {"type": "integer", "minimum": 1}
+                    },
+                    "required": ["path", "line_start", "line_end"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "additionalProperties": false
+    })
+}
+
+pub fn snapshot_list_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {"session_id": {"type": "string"}},
+        "additionalProperties": false
+    })
+}
+
+pub fn snapshot_get_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {"snapshot_id": {"type": "string"}},
+        "required": ["snapshot_id"],
+        "additionalProperties": false
+    })
+}
+
+pub fn snapshot_diff_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "snapshot_a": {"type": "string"},
+            "snapshot_b": {"type": "string"}
+        },
+        "required": ["snapshot_a", "snapshot_b"],
+        "additionalProperties": false
+    })
+}
+
+pub fn session_resume_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "snapshot_id": {"type": "string"},
+            "budget_tokens": {"type": "integer", "minimum": 1, "maximum": 12000}
+        },
+        "required": ["snapshot_id"],
         "additionalProperties": false
     })
 }

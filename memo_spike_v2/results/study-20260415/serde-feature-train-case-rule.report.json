@@ -1,0 +1,76 @@
+{
+  "run_id": "serde-feature-train-case-rule",
+  "task": "serde feature: Train-Case rename rule",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-serde-feature-train-case-rule/72c5e326-adf4-48da-ae47-f745e0d6df03.jsonl",
+  "policies": [
+    {
+      "policy": "conservative",
+      "actual_navigation_tokens": 5198,
+      "memo_navigation_tokens": 4654,
+      "saved_navigation_tokens": 544,
+      "navigation_reduction_ratio": 0.10465563678337822,
+      "actual_total_tokens": 19491,
+      "memo_total_tokens": 18947,
+      "saved_total_tokens": 544,
+      "total_reduction_ratio": 0.027910317582473962,
+      "first_reads": 2,
+      "unchanged_rereads": 0,
+      "changed_rereads": 1,
+      "cached_searches": 0,
+      "changed_searches": 0,
+      "passthrough_tokens": 0,
+      "top_saved_files": [
+        {
+          "path": "serde_derive_internals/src/case.rs",
+          "saved_tokens": 544
+        }
+      ]
+    },
+    {
+      "policy": "default",
+      "actual_navigation_tokens": 5198,
+      "memo_navigation_tokens": 4606,
+      "saved_navigation_tokens": 592,
+      "navigation_reduction_ratio": 0.11388995767602925,
+      "actual_total_tokens": 19491,
+      "memo_total_tokens": 18899,
+      "saved_total_tokens": 592,
+      "total_reduction_ratio": 0.030372992663280488,
+      "first_reads": 2,
+      "unchanged_rereads": 0,
+      "changed_rereads": 1,
+      "cached_searches": 0,
+      "changed_searches": 0,
+      "passthrough_tokens": 0,
+      "top_saved_files": [
+        {
+          "path": "serde_derive_internals/src/case.rs",
+          "saved_tokens": 592
+        }
+      ]
+    },
+    {
+      "policy": "aggressive",
+      "actual_navigation_tokens": 5198,
+      "memo_navigation_tokens": 4590,
+      "saved_navigation_tokens": 608,
+      "navigation_reduction_ratio": 0.11696806464024626,
+      "actual_total_tokens": 19491,
+      "memo_total_tokens": 18883,
+      "saved_total_tokens": 608,
+      "total_reduction_ratio": 0.031193884356882664,
+      "first_reads": 2,
+      "unchanged_rereads": 0,
+      "changed_rereads": 1,
+      "cached_searches": 0,
+      "changed_searches": 0,
+      "passthrough_tokens": 0,
+      "top_saved_files": [
+        {
+          "path": "serde_derive_internals/src/case.rs",
+          "saved_tokens": 608
+        }
+      ]
+    }
+  ]
+}

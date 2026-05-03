@@ -1,0 +1,650 @@
+{
+  "label": "serde-feature-train-case-rule",
+  "task": "serde feature: Train-Case rename rule",
+  "repository": "/Users/trivedi/Documents/Projects/TriSeek/scope_spike/workdirs/serde-feature-train-case-rule",
+  "tokenizer": {
+    "name": "cl100k_base",
+    "exact": true
+  },
+  "actual": {
+    "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-serde-feature-train-case-rule/72c5e326-adf4-48da-ae47-f745e0d6df03.jsonl",
+    "session_id": "72c5e326-adf4-48da-ae47-f745e0d6df03",
+    "repo_root": "/Users/trivedi/Documents/Projects/TriSeek/scope_spike/workdirs/serde-feature-train-case-rule",
+    "assistant_input_tokens": 37,
+    "assistant_output_tokens": 14293,
+    "reasoning_tokens": 14293,
+    "total_tokens": 19491,
+    "navigation_tokens": 5198,
+    "navigation_overhead_tokens": 0,
+    "wasted_read_tokens": 1553,
+    "redundant_read_tokens": 3652,
+    "useful_read_tokens": 3645,
+    "files_read": 50,
+    "files_useful": 1,
+    "files_wasted": 49,
+    "edited_files": [
+      "serde_derive_internals/src/case.rs"
+    ],
+    "assistant_messages": 33,
+    "tool_counts": {
+      "Bash": 3,
+      "Read": 3,
+      "Edit": 10
+    },
+    "file_details": [
+      {
+        "path": "serde_derive_internals/src/case.rs",
+        "tokens": 3645,
+        "first_read_tokens": 33,
+        "redundant_tokens": 3612,
+        "tool": "Bash",
+        "tools": [
+          "Bash",
+          "Read"
+        ],
+        "was_useful": true,
+        "read_count": 3
+      },
+      {
+        "path": "serde_derive_internals/src/attr.rs",
+        "tokens": 73,
+        "first_read_tokens": 33,
+        "redundant_tokens": 40,
+        "tool": "Bash",
+        "tools": [
+          "Bash",
+          "Read"
+        ],
+        "was_useful": false,
+        "read_count": 2
+      },
+      {
+        "path": ".github/ISSUE_TEMPLATE/1-problem.md",
+        "tokens": 34,
+        "first_read_tokens": 34,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": ".github/ISSUE_TEMPLATE/2-suggestion.md",
+        "tokens": 34,
+        "first_read_tokens": 34,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": ".github/ISSUE_TEMPLATE/3-documentation.md",
+        "tokens": 34,
+        "first_read_tokens": 34,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": ".github/ISSUE_TEMPLATE/4-other.md",
+        "tokens": 33,
+        "first_read_tokens": 33,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/ser/impls.rs",
+        "tokens": 33,
+        "first_read_tokens": 33,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/Cargo.toml",
+        "tokens": 33,
+        "first_read_tokens": 33,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/LICENSE-APACHE",
+        "tokens": 33,
+        "first_read_tokens": 33,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/src/ast.rs",
+        "tokens": 33,
+        "first_read_tokens": 33,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/src/ctxt.rs",
+        "tokens": 33,
+        "first_read_tokens": 33,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/src/receiver.rs",
+        "tokens": 33,
+        "first_read_tokens": 33,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/src/respan.rs",
+        "tokens": 33,
+        "first_read_tokens": 33,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/src/symbol.rs",
+        "tokens": 33,
+        "first_read_tokens": 33,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/de/ignored_any.rs",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/de/impls.rs",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/private/size_hint.rs",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/ser/fmt.rs",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/ser/impossible.rs",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/LICENSE-MIT",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/src/check.rs",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/src/mod.rs",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/src/name.rs",
+        "tokens": 32,
+        "first_read_tokens": 32,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/crate_root.rs",
+        "tokens": 31,
+        "first_read_tokens": 31,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/private/seed.rs",
+        "tokens": 31,
+        "first_read_tokens": 31,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/ser/mod.rs",
+        "tokens": 31,
+        "first_read_tokens": 31,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/build.rs",
+        "tokens": 31,
+        "first_read_tokens": 31,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive_internals/lib.rs",
+        "tokens": 31,
+        "first_read_tokens": 31,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": ".github/workflows/ci.yml",
+        "tokens": 30,
+        "first_read_tokens": 30,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/Cargo.toml",
+        "tokens": 30,
+        "first_read_tokens": 30,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/LICENSE-APACHE",
+        "tokens": 30,
+        "first_read_tokens": 30,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/de/mod.rs",
+        "tokens": 30,
+        "first_read_tokens": 30,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/de/value.rs",
+        "tokens": 30,
+        "first_read_tokens": 30,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/macros.rs",
+        "tokens": 30,
+        "first_read_tokens": 30,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/private/content.rs",
+        "tokens": 30,
+        "first_read_tokens": 30,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/private/doc.rs",
+        "tokens": 30,
+        "first_read_tokens": 30,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/private/mod.rs",
+        "tokens": 30,
+        "first_read_tokens": 30,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/private/string.rs",
+        "tokens": 30,
+        "first_read_tokens": 30,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/std_error.rs",
+        "tokens": 30,
+        "first_read_tokens": 30,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": ".github/FUNDING.yml",
+        "tokens": 29,
+        "first_read_tokens": 29,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "CONTRIBUTING.md",
+        "tokens": 29,
+        "first_read_tokens": 29,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/LICENSE-MIT",
+        "tokens": 29,
+        "first_read_tokens": 29,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/README.md",
+        "tokens": 29,
+        "first_read_tokens": 29,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/format.rs",
+        "tokens": 29,
+        "first_read_tokens": 29,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/src/lib.rs",
+        "tokens": 29,
+        "first_read_tokens": 29,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "serde_core/build.rs",
+        "tokens": 28,
+        "first_read_tokens": 28,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "Cargo.toml",
+        "tokens": 27,
+        "first_read_tokens": 27,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "LICENSE-APACHE",
+        "tokens": 27,
+        "first_read_tokens": 27,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": ".gitignore",
+        "tokens": 26,
+        "first_read_tokens": 26,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      },
+      {
+        "path": "README.md",
+        "tokens": 26,
+        "first_read_tokens": 26,
+        "redundant_tokens": 0,
+        "tool": "Bash",
+        "tools": [
+          "Bash"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      }
+    ]
+  },
+  "oracle": {
+    "recommended_files": [
+      "serde_derive_internals/src/case.rs"
+    ],
+    "recommended_tokens": 33,
+    "eliminated_tokens": 5165,
+    "elimination_ratio": 0.9936514043863024,
+    "reduction_factor": 157.52,
+    "verdict": "PASS"
+  },
+  "verdict": "PASS"
+}

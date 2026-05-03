@@ -1,0 +1,25 @@
+{
+  "run_id": "ripgrep-feature-terabyte-size-suffix-cold",
+  "task": "ripgrep cold-start feature: next larger byte unit",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-feature-terabyte-size-suffix-cold/491ac634-ab18-436c-864e-11cd9d639d69.jsonl",
+  "rust_replay": {
+    "session_id": "a043ec3d-a21a-4ea3-a6cc-037cfd1c0fae",
+    "total_reads": 3,
+    "redundant_reads_prevented": 1,
+    "tokens_saved": 105,
+    "false_negatives": 0,
+    "actual_navigation_tokens": 1429,
+    "memo_navigation_tokens": 1324,
+    "reduction_ratio_vs_redundant": 0.07641921397379912
+  },
+  "oracle": {
+    "elimination_ratio": 0.9872905834777586,
+    "eliminated_tokens": 3418,
+    "redundant_read_tokens": 1374
+  },
+  "python_simulation": {
+    "saved_navigation_tokens": 69,
+    "navigation_reduction_ratio": 0.019907674552798616
+  },
+  "verdict": "FAIL"
+}

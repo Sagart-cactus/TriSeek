@@ -16,7 +16,8 @@ pub fn install(scope: Scope) -> Result<()> {
         Scope::Project => install_project(&binary_str)?,
         Scope::Local | Scope::User => install_via_cli(&binary_str, scope)?,
     };
-    install_hooks(&binary_str, scope)
+    install_hooks(&binary_str, scope)?;
+    install_command(scope)
 }
 
 pub fn uninstall(scope: Scope) -> Result<()> {
@@ -24,7 +25,8 @@ pub fn uninstall(scope: Scope) -> Result<()> {
         Scope::Project => uninstall_project()?,
         Scope::Local | Scope::User => uninstall_via_cli(scope)?,
     };
-    uninstall_hooks(scope)
+    uninstall_hooks(scope)?;
+    uninstall_command(scope)
 }
 
 fn install_project(binary: &str) -> Result<()> {
@@ -143,6 +145,30 @@ fn uninstall_hooks(scope: Scope) -> Result<()> {
             "triseek: no memo hooks found in {}",
             settings_path.display()
         ),
+    }
+    Ok(())
+}
+
+fn install_command(scope: Scope) -> Result<()> {
+    let path = shared::claude_triseek_command_path(scope)?;
+    shared::write_claude_triseek_command(&path)
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    println!(
+        "triseek: installed Claude command into {}. Use `/triseek handoff codex` or `/triseek resume <snapshot_id>`.",
+        path.display()
+    );
+    Ok(())
+}
+
+fn uninstall_command(scope: Scope) -> Result<()> {
+    let path = shared::claude_triseek_command_path(scope)?;
+    if shared::remove_triseek_owned_file(&path)? {
+        println!("triseek: removed Claude command from {}", path.display());
+    } else {
+        println!(
+            "triseek: no TriSeek-owned Claude command found at {}",
+            path.display()
+        );
     }
     Ok(())
 }

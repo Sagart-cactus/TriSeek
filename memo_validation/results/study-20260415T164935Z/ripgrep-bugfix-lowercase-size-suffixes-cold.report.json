@@ -1,0 +1,27 @@
+{
+  "run_id": "ripgrep-bugfix-lowercase-size-suffixes-cold",
+  "task": "ripgrep cold-start bugfix: lowercase unit spellings",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-bugfix-lowercase-size-suffixes-cold/5933dca0-4fee-4794-81aa-eca77979ee59.jsonl",
+  "rust_replay": {
+    "session_id": "417f5161-ed70-46c4-b8b6-5d822b35bda7",
+    "total_reads": 1,
+    "redundant_reads_prevented": 0,
+    "tokens_saved": 0,
+    "false_negatives": 0,
+    "actual_navigation_tokens": 1208,
+    "memo_navigation_tokens": 1208,
+    "memo_eligible_redundant_tokens": 0,
+    "reduction_ratio_vs_eligible": null,
+    "reduction_ratio_vs_oracle": 0.0
+  },
+  "oracle": {
+    "elimination_ratio": 0.9971830985915493,
+    "eliminated_tokens": 2478,
+    "redundant_read_tokens": 1037
+  },
+  "python_simulation": {
+    "saved_navigation_tokens": 0,
+    "navigation_reduction_ratio": 0.0
+  },
+  "verdict": "PASS"
+}

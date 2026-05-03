@@ -1,0 +1,34 @@
+{
+  "run_id": "serde-feature-train-case-rule",
+  "task": "serde feature: Train-Case rename rule",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-serde-feature-train-case-rule/72c5e326-adf4-48da-ae47-f745e0d6df03.jsonl",
+  "compact_at_turn": null,
+  "file_replay": {
+    "session_id": "cd9489e7-0364-4535-8bbe-6e67c6af885b",
+    "tokens_saved": 0,
+    "eligible_tokens": 0,
+    "false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_navigation_tokens": 4400,
+    "optimized_navigation_tokens": 4400
+  },
+  "search_replay": {
+    "session_id": "d10638a4-aab9-4fa5-ac26-5cff6c5a3bab",
+    "total_search_calls": 0,
+    "duplicate_search_calls": 0,
+    "search_reuse_hits": 0,
+    "search_tokens_saved": 0,
+    "search_eligible_tokens": 0,
+    "search_false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_search_tokens": 0,
+    "replay_search_tokens": 0
+  },
+  "combined": {
+    "actual_navigation_tokens": 4400,
+    "optimized_navigation_tokens": 4400,
+    "combined_eligible_tokens": 0,
+    "combined_tokens_saved": 0
+  },
+  "verdict": "PASS"
+}

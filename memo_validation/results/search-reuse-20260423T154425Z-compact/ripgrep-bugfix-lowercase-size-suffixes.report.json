@@ -1,0 +1,34 @@
+{
+  "run_id": "ripgrep-bugfix-lowercase-size-suffixes",
+  "task": "ripgrep bugfix: lowercase size suffixes",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-bugfix-lowercase-size-suffixes/07fb4d67-03b5-4d2d-bb1a-a7f9300d759f.jsonl",
+  "compact_at_turn": 6,
+  "file_replay": {
+    "session_id": "40eb729a-5e2f-4aaa-8f93-040941a1a710",
+    "tokens_saved": 0,
+    "eligible_tokens": 0,
+    "false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_navigation_tokens": 1208,
+    "optimized_navigation_tokens": 1208
+  },
+  "search_replay": {
+    "session_id": "5cae2be7-77bf-4a40-9355-b4c5fc0ff938",
+    "total_search_calls": 3,
+    "duplicate_search_calls": 0,
+    "search_reuse_hits": 0,
+    "search_tokens_saved": 0,
+    "search_eligible_tokens": 0,
+    "search_false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_search_tokens": 1157,
+    "replay_search_tokens": 422
+  },
+  "combined": {
+    "actual_navigation_tokens": 2365,
+    "optimized_navigation_tokens": 1630,
+    "combined_eligible_tokens": 0,
+    "combined_tokens_saved": 0
+  },
+  "verdict": "PASS"
+}

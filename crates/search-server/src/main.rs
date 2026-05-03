@@ -1,20 +1,31 @@
+mod git_state;
+mod hydrate;
 mod memo;
+mod session_state;
+mod snapshot;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use memo::MemoState;
 use search_core::{
-    DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonRootParams, DaemonRootStatus,
+    ActionKind, DAEMON_HOST, DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonRootParams, DaemonRootStatus,
     DaemonSearchParams, DaemonStatus, DaemonStatusParams, FrecencySelectParams, MemoCheckParams,
-    MemoEventKind, MemoObserveParams, MemoSessionParams, MemoStatusParams, RpcRequest, RpcResponse,
+    MemoEventKind, MemoObserveParams, MemoSessionParams, MemoStatusParams,
+    PortabilitySessionStatusParams, PortabilitySessionStatusResponse, RpcRequest, RpcResponse,
     SearchEngineKind, SearchHit, SearchKind, SearchResponse, SearchReuseCheckParams,
-    SearchReuseCheckResponse, SearchReuseReason, plan_query, route_query,
+    SearchReuseCheckResponse, SearchReuseReason, SessionCloseParams, SessionListParams,
+    SessionListResponse, SessionOpenParams, SessionOpenResponse, SessionRecordActionParams,
+    SessionRecordActionResponse, SessionResumePrepareParams, SessionSnapshotCreateParams,
+    SessionSnapshotCreateResponse, SessionSnapshotDiffParams, SessionSnapshotDiffResponse,
+    SessionSnapshotGetParams, SessionSnapshotGetResponse, SessionSnapshotListParams,
+    SessionSnapshotListResponse, plan_query, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
 use search_index::{
     BuildConfig, SearchEngine, WatcherHandle, daemon_dir, default_index_dir, index_exists,
     query_matches_path_filters, start_watcher,
 };
+use session_state::SessionStore;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
@@ -50,6 +61,7 @@ struct RepoService {
     context_epoch: AtomicU64,
     search_change_journal: Arc<Mutex<VecDeque<SearchChangeBatch>>>,
     memo: Arc<MemoState>,
+    session_store: Arc<SessionStore>,
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +73,11 @@ struct SearchChangeBatch {
 const SEARCH_CHANGE_JOURNAL_LIMIT: usize = 256;
 
 impl RepoService {
-    fn new(repo_root: PathBuf, memo: Arc<MemoState>) -> Result<Self> {
+    fn new(
+        repo_root: PathBuf,
+        memo: Arc<MemoState>,
+        session_store: Arc<SessionStore>,
+    ) -> Result<Self> {
         let index_dir = default_index_dir(&repo_root);
         let engine = if index_exists(&index_dir) {
             Some(SearchEngine::open(&index_dir).context("failed to open index")?)
@@ -78,6 +94,7 @@ impl RepoService {
             context_epoch: AtomicU64::new(0),
             search_change_journal: Arc::new(Mutex::new(VecDeque::new())),
             memo,
+            session_store,
         };
         service.start_watcher_if_needed()?;
         Ok(service)
@@ -127,6 +144,7 @@ impl RepoService {
         if let Ok(store) = self.frecency.lock() {
             let _ = store.flush();
         }
+        let _ = self.session_store.flush_to_disk();
     }
 
     fn current_generation(&self) -> u64 {
@@ -299,21 +317,63 @@ impl RepoService {
             changed_paths: Vec::new(),
         }
     }
+
+    fn create_snapshot(
+        &self,
+        params: &SessionSnapshotCreateParams,
+        daemon_dir: &Path,
+    ) -> Result<SessionSnapshotCreateResponse> {
+        let frecency = self.frecency.lock().unwrap();
+        let manifest = snapshot::create_snapshot(
+            &self.session_store,
+            &frecency,
+            &self.repo_root,
+            daemon_dir,
+            self.current_generation(),
+            self.context_epoch.load(Ordering::SeqCst),
+            params,
+        )?;
+        Ok(SessionSnapshotCreateResponse {
+            snapshot_id: manifest.snapshot_id.clone(),
+            snapshot_dir: snapshot::snapshot_dir(daemon_dir, &manifest.snapshot_id)
+                .display()
+                .to_string(),
+            manifest,
+        })
+    }
+
+    fn resume_prepare(
+        &self,
+        params: &SessionResumePrepareParams,
+        daemon_dir: &Path,
+    ) -> Result<search_core::SessionResumePrepareResponse> {
+        let snapshot = snapshot::read_snapshot(daemon_dir, &params.snapshot_id)?;
+        let mut frecency = self.frecency.lock().unwrap();
+        hydrate::prepare_resume(
+            &snapshot,
+            &self.memo,
+            &mut frecency,
+            &self.repo_root,
+            params.budget_tokens,
+        )
+    }
 }
 
 struct ServerState {
     daemon_dir: PathBuf,
     services: Mutex<HashMap<String, Arc<RepoService>>>,
     memo: Arc<MemoState>,
+    session_store: Arc<SessionStore>,
 }
 
 impl ServerState {
-    fn new(daemon_dir: PathBuf) -> Self {
-        Self {
+    fn new(daemon_dir: PathBuf) -> Result<Self> {
+        Ok(Self {
+            session_store: Arc::new(SessionStore::load_from_disk(&daemon_dir)?),
             daemon_dir,
             services: Mutex::new(HashMap::new()),
             memo: Arc::new(MemoState::new(Duration::from_secs(600))),
-        }
+        })
     }
 
     fn preload_root(&self, root: PathBuf) -> Result<()> {
@@ -331,6 +391,7 @@ impl ServerState {
         let service = Arc::new(RepoService::new(
             root.to_path_buf(),
             Arc::clone(&self.memo),
+            Arc::clone(&self.session_store),
         )?);
         let mut services = self.services.lock().unwrap();
         Ok(services
@@ -388,7 +449,7 @@ fn main() -> Result<()> {
     std::fs::write(&port_file, listen_port.to_string())
         .context("failed to write daemon port file")?;
 
-    let state = Arc::new(ServerState::new(daemon_root.clone()));
+    let state = Arc::new(ServerState::new(daemon_root.clone())?);
     if let Some(root) = args.root.or(args.repo) {
         state.preload_root(canonicalize_target_root(&root)?)?;
     }
@@ -416,7 +477,7 @@ fn main() -> Result<()> {
             break;
         }
 
-        if last_flush.elapsed() >= Duration::from_secs(30) {
+        if last_flush.elapsed() >= Duration::from_secs(5) {
             state.flush_all();
             last_flush = Instant::now();
         }
@@ -494,6 +555,7 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
             if let Err(error) = service.ensure_ready() {
                 return RpcResponse::error(id, -32000, error.to_string());
             }
+            let session_id = params.session_id.clone();
             let query = params.request;
             let guard = service.engine.read().unwrap();
             let Some(engine) = guard.as_ref() else {
@@ -548,6 +610,28 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                         summary: execution.summary,
                         metrics: execution.metrics,
                     };
+                    if let Some(session_id) = session_id {
+                        let result_paths = response
+                            .hits
+                            .iter()
+                            .take(20)
+                            .map(|hit| match hit {
+                                SearchHit::Content { path, .. } | SearchHit::Path { path } => {
+                                    path.clone()
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        let _ = service.session_store.record_action(
+                            &session_id,
+                            ActionKind::Search,
+                            serde_json::json!({
+                                "method": "search",
+                                "query": query.pattern,
+                                "kind": format!("{:?}", query.kind).to_ascii_lowercase(),
+                                "result_paths": result_paths,
+                            }),
+                        );
+                    }
                     RpcResponse::ok(id, response)
                 }
                 Err(error) => RpcResponse::error(id, -32000, error.to_string()),
@@ -709,7 +793,8 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                     return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
                 }
             };
-            RpcResponse::ok(id, state.memo.check(&params))
+            let response = state.memo.check(&params);
+            RpcResponse::ok(id, response)
         }
         "search_reuse_check" => {
             let params: SearchReuseCheckParams = match serde_json::from_value(request.params) {
@@ -726,6 +811,187 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                 return RpcResponse::error(id, -32000, error.to_string());
             }
             RpcResponse::ok(id, service.check_search_reuse(&params))
+        }
+        "session_open" => {
+            let params: SessionOpenParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            let root = match canonicalize_target_root(Path::new(&params.target_root)) {
+                Ok(root) => root,
+                Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+            };
+            match state.session_store.open_session(
+                params.session_id,
+                params.goal,
+                root.display().to_string(),
+            ) {
+                Ok(session) => RpcResponse::ok(id, SessionOpenResponse { session }),
+                Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+            }
+        }
+        "session_list" => {
+            let params: SessionListParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            let root = match canonicalize_target_root(Path::new(&params.target_root)) {
+                Ok(root) => root,
+                Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+            };
+            let root_string = root.display().to_string();
+            RpcResponse::ok(
+                id,
+                SessionListResponse {
+                    sessions: state
+                        .session_store
+                        .list_sessions(Some(root_string.as_str())),
+                },
+            )
+        }
+        "session_status" => {
+            let params: PortabilitySessionStatusParams =
+                match serde_json::from_value(request.params) {
+                    Ok(params) => params,
+                    Err(error) => {
+                        return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                    }
+                };
+            match state.session_store.session(&params.session_id) {
+                Ok(session) => RpcResponse::ok(
+                    id,
+                    PortabilitySessionStatusResponse {
+                        action_log_size: state
+                            .session_store
+                            .entries_for_session(&params.session_id)
+                            .len(),
+                        session,
+                    },
+                ),
+                Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+            }
+        }
+        "session_close" => {
+            let params: SessionCloseParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            match state
+                .session_store
+                .close_session(&params.session_id, params.status)
+            {
+                Ok(session) => RpcResponse::ok(id, search_core::SessionCloseResponse { session }),
+                Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+            }
+        }
+        "session_record_action" => {
+            let params: SessionRecordActionParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            let service = match service_for_target_root(state, &params.target_root) {
+                Ok(service) => service,
+                Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+            };
+            match service.session_store.record_action(
+                &params.session_id,
+                params.kind,
+                params.payload,
+            ) {
+                Ok(entry) => RpcResponse::ok(
+                    id,
+                    SessionRecordActionResponse {
+                        entry_id: entry.entry_id,
+                    },
+                ),
+                Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+            }
+        }
+        "session_snapshot_create" => {
+            let params: SessionSnapshotCreateParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            let service = match service_for_target_root(state, &params.target_root) {
+                Ok(service) => service,
+                Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+            };
+            match service.create_snapshot(&params, &state.daemon_dir) {
+                Ok(response) => RpcResponse::ok(id, response),
+                Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+            }
+        }
+        "session_snapshot_list" => {
+            let params: SessionSnapshotListParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            match snapshot::list_snapshots(&state.daemon_dir, params.session_id.as_deref()) {
+                Ok(snapshots) => RpcResponse::ok(id, SessionSnapshotListResponse { snapshots }),
+                Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+            }
+        }
+        "session_snapshot_get" => {
+            let params: SessionSnapshotGetParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            match snapshot::read_snapshot(&state.daemon_dir, &params.snapshot_id) {
+                Ok(snapshot) => RpcResponse::ok(id, SessionSnapshotGetResponse { snapshot }),
+                Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+            }
+        }
+        "session_snapshot_diff" => {
+            let params: SessionSnapshotDiffParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            let a = match snapshot::read_snapshot(&state.daemon_dir, &params.snapshot_a) {
+                Ok(snapshot) => snapshot,
+                Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+            };
+            let b = match snapshot::read_snapshot(&state.daemon_dir, &params.snapshot_b) {
+                Ok(snapshot) => snapshot,
+                Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+            };
+            RpcResponse::ok(
+                id,
+                SessionSnapshotDiffResponse {
+                    diff: snapshot::diff_snapshots(&a, &b),
+                },
+            )
+        }
+        "session_resume_prepare" => {
+            let params: SessionResumePrepareParams = match serde_json::from_value(request.params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
+                }
+            };
+            let service = match service_for_target_root(state, &params.target_root) {
+                Ok(service) => service,
+                Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
+            };
+            match service.resume_prepare(&params, &state.daemon_dir) {
+                Ok(response) => RpcResponse::ok(id, response),
+                Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+            }
         }
         "shutdown" => {
             SHUTDOWN.store(true, Ordering::SeqCst);
@@ -797,6 +1063,9 @@ mod tests {
             context_epoch: AtomicU64::new(context_epoch),
             search_change_journal: Arc::new(Mutex::new(VecDeque::new())),
             memo: Arc::new(MemoState::new(Duration::from_secs(600))),
+            session_store: Arc::new(
+                SessionStore::load_from_disk(tmp.path()).expect("session store"),
+            ),
         };
         (tmp, service)
     }
@@ -907,7 +1176,7 @@ mod tests {
         let repo_root = tmp.path().join("repo");
         std::fs::create_dir_all(&repo_root).expect("create repo root");
         let repo_root = repo_root.canonicalize().expect("canonicalize repo root");
-        let state = ServerState::new(tmp.path().join("daemon"));
+        let state = ServerState::new(tmp.path().join("daemon")).expect("server state");
         let service = state
             .service_for_root(&repo_root)
             .expect("create repo service");

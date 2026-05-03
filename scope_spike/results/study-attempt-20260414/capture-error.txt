@@ -1,0 +1,1 @@
+The local `claude` CLI reported a 401 authentication failure. Re-authenticate Claude Code before attempting fresh study captures.

@@ -1,0 +1,25 @@
+{
+  "run_id": "ripgrep-bugfix-lowercase-size-suffixes",
+  "task": "ripgrep bugfix: lowercase size suffixes",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-bugfix-lowercase-size-suffixes/07fb4d67-03b5-4d2d-bb1a-a7f9300d759f.jsonl",
+  "rust_replay": {
+    "session_id": "ec428eef-e168-4339-8445-62e7b5bef0b9",
+    "total_reads": 1,
+    "redundant_reads_prevented": 0,
+    "tokens_saved": 0,
+    "false_negatives": 0,
+    "actual_navigation_tokens": 1208,
+    "memo_navigation_tokens": 1208,
+    "reduction_ratio_vs_redundant": 0.0
+  },
+  "oracle": {
+    "elimination_ratio": 0.9968152866242038,
+    "eliminated_tokens": 2191,
+    "redundant_read_tokens": 1037
+  },
+  "python_simulation": {
+    "saved_navigation_tokens": 0,
+    "navigation_reduction_ratio": 0.0
+  },
+  "verdict": "FAIL"
+}

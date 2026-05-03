@@ -1,0 +1,105 @@
+{
+  "label": "serde-feature-train-case-rule-cold",
+  "task": "serde cold-start feature: dashed title-case rename style",
+  "repository": "/Users/trivedi/Documents/Projects/TriSeek/scope_spike/workdirs/serde-feature-train-case-rule-cold",
+  "tokenizer": {
+    "name": "cl100k_base",
+    "exact": true
+  },
+  "actual": {
+    "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-serde-feature-train-case-rule-cold/753c51d6-aa98-4a5f-8159-8938d9536668.jsonl",
+    "session_id": "753c51d6-aa98-4a5f-8159-8938d9536668",
+    "repo_root": "/Users/trivedi/Documents/Projects/TriSeek/scope_spike/workdirs/serde-feature-train-case-rule-cold",
+    "assistant_input_tokens": 56,
+    "assistant_output_tokens": 24164,
+    "reasoning_tokens": 24164,
+    "total_tokens": 28834,
+    "navigation_tokens": 4670,
+    "navigation_overhead_tokens": 0,
+    "wasted_read_tokens": 408,
+    "redundant_read_tokens": 1699,
+    "useful_read_tokens": 4262,
+    "files_read": 4,
+    "files_useful": 3,
+    "files_wasted": 1,
+    "edited_files": [
+      "serde_derive/src/internals/case.rs",
+      "serde_derive_internals/src/case.rs",
+      "test_suite/tests/test_macros.rs"
+    ],
+    "assistant_messages": 50,
+    "tool_counts": {
+      "Agent": 1,
+      "Read": 3,
+      "ToolSearch": 1,
+      "TodoWrite": 6,
+      "Edit": 12,
+      "Bash": 4,
+      "Grep": 1
+    },
+    "file_details": [
+      {
+        "path": "serde_derive/src/internals/case.rs",
+        "tokens": 1869,
+        "first_read_tokens": 170,
+        "redundant_tokens": 1699,
+        "tool": "Grep",
+        "tools": [
+          "Grep",
+          "Read"
+        ],
+        "was_useful": true,
+        "read_count": 2
+      },
+      {
+        "path": "serde_derive_internals/src/case.rs",
+        "tokens": 1699,
+        "first_read_tokens": 1699,
+        "redundant_tokens": 0,
+        "tool": "Read",
+        "tools": [
+          "Read"
+        ],
+        "was_useful": true,
+        "read_count": 1
+      },
+      {
+        "path": "test_suite/tests/test_macros.rs",
+        "tokens": 694,
+        "first_read_tokens": 694,
+        "redundant_tokens": 0,
+        "tool": "Read",
+        "tools": [
+          "Read"
+        ],
+        "was_useful": true,
+        "read_count": 1
+      },
+      {
+        "path": "serde_derive/src/internals/attr.rs",
+        "tokens": 408,
+        "first_read_tokens": 408,
+        "redundant_tokens": 0,
+        "tool": "Grep",
+        "tools": [
+          "Grep"
+        ],
+        "was_useful": false,
+        "read_count": 1
+      }
+    ]
+  },
+  "oracle": {
+    "recommended_files": [
+      "serde_derive/src/internals/case.rs",
+      "serde_derive_internals/src/case.rs",
+      "test_suite/tests/test_macros.rs"
+    ],
+    "recommended_tokens": 2563,
+    "eliminated_tokens": 2107,
+    "elimination_ratio": 0.4511777301927195,
+    "reduction_factor": 1.82,
+    "verdict": "FAIL"
+  },
+  "verdict": "FAIL"
+}
