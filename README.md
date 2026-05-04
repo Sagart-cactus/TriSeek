@@ -52,7 +52,7 @@ Installs `triseek` and `triseek-server` into `~/.local/bin`. Prefers prebuilt Gi
 Pin a version or install elsewhere:
 
 ```sh
-curl -fsSL .../install.sh | sh -s -- --version v0.4.1
+curl -fsSL .../install.sh | sh -s -- --version v0.4.2
 curl -fsSL .../install.sh | sh -s -- --install-dir /usr/local/bin
 ```
 

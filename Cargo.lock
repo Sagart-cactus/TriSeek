@@ -761,7 +761,7 @@ dependencies = [
 
 [[package]]
 name = "search-bench"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -780,7 +780,7 @@ dependencies = [
 
 [[package]]
 name = "search-core"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "regex-syntax",
  "serde",
@@ -790,7 +790,7 @@ dependencies = [
 
 [[package]]
 name = "search-frecency"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "search-core",
  "serde",
@@ -800,7 +800,7 @@ dependencies = [
 
 [[package]]
 name = "search-index"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "bincode",
@@ -823,7 +823,7 @@ dependencies = [
 
 [[package]]
 name = "search-server"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1083,7 +1083,7 @@ checksum = "d282ade6016312faf3e41e57ebbba0c073e4056dab1232ab1cb624199648f8ed"
 
 [[package]]
 name = "triseek"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "clap",
