@@ -1,9 +1,0 @@
-{
-  "avg_elimination_ratio": 0.8904101552507098,
-  "median_elimination_ratio": 0.9749365609978669,
-  "min_elimination_ratio": 0.4511777301927195,
-  "max_elimination_ratio": 0.9971830985915493,
-  "total_runs": 6,
-  "pass_count": 5,
-  "verdict": "PASS"
-}
