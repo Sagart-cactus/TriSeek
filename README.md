@@ -33,6 +33,7 @@ That's the whole onboarding. Search works immediately. The index and daemon warm
 
 - **Indexed where it matters, raw where it doesn't.** Trigram index for repeated queries; ripgrep fallback for weak regex and small repos. You never wait for an index to build before the first search.
 - **Built for AI agents from day one.** First-class MCP server (8 tools), installs into Claude Code / Codex / OpenCode / Pi with one command, and exposes a session-aware memo layer that prevents agents from re-reading files they just saw.
+- **Context Handoff between harnesses.** Snapshot a session and resume it in another harness — goal, files, searches, and git state preserved. Explicit Claude ↔ Codex switching.
 - **State stays out of your repo.** Indexes, daemon, and session data live under `~/.triseek`, not in repo-local dotfiles. One global daemon serves many roots.
 - **Honest about what ran.** Every MCP response tells you which backend answered (`triseek_indexed`, `triseek_direct_scan`, `ripgrep_fallback`) and whether a repeated indexed search reused earlier context (`cache: hit`) or executed again (`miss` / `bypass`).
 
@@ -91,6 +92,10 @@ triseek install claude-code     # or codex, opencode, pi
 
 # check everything is wired up
 triseek doctor
+
+# hand off an active session after doctor passes
+triseek handoff codex
+triseek resume <snapshot_id>
 ```
 
 TriSeek writes nothing into the searched repo. Default state lives at `~/.triseek/indexes/<root-key>/` and `~/.triseek/daemon/`.
@@ -201,6 +206,8 @@ Verify any install with `triseek doctor`. Run the server manually (for debugging
 | `memo_session` | Show session state, tracked files, and token savings |
 | `memo_status` | Batch freshness check on a set of files |
 | `memo_check` | Single-file skip-or-reread decision |
+| `session_handoff` | Create a portable snapshot for switching harnesses |
+| `session_resume` | Hydrate a portable snapshot in the target harness |
 
 Full schemas and error codes: [MCP reference](https://sagart-cactus.github.io/TriSeek/mcp.html).
 
@@ -278,6 +285,7 @@ Local index and session data live under `~/.triseek`; remove that directory if y
 - [Installation guide](https://sagart-cactus.github.io/TriSeek/install.html)
 - [MCP server reference](https://sagart-cactus.github.io/TriSeek/mcp.html)
 - [Memo & search reuse](https://sagart-cactus.github.io/TriSeek/memo.html)
+- [Context Handoff](https://sagart-cactus.github.io/TriSeek/context-handoff.html)
 - [How TriSeek works](https://sagart-cactus.github.io/TriSeek/triseek-explained.html)
 - [Architecture](https://sagart-cactus.github.io/TriSeek/triseek-architecture.html)
 

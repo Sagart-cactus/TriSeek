@@ -76,6 +76,27 @@ triseek help
 triseek doctor
 ```
 
+Run `triseek doctor` before any context handoff workflow; it checks that the
+daemon and MCP server are reachable.
+
+## Context Handoff Commands
+
+Use Context Handoff to snapshot a session and resume it in another harness:
+
+```sh
+triseek handoff <target>
+triseek resume <snapshot_id>
+```
+
+Harness-specific forms:
+
+| Harness | Initiate handoff | Resume |
+|---|---|---|
+| Claude Code | `/triseek handoff codex` | `/triseek resume <snapshot_id>` |
+| Codex | `$triseek handoff claude` | `$triseek resume <snapshot_id>` |
+
+See the [Context Handoff guide](context-handoff.html) for the full workflow.
+
 ## Release-Style Validation
 
 TriSeek includes a Docker real harness for testing release binaries without

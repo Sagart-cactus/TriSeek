@@ -372,6 +372,48 @@ Output (example):
 - `reread_with_diff`
 - `reread`
 
+### `session_handoff`
+
+Create a portable snapshot for transferring the current session to another
+harness, then mark the current session resolved.
+
+Input:
+
+```json
+{
+  "session_id": "session-123",
+  "target": "codex",
+  "source_harness": "claude_code",
+  "pinned_snippet_paths": [
+    {
+      "path": "src/auth/router.rs",
+      "line_start": 40,
+      "line_end": 80
+    }
+  ]
+}
+```
+
+`target` is the destination harness for the handoff. Use `codex` when
+initiating from Claude Code and `claude` when initiating from Codex.
+
+### `session_resume`
+
+Hydrate daemon state from a portable snapshot and return a bounded Markdown
+payload for the new harness.
+
+Input:
+
+```json
+{
+  "snapshot_id": "snap_1777803396_demo-handoff-real",
+  "budget_tokens": 8000
+}
+```
+
+`snapshot_id` is required. `budget_tokens` is optional and caps the resume
+payload size.
+
 ## Memo modes
 
 - Claude Code, OpenCode, and Pi use passive Memo observation via hooks or generated plugins/extensions.

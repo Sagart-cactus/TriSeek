@@ -61,3 +61,50 @@ rediscovering the repo from scratch.
 - **`harness_display` fallback**: The catch-all `_ => "target harness"` in
   `harness_display` is a poor display string if an unknown harness leaks into the
   rendered block.  Consider returning the raw value unchanged as a safer default.
+
+---
+
+## Phase 2 — Codex Markdown/docs checklist
+
+*Left for Codex by Claude (Phase 1 completed 2026-05-03).*
+*Phase 1 updated the HTML docs site: `docs/context-handoff.html` created, nav updated in all eight HTML pages, card + feature item added to `docs/index.html`.*
+
+The following Markdown docs should be updated by Codex to match the HTML documentation written in Phase 1:
+
+### Files to create or update
+
+- [x] **`docs/mcp.md`** — Add a `session_handoff` and `session_resume` tool entry in the MCP tool reference table. Match the schema style of existing tool entries (`session_open`, `session_snapshot`, etc.). Include the `target` parameter for `session_handoff` and the `snapshot_id` parameter for `session_resume`.
+
+- [x] **`docs/install.md`** (if it documents CLI commands) — Add a brief mention of `triseek handoff <target>` and `triseek resume <snapshot_id>` in the CLI command listing. Two-line entries are sufficient; link to `context-handoff.html`.
+
+- [x] **`README.md`** (root) — Add Context Handoff to the feature list or capability summary. Use the same one-sentence description used in `docs/index.html`: "Snapshot a session and resume it in another harness — goal, files, searches, and git state preserved. Explicit Claude ↔ Codex switching."
+
+### Command behavior to preserve (exact wording)
+
+These are the exact command forms documented in the HTML. Any Markdown docs must match them precisely:
+
+| Harness | Initiate handoff | Resume |
+|---|---|---|
+| Claude Code | `/triseek handoff codex` | `/triseek resume <snapshot_id>` |
+| Codex | `$triseek handoff claude` | `$triseek resume <snapshot_id>` |
+
+- The `From:` / `To:` labels in the printed handoff block use `harness_display()` — display strings are `Claude` and `Codex`, not `claude_code` / `codex`.
+- The `In {target}, paste:` line always shows the target-specific command (slash vs dollar prefix).
+- `triseek doctor` is the pre-flight check; it should be mentioned before any handoff walkthrough.
+
+### What NOT to change
+
+- Do not alter the snapshot ID format (`snap_<timestamp>_<session_id>`) — it is an implementation detail, not a user-visible API.
+- Do not add a `--json` flag to `triseek handoff` — the follow-up item in this file already tracks that as a future consideration.
+- Do not document `source_model` — it is always `null` until the follow-up item is implemented.
+
+### Verification
+
+After updating the Markdown docs, run a search to confirm the command strings appear consistently:
+
+```
+$triseek search_content "triseek handoff"
+$triseek search_content "triseek resume"
+```
+
+Both should surface exactly the files you just updated — not stale docs referencing old command names.
