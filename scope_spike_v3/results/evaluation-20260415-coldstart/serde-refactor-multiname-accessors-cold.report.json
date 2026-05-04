@@ -1,0 +1,350 @@
+{
+  "run_id": "serde-refactor-multiname-accessors-cold",
+  "task": "serde cold-start refactor: clearer serializer/deserializer name accessors",
+  "prompt": "Inside `serde_derive`, an internal naming helper exposes separate accessor methods for serializer-facing and deserializer-facing names, but the current method names read awkwardly. Rename those methods to clearer query-style names everywhere they are used, keep behavior unchanged, and verify the relevant derive test target before finishing.",
+  "repo_root": "/Users/trivedi/Documents/Projects/Triseek-bench/repos/serde-rs_serde",
+  "ground_truth_files": [
+    "serde_derive/src/de.rs",
+    "serde_derive/src/de/enum_adjacently.rs",
+    "serde_derive/src/de/enum_externally.rs",
+    "serde_derive/src/de/struct_.rs",
+    "serde_derive/src/de/tuple.rs",
+    "serde_derive/src/de/unit.rs",
+    "serde_derive/src/internals/check.rs",
+    "serde_derive/src/internals/name.rs",
+    "serde_derive/src/ser.rs"
+  ],
+  "actual_navigation_tokens": 7436,
+  "lexical": {
+    "metrics": {
+      "recall_at_5": 0.2222222222222222,
+      "recall_at_10": 0.3333333333333333,
+      "precision_at_5": 0.4,
+      "precision_at_10": 0.3,
+      "first_hit_rank": 4,
+      "mrr": 0.25,
+      "full_coverage_at_5": false,
+      "full_coverage_at_10": false
+    },
+    "top_files": [
+      {
+        "path": "serde_derive/README.md",
+        "score": 1.0,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "# Serde &emsp; [![Build Status]][actions] [![Latest Version]][crates.io] [![serde msrv]][Rust 1.56] [![serde_derive msrv]][Rust 1.71] | # The core APIs, including the Serialize and Deserialize traits. Always | # required when using Serde. T",
+        "feature_scores": {
+          "lexical": 1.0
+        }
+      },
+      {
+        "path": "test_suite/tests/test_borrow.rs",
+        "score": 0.9673876020845853,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "// We use lots of declarations inside function bodies to avoid conflicts, | // but they aren't used. We just want to make sure they compile. | fn test_borrowed_str() { | fn test_borrowed_str_from_string() {",
+        "feature_scores": {
+          "lexical": 0.9673876020845853
+        }
+      },
+      {
+        "path": "serde_core/src/de/mod.rs",
+        "score": 0.9541494418775702,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "//! Generic data structure deserialization framework. | //! | //! The two most important traits in this module are [`Deserialize`] and | //! [`Deserializer`].",
+        "feature_scores": {
+          "lexical": 0.9541494418775702
+        }
+      },
+      {
+        "path": "serde_derive/src/internals/check.rs",
+        "score": 0.8947274102505247,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "// Cross-cutting checks that require looking at more than a single attrs object. | // Simpler checks should happen when parsing and building the attrs. | pub fn check(cx: &Ctxt, cont: &mut Container, derive: Derive) { | // If some field of ",
+        "feature_scores": {
+          "lexical": 0.8947274102505247
+        }
+      },
+      {
+        "path": "serde_derive/src/ser.rs",
+        "score": 0.8794266783792722,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "pub fn expand_derive_serialize(input: &mut syn::DeriveInput) -> syn::Result<TokenStream> { | fn serialize<__S>(&self, __serializer: __S) -> _serde::#private::Result<__S::Ok, __S::Error> | fn precondition(cx: &Ctxt, cont: &Container) { | str",
+        "feature_scores": {
+          "lexical": 0.8794266783792722
+        }
+      },
+      {
+        "path": "test_suite/tests/test_serde_path.rs",
+        "score": 0.8550872975519418,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "fn test_gen_custom_serde() { | struct Foo; | // Would be overlapping if serde::Serialize were implemented | // Would be overlapping if serde::Deserialize were implemented",
+        "feature_scores": {
+          "lexical": 0.8550872975519418
+        }
+      },
+      {
+        "path": "test_suite/tests/test_gen.rs",
+        "score": 0.8509160037399823,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "// These just test that serde_derive is able to produce code that compiles | // successfully when there are a variety of generics and non-(de)serializable | // types involved. | // Clippy bug: https://github.com/rust-lang/rust-clippy/issues",
+        "feature_scores": {
+          "lexical": 0.8509160037399823
+        }
+      },
+      {
+        "path": "serde/src/lib.rs",
+        "score": 0.8379501339703008,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "//! # Serde | //! | //! Serde is a framework for ***ser***ializing and ***de***serializing Rust data | //! structures efficiently and generically.",
+        "feature_scores": {
+          "lexical": 0.8379501339703008
+        }
+      },
+      {
+        "path": "serde_core/src/macros.rs",
+        "score": 0.8291977726152315,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "// Super explicit first paragraph because this shows up at the top level and | // trips up people who are just looking for basic Serialize / Deserialize | // documentation. | /// Helper macro when implementing the `Deserializer` part of a n",
+        "feature_scores": {
+          "lexical": 0.8291977726152315
+        }
+      },
+      {
+        "path": "serde_derive/src/de.rs",
+        "score": 0.8174777670812828,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "pub fn expand_derive_deserialize(input: &mut syn::DeriveInput) -> syn::Result<TokenStream> { | fn deserialize<__D>(__deserializer: __D) -> _serde::#private::Result<Self, __D::Error> | fn precondition(cx: &Ctxt, cont: &Container) { | fn prec",
+        "feature_scores": {
+          "lexical": 0.8174777670812828
+        }
+      }
+    ],
+    "top5_read_budget": 36058,
+    "top10_read_budget": 55310
+  },
+  "scope": {
+    "metrics": {
+      "recall_at_5": 0.1111111111111111,
+      "recall_at_10": 0.2222222222222222,
+      "precision_at_5": 0.2,
+      "precision_at_10": 0.2,
+      "first_hit_rank": 5,
+      "mrr": 0.2,
+      "full_coverage_at_5": false,
+      "full_coverage_at_10": false
+    },
+    "top_files": [
+      {
+        "path": "serde/README.md",
+        "score": 0.7751198754602756,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal",
+          "sibling-file signal"
+        ],
+        "summary": "# Serde &emsp; [![Build Status]][actions] [![Latest Version]][crates.io] [![serde msrv]][Rust 1.56] [![serde_derive msrv]][Rust 1.71] | # The core APIs, including the Serialize and Deserialize traits. Always | # required when using Serde. T",
+        "feature_scores": {
+          "lexical": 0.7885594742863264,
+          "graph": 0.33009286716252334,
+          "cochange": 1.0,
+          "mirror": 1.0,
+          "lexical_raw": 21.32607660524917
+        }
+      },
+      {
+        "path": "serde_core/src/de/mod.rs",
+        "score": 0.7420194454621747,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "//! Generic data structure deserialization framework. | //! | //! The two most important traits in this module are [`Deserialize`] and | //! [`Deserializer`].",
+        "feature_scores": {
+          "lexical": 0.9541494418775702,
+          "graph": 0.5785028347795917,
+          "cochange": 0.8682049328617277,
+          "mirror": 0.0,
+          "lexical_raw": 25.804349264527808
+        }
+      },
+      {
+        "path": "serde_derive/README.md",
+        "score": 0.7274287469415047,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "# Serde &emsp; [![Build Status]][actions] [![Latest Version]][crates.io] [![serde msrv]][Rust 1.56] [![serde_derive msrv]][Rust 1.71] | # The core APIs, including the Serialize and Deserialize traits. Always | # required when using Serde. T",
+        "feature_scores": {
+          "lexical": 1.0,
+          "graph": 0.2748500941952822,
+          "cochange": 0.8618716719270655,
+          "mirror": 0.0,
+          "lexical_raw": 27.044347700660126
+        }
+      },
+      {
+        "path": "test_suite/tests/test_borrow.rs",
+        "score": 0.7249251293551489,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "// We use lots of declarations inside function bodies to avoid conflicts, | // but they aren't used. We just want to make sure they compile. | fn test_borrowed_str() { | fn test_borrowed_str_from_string() {",
+        "feature_scores": {
+          "lexical": 0.9673876020845853,
+          "graph": 0.39881933306185946,
+          "cochange": 0.866376367925571,
+          "mirror": 0.0,
+          "lexical_raw": 26.162366672083365
+        }
+      },
+      {
+        "path": "serde_derive/src/de.rs",
+        "score": 0.7066529212009572,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "pub fn expand_derive_deserialize(input: &mut syn::DeriveInput) -> syn::Result<TokenStream> { | fn deserialize<__D>(__deserializer: __D) -> _serde::#private::Result<Self, __D::Error> | fn precondition(cx: &Ctxt, cont: &Container) { | fn prec",
+        "feature_scores": {
+          "lexical": 0.8174777670812828,
+          "graph": 0.8558336115040132,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 22.108152970505465
+        }
+      },
+      {
+        "path": "README.md",
+        "score": 0.6933093980229283,
+        "reasons": [
+          "exact symbol match",
+          "import-neighbor signal",
+          "git co-change signal",
+          "sibling-file signal"
+        ],
+        "summary": "# Serde &emsp; [![Build Status]][actions] [![Latest Version]][crates.io] [![serde msrv]][Rust 1.56] [![serde_derive msrv]][Rust 1.71] | # The core APIs, including the Serialize and Deserialize traits. Always | # required when using Serde. T",
+        "feature_scores": {
+          "lexical": 0.6566070913228631,
+          "graph": 0.33009286716252334,
+          "cochange": 1.0,
+          "mirror": 1.0,
+          "lexical_raw": 17.757510480454606
+        }
+      },
+      {
+        "path": "serde_derive/src/ser.rs",
+        "score": 0.6892728775361355,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "pub fn expand_derive_serialize(input: &mut syn::DeriveInput) -> syn::Result<TokenStream> { | fn serialize<__S>(&self, __serializer: __S) -> _serde::#private::Result<__S::Ok, __S::Error> | fn precondition(cx: &Ctxt, cont: &Container) { | str",
+        "feature_scores": {
+          "lexical": 0.8794266783792722,
+          "graph": 0.5267588277197702,
+          "cochange": 0.8785262632527367,
+          "mirror": 0.0,
+          "lexical_raw": 23.78352086732564
+        }
+      },
+      {
+        "path": "test_suite/tests/test_serde_path.rs",
+        "score": 0.684641341776329,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "fn test_gen_custom_serde() { | struct Foo; | // Would be overlapping if serde::Serialize were implemented | // Would be overlapping if serde::Deserialize were implemented",
+        "feature_scores": {
+          "lexical": 0.8550872975519418,
+          "graph": 0.5995439971107526,
+          "cochange": 0.8818882212327463,
+          "mirror": 0.0,
+          "lexical_raw": 23.125278189412537
+        }
+      },
+      {
+        "path": "test_suite/tests/test_gen.rs",
+        "score": 0.6598943190572095,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "// These just test that serde_derive is able to produce code that compiles | // successfully when there are a variety of generics and non-(de)serializable | // types involved. | // Clippy bug: https://github.com/rust-lang/rust-clippy/issues",
+        "feature_scores": {
+          "lexical": 0.8509160037399823,
+          "graph": 0.4409231795184932,
+          "cochange": 0.8824643950728933,
+          "mirror": 0.0,
+          "lexical_raw": 23.012468269200294
+        }
+      },
+      {
+        "path": "serde/src/lib.rs",
+        "score": 0.6577473050358481,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "//! # Serde | //! | //! Serde is a framework for ***ser***ializing and ***de***serializing Rust data | //! structures efficiently and generically.",
+        "feature_scores": {
+          "lexical": 0.8379501339703008,
+          "graph": 0.4819842432526165,
+          "cochange": 0.8842553489861908,
+          "mirror": 0.0,
+          "lexical_raw": 22.661814778907548
+        }
+      }
+    ],
+    "top5_read_budget": 31972,
+    "top10_read_budget": 52063
+  }
+}

@@ -1,0 +1,57 @@
+[
+  {
+    "run_id": "ripgrep-bugfix-lowercase-size-suffixes",
+    "repo_slug": "BurntSushi_ripgrep",
+    "repo_path": "../Triseek-bench/repos/BurntSushi_ripgrep",
+    "task_type": "bugfix",
+    "title": "ripgrep bugfix: lowercase size suffixes",
+    "prompt": "Ripgrep CLI parses human-readable size strings like `2M` through its shared size helper. Extend that behavior so lowercase suffixes `k`, `m`, and `g` work too. Add or update focused tests, keep existing error behavior for invalid input, and verify the relevant tests before finishing.",
+    "verification_command": "cargo test -p grep-cli"
+  },
+  {
+    "run_id": "ripgrep-feature-terabyte-size-suffix",
+    "repo_slug": "BurntSushi_ripgrep",
+    "repo_path": "../Triseek-bench/repos/BurntSushi_ripgrep",
+    "task_type": "feature",
+    "title": "ripgrep feature: terabyte size suffix",
+    "prompt": "Add terabyte support to ripgrep's human-readable size parser so both `T` and `t` are accepted. Update any docs or help text that mention supported suffixes, add focused tests, and verify the relevant tests before finishing.",
+    "verification_command": "cargo test -p grep-cli"
+  },
+  {
+    "run_id": "ripgrep-refactor-parse-human-size",
+    "repo_slug": "BurntSushi_ripgrep",
+    "repo_path": "../Triseek-bench/repos/BurntSushi_ripgrep",
+    "task_type": "refactor",
+    "title": "ripgrep refactor: rename parse_human_readable_size",
+    "prompt": "Rename the public helper `parse_human_readable_size` to `parse_human_size` throughout ripgrep's CLI crate. Update re-exports, call sites, tests, and docs without changing behavior, and verify the relevant tests before finishing.",
+    "verification_command": "cargo test -p grep-cli"
+  },
+  {
+    "run_id": "serde-bugfix-lowercase-screaming-rule-aliases",
+    "repo_slug": "serde-rs_serde",
+    "repo_path": "../Triseek-bench/repos/serde-rs_serde",
+    "task_type": "bugfix",
+    "title": "serde bugfix: lowercase screaming rename-rule aliases",
+    "prompt": "Serde derive accepts `rename_all` strings like `SCREAMING_SNAKE_CASE` and `SCREAMING-KEBAB-CASE`. Make the parser accept lowercase spellings of those two existing styles as aliases while preserving canonical behavior. Add focused tests and verify the relevant serde_derive tests before finishing.",
+    "verification_command": "cargo test -p serde_derive"
+  },
+  {
+    "run_id": "serde-feature-train-case-rule",
+    "repo_slug": "serde-rs_serde",
+    "repo_path": "../Triseek-bench/repos/serde-rs_serde",
+    "task_type": "feature",
+    "title": "serde feature: Train-Case rename rule",
+    "prompt": "Add a new serde derive `rename_all = \"Train-Case\"` style. For fields it should convert `very_tasty` to `Very-Tasty`; for variants it should convert `VeryTasty` to `Very-Tasty`. Wire it through parsing, rename application, and focused tests, then verify the relevant serde_derive tests before finishing.",
+    "verification_command": "cargo test -p serde_derive"
+  },
+  {
+    "run_id": "serde-refactor-multiname-accessors",
+    "repo_slug": "serde-rs_serde",
+    "repo_path": "../Triseek-bench/repos/serde-rs_serde",
+    "task_type": "refactor",
+    "title": "serde refactor: rename MultiName accessors",
+    "prompt": "Rename the `MultiName` accessors `serialize_name` and `deserialize_name` to `name_for_serialize` and `name_for_deserialize` across serde_derive. Update all call sites and tests without changing behavior, and verify the relevant serde_derive tests before finishing.",
+    "verification_command": "cargo test -p serde_derive"
+  }
+]
+

@@ -1,0 +1,18 @@
+{
+  "total_runs": 12,
+  "file_false_negatives_total": 0,
+  "search_false_negatives_total": 1,
+  "post_compact_false_negatives_total": 0,
+  "file_read_eligible_tokens": 496,
+  "file_read_tokens_saved": 496,
+  "search_eligible_tokens": 679,
+  "search_tokens_saved": 0,
+  "combined_eligible_tokens": 1175,
+  "combined_tokens_saved": 496,
+  "search_reuse_hits": 0,
+  "duplicate_search_calls": 1,
+  "overall_combined_reduction_ratio": 0.4221276595744681,
+  "avg_per_run_combined_reduction_ratio": 0.8,
+  "pass_count": 11,
+  "fail_count": 1
+}

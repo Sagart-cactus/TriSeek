@@ -1,0 +1,27 @@
+{
+  "run_id": "ripgrep-refactor-parse-human-size",
+  "task": "ripgrep refactor: rename parse_human_readable_size",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-refactor-parse-human-size/ed2ad386-68e6-4842-bf7f-230866812ba5.jsonl",
+  "rust_replay": {
+    "session_id": "ed77348a-8abd-482f-ac7b-71db84086cd0",
+    "total_reads": 2,
+    "redundant_reads_prevented": 0,
+    "tokens_saved": 0,
+    "false_negatives": 0,
+    "actual_navigation_tokens": 802,
+    "memo_navigation_tokens": 802,
+    "memo_eligible_redundant_tokens": 0,
+    "reduction_ratio_vs_eligible": null,
+    "reduction_ratio_vs_oracle": 0.0
+  },
+  "oracle": {
+    "elimination_ratio": 0.8991989319092123,
+    "eliminated_tokens": 2694,
+    "redundant_read_tokens": 736
+  },
+  "python_simulation": {
+    "saved_navigation_tokens": 0,
+    "navigation_reduction_ratio": 0.0
+  },
+  "verdict": "PASS"
+}

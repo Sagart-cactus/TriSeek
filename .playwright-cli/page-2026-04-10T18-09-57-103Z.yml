@@ -1,0 +1,774 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - link "▲ TriSeek" [ref=e3] [cursor=pointer]:
+      - /url: index.html
+    - generic [ref=e4]:
+      - link "home" [ref=e5] [cursor=pointer]:
+        - /url: index.html
+      - link "install" [ref=e6] [cursor=pointer]:
+        - /url: install.html
+      - link "mcp" [ref=e7] [cursor=pointer]:
+        - /url: mcp.html
+      - link "how it works" [ref=e8] [cursor=pointer]:
+        - /url: triseek-explained.html
+      - link "architecture" [ref=e9] [cursor=pointer]:
+        - /url: triseek-architecture.html
+  - navigation [ref=e10]:
+    - link "Top" [ref=e11] [cursor=pointer]:
+      - /url: "#hero"
+    - link "Trigrams" [ref=e12] [cursor=pointer]:
+      - /url: "#trigrams"
+    - link "rg vs TriSeek" [ref=e13] [cursor=pointer]:
+      - /url: "#rg-vs-triseek"
+    - link "Indexing" [ref=e14] [cursor=pointer]:
+      - /url: "#indexing"
+    - link "Searching" [ref=e15] [cursor=pointer]:
+      - /url: "#searching"
+    - link "Binary Format" [ref=e16] [cursor=pointer]:
+      - /url: "#binary-format"
+    - link "Parallelism" [ref=e17] [cursor=pointer]:
+      - /url: "#parallel"
+    - link "Benchmarks" [ref=e18] [cursor=pointer]:
+      - /url: "#benchmarks"
+  - banner [ref=e19]:
+    - generic [ref=e20]: Trigram-Indexed Code Search
+    - heading "TriSeek" [level=1] [ref=e22]
+    - paragraph [ref=e23]: A code search engine that indexes every 3-byte sequence in your codebase, then answers queries in milliseconds using posting list intersection and parallel verification.
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]: 20.1x
+        - generic [ref=e27]: Peak measured speedup
+      - generic [ref=e28]:
+        - generic [ref=e29]: <5ms
+        - generic [ref=e30]: Index open time
+      - generic [ref=e31]:
+        - generic [ref=e32]: 38/39
+        - generic [ref=e33]: Medium+ repo wins
+    - generic [ref=e35]: Scroll
+  - generic [ref=e38]:
+    - generic [ref=e39]:
+      - generic [ref=e40]: 01 — The Core Idea
+      - heading "What is a Trigram?" [level=2] [ref=e41]
+      - paragraph [ref=e42]:
+        - text: A trigram is a sliding window of 3 consecutive bytes through text. The string
+        - code [ref=e43]: hello
+        - text: "produces:"
+        - code [ref=e44]: hel
+        - text: ","
+        - code [ref=e45]: ell
+        - text: ","
+        - code [ref=e46]: llo
+        - text: . By building an index of which files contain which trigrams, we can dramatically narrow the search space for any query.
+    - generic [ref=e47]:
+      - text: Type any text to see its trigrams extracted in real-time
+      - 'textbox "Try: HttpResponse or \"fn main\"" [ref=e48]': search
+      - generic [ref=e49]:
+        - generic [ref=e50]: Extracted Trigrams (4)
+        - generic [ref=e51]:
+          - generic [ref=e52]: sea
+          - generic [ref=e53]: ear
+          - generic [ref=e54]: arc
+          - generic [ref=e55]: rch
+      - generic [ref=e56]:
+        - generic [ref=e57]: Sliding Window Visualization
+        - generic [ref=e58]:
+          - generic [ref=e59]: s
+          - generic [ref=e60]: e
+          - generic [ref=e61]: a
+          - generic [ref=e62]: r
+          - generic [ref=e63]: c
+          - generic [ref=e64]: h
+        - generic [ref=e65]:
+          - button "← Prev" [disabled] [ref=e66]
+          - generic [ref=e67]: "\"sea\""
+          - button "Next →" [ref=e68] [cursor=pointer]
+          - button "▶ Play" [ref=e69] [cursor=pointer]
+    - generic [ref=e70]:
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - generic [ref=e73]: "?"
+          - heading "Why 3 bytes?" [level=3] [ref=e74]
+        - paragraph [ref=e75]: With 3 bytes we get 16.7 million possible trigrams (256³). This is selective enough to narrow search candidates dramatically, yet small enough that every reasonable search query of 3+ characters produces at least one trigram to look up. A bigram (2-byte) index would be too broad; a 4-gram too sparse.
+      - generic [ref=e76]:
+        - generic [ref=e77]:
+          - generic [ref=e78]: ⇄
+          - heading "Trigram as u32" [level=3] [ref=e79]
+        - paragraph [ref=e80]:
+          - text: Each trigram is encoded as a
+          - code [ref=e81]: u32
+          - text: "integer:"
+          - code [ref=e82]: byte[0] | (byte[1] << 8) | (byte[2] << 16)
+          - text: . This compact representation makes hash lookups and comparisons blazing fast — just integer operations, no string allocation.
+        - generic [ref=e83]:
+          - generic [ref=e84]: trigram encoding
+          - generic [ref=e89]: // "hel" → trigram u32 let t = 0x68 // 'h' | (0x65 << 8) // 'e' | (0x6C << 16); // 'l' // t = 7104872
+  - generic [ref=e91]:
+    - generic [ref=e92]:
+      - generic [ref=e93]: 02 — The Key Difference
+      - heading "ripgrep vs TriSeek" [level=2] [ref=e94]
+      - paragraph [ref=e95]:
+        - text: ripgrep is the gold standard for grep. It's incredibly fast at scanning files — but it still scans
+        - emphasis [ref=e96]: every single file
+        - text: ", every time. TriSeek takes a fundamentally different approach: build an index once, then answer queries by looking up which files"
+        - emphasis [ref=e97]: could
+        - text: match before reading any of them.
+    - generic [ref=e98]:
+      - generic [ref=e99]:
+        - generic [ref=e100]:
+          - text: ripgrep
+          - generic [ref=e101]: brute force
+        - generic [ref=e102]:
+          - generic [ref=e103]: "1"
+          - generic [ref=e104]:
+            - strong [ref=e105]: Walk every file
+            - text: in the repository, respecting .gitignore
+        - generic [ref=e106]: ↓
+        - generic [ref=e107]:
+          - generic [ref=e108]: "2"
+          - generic [ref=e109]:
+            - strong [ref=e110]: Read each file
+            - text: from disk into memory (or mmap it)
+        - generic [ref=e111]: ↓
+        - generic [ref=e112]:
+          - generic [ref=e113]: "3"
+          - generic [ref=e114]:
+            - strong [ref=e115]: Run the regex
+            - text: / literal matcher against every byte of every file using SIMD-accelerated search
+        - generic [ref=e116]: ↓
+        - generic [ref=e117]:
+          - generic [ref=e118]: "4"
+          - generic [ref=e119]:
+            - strong [ref=e120]: Output matches
+            - text: as they're found
+        - generic [ref=e121]:
+          - generic [ref=e122]: Files touched for query "HttpResponse" in Kubernetes (28K files)
+          - paragraph [ref=e188]: Every dot = a file read from disk. All 28,132 files scanned.
+        - generic [ref=e189]: ~500 ms per query
+      - generic [ref=e190]:
+        - generic [ref=e191]:
+          - text: TriSeek
+          - generic [ref=e192]: indexed lookup
+        - generic [ref=e193]:
+          - generic [ref=e194]: "1"
+          - generic [ref=e195]:
+            - strong [ref=e196]: Extract trigrams
+            - text: "from query: \"Htt\", \"ttp\", \"tpR\", \"pRe\", \"Res\", \"esp\", \"spo\", \"pon\", \"ons\", \"nse\""
+        - generic [ref=e197]: ↓
+        - generic [ref=e198]:
+          - generic [ref=e199]: "2"
+          - generic [ref=e200]:
+            - strong [ref=e201]: Look up posting lists
+            - text: — instant HashMap lookups from mmap'd index. Zero disk I/O.
+        - generic [ref=e202]: ↓
+        - generic [ref=e203]:
+          - generic [ref=e204]: "3"
+          - generic [ref=e205]:
+            - strong [ref=e206]: Intersect posting lists
+            - text: using sorted merge. Only files containing ALL trigrams survive.
+        - generic [ref=e207]: ↓
+        - generic [ref=e208]:
+          - generic [ref=e209]: "4"
+          - generic [ref=e210]:
+            - strong [ref=e211]: Verify only candidates
+            - text: — read just the handful of surviving files, in parallel across all CPU cores.
+        - generic [ref=e212]:
+          - generic [ref=e213]: Files touched for query "HttpResponse" in Kubernetes (28K files)
+          - paragraph [ref=e279]: Only 5 files read from disk. 28,127 files never touched.
+        - generic [ref=e280]: ~64 ms per query
+    - generic [ref=e281]:
+      - generic [ref=e282]:
+        - generic [ref=e283]: 💡
+        - heading "The Fundamental Tradeoff" [level=3] [ref=e284]
+      - paragraph [ref=e285]:
+        - text: ripgrep pays a
+        - strong [ref=e286]: linear cost
+        - text: proportional to repo size on every query — it must touch every file. TriSeek pays an
+        - strong [ref=e287]: upfront indexing cost
+        - text: once, then each query cost is proportional to the
+        - emphasis [ref=e288]: number of matching files
+        - text: ", not the total repo size. The larger the codebase, the bigger the advantage."
+      - generic [ref=e289]:
+        - generic [ref=e290]:
+          - generic [ref=e291]: ripgrep query cost
+          - paragraph [ref=e292]: O(total files × avg file size)
+        - generic [ref=e293]:
+          - generic [ref=e294]: TriSeek query cost
+          - paragraph [ref=e295]: O(posting list size + candidate files)
+    - generic [ref=e296]:
+      - generic [ref=e297]:
+        - generic [ref=e298]:
+          - generic [ref=e299]: ✓
+          - heading "When TriSeek wins" [level=3] [ref=e300]
+        - list [ref=e301]:
+          - listitem [ref=e302]: → Medium/large repos (1K+ files)
+          - listitem [ref=e303]: → Selective queries with literal strings
+          - listitem [ref=e304]: → Session workloads (many queries, index stays hot)
+          - listitem [ref=e305]: → Agent workflows (Codex, Claude) doing 20+ searches
+      - generic [ref=e306]:
+        - generic [ref=e307]:
+          - generic [ref=e308]: ⚠
+          - heading "When ripgrep wins" [level=3] [ref=e309]
+        - list [ref=e310]:
+          - listitem [ref=e311]: → Small repos (page cache makes brute force free)
+          - listitem [ref=e312]:
+            - text: → Pure regex with no extractable literals (
+            - code [ref=e313]: "\\d{3}-\\d{4}"
+            - text: )
+          - listitem [ref=e314]: → One-off queries (no index yet built)
+          - listitem [ref=e315]: → Very high match-count patterns (most files match)
+  - generic [ref=e317]:
+    - generic [ref=e318]:
+      - generic [ref=e319]: 03 — Building the Index
+      - heading "How Indexing Works" [level=2] [ref=e320]
+      - paragraph [ref=e321]: TriSeek walks your repository, extracts trigrams from every file, and builds an inverted index — a map from each trigram to the set of files containing it.
+    - generic [ref=e322]:
+      - generic [ref=e323]:
+        - generic [ref=e325]: "1"
+        - generic [ref=e327]:
+          - heading "Walk Repository" [level=3] [ref=e328]
+          - paragraph [ref=e329]:
+            - text: Using the
+            - code [ref=e330]: ignore
+            - text: crate's parallel walker, all files are discovered respecting
+            - code [ref=e331]: .gitignore
+            - text: rules. Threads are capped at
+            - code [ref=e332]: min(cores, 8)
+            - text: for optimal I/O throughput.
+          - generic [ref=e333]:
+            - generic [ref=e334]: walker.rs
+            - generic [ref=e339]: "fn walk_repository_parallel(root: &Path) { WalkBuilder::new(root) .threads(num_cpus::get().min(8)) .build_parallel() .run(|| { /* process each file */ }); }"
+      - generic [ref=e340]:
+        - generic [ref=e342]: "2"
+        - generic [ref=e344]:
+          - heading "Extract Trigrams" [level=3] [ref=e345]
+          - paragraph [ref=e346]:
+            - text: For each file, a sliding window of 3 bytes produces all trigrams. These are collected into a
+            - code [ref=e347]: HashSet<u32>
+            - text: per file (deduplication — we only need to know
+            - emphasis [ref=e348]: if
+            - text: a trigram appears, not how many times).
+          - generic [ref=e349]:
+            - generic [ref=e350]: trigram extraction
+            - generic [ref=e355]: "for window in content.windows(3) { let tri = window[0] as u32 | (window[1] as u32) << 8 | (window[2] as u32) << 16; trigrams.insert(tri); }"
+      - generic [ref=e356]:
+        - generic [ref=e358]: "3"
+        - generic [ref=e360]:
+          - heading "Build Posting Lists" [level=3] [ref=e361]
+          - paragraph [ref=e362]:
+            - text: The inverted index maps each trigram to a sorted list of document IDs. If trigram
+            - code [ref=e363]: "\"htt\""
+            - text: appears in files 4, 17, and 203, its posting list is
+            - code [ref=e364]: "[4, 17, 203]"
+            - text: .
+          - generic [ref=e365]:
+            - generic [ref=e366]:
+              - generic [ref=e367]: htt
+              - generic [ref=e368]:
+                - generic [ref=e369]: server.rs
+                - generic [ref=e370]: client.rs
+                - generic [ref=e371]: proxy.rs
+            - generic [ref=e372]:
+              - generic [ref=e373]: ttp
+              - generic [ref=e374]:
+                - generic [ref=e375]: server.rs
+                - generic [ref=e376]: client.rs
+                - generic [ref=e377]: config.rs
+                - generic [ref=e378]: proxy.rs
+            - generic [ref=e379]:
+              - generic [ref=e380]: tps
+              - generic [ref=e381]:
+                - generic [ref=e382]: server.rs
+                - generic [ref=e383]: client.rs
+                - generic [ref=e384]: proxy.rs
+      - generic [ref=e385]:
+        - generic [ref=e387]: "4"
+        - generic [ref=e388]:
+          - heading "Write Binary Index" [level=3] [ref=e389]
+          - paragraph [ref=e390]:
+            - text: The in-memory index is persisted as
+            - code [ref=e391]: fast.idx
+            - text: — a custom flat binary format designed for instant
+            - code [ref=e392]: mmap
+            - text: loading. No deserialization needed; posting lists are read directly from mapped memory.
+  - generic [ref=e394]:
+    - generic [ref=e395]:
+      - generic [ref=e396]: 04 — Query Execution
+      - heading "How Search Works" [level=2] [ref=e397]
+      - paragraph [ref=e398]:
+        - text: When you search for
+        - code [ref=e399]: https
+        - text: ", TriSeek extracts its trigrams, intersects the posting lists to find candidate files, then verifies matches in parallel."
+    - generic [ref=e400]:
+      - 'heading "Step-by-Step: Searching for \"https\"" [level=3] [ref=e401]'
+      - generic [ref=e402]:
+        - generic [ref=e403]: 1. Extract query trigrams
+        - generic [ref=e404]:
+          - generic [ref=e405]: htt
+          - generic [ref=e406]: ttp
+          - generic [ref=e407]: tps
+      - generic [ref=e408]:
+        - generic [ref=e409]: 2. Look up posting lists
+        - generic [ref=e410]:
+          - generic [ref=e411]:
+            - generic [ref=e412]: htt
+            - generic [ref=e413]:
+              - generic [ref=e414]: "2"
+              - generic [ref=e415]: "7"
+              - generic [ref=e416]: "15"
+              - generic [ref=e417]: "23"
+              - generic [ref=e418]: "41"
+          - generic [ref=e419]:
+            - generic [ref=e420]: ttp
+            - generic [ref=e421]:
+              - generic [ref=e422]: "2"
+              - generic [ref=e423]: "5"
+              - generic [ref=e424]: "7"
+              - generic [ref=e425]: "15"
+              - generic [ref=e426]: "23"
+              - generic [ref=e427]: "30"
+              - generic [ref=e428]: "41"
+          - generic [ref=e429]:
+            - generic [ref=e430]: tps
+            - generic [ref=e431]:
+              - generic [ref=e432]: "2"
+              - generic [ref=e433]: "15"
+              - generic [ref=e434]: "23"
+              - generic [ref=e435]: "41"
+              - generic [ref=e436]: "50"
+      - generic [ref=e437]:
+        - generic [ref=e438]: 3. Sorted intersection — O(n+m) merge
+        - paragraph [ref=e439]: Walk all lists simultaneously with pointers. Only advance the pointer on the smallest value. When all pointers agree, that's a candidate.
+        - generic [ref=e440]:
+          - generic [ref=e441]: Candidates (files containing ALL trigrams)
+          - generic [ref=e442]:
+            - generic [ref=e443]: File 2
+            - generic [ref=e444]: File 15
+            - generic [ref=e445]: File 23
+            - generic [ref=e446]: File 41
+          - paragraph [ref=e447]: From 28,000 files in the repo → only 4 candidates to verify. That's a 7,000x reduction.
+      - generic [ref=e448]:
+        - generic [ref=e449]: 4. Parallel verification with Rayon
+        - paragraph [ref=e450]: Read each candidate file and run the actual regex/literal match. This happens across all CPU cores simultaneously.
+    - generic [ref=e451]:
+      - generic [ref=e452]: engine.rs — sorted intersection
+      - generic [ref=e457]: "fn sorted_intersect(a: &[u32], b: &[u32]) -> Vec<u32> { let (mut i, mut j) = (0, 0); let mut result = Vec::new(); while i < a.len() && j < b.len() { match a[i].cmp(&b[j]) { Equal => { result.push(a[i]); i += 1; j += 1; } Less => i += 1, Greater => j += 1, } } result }"
+  - generic [ref=e459]:
+    - generic [ref=e460]:
+      - generic [ref=e461]: 05 — The Fast Index
+      - heading "Binary Format Layout" [level=2] [ref=e462]
+      - paragraph [ref=e463]:
+        - text: The
+        - code [ref=e464]: fast.idx
+        - text: file is a flat binary format designed for
+        - code [ref=e465]: mmap
+        - text: . No parsing, no deserialization — the OS maps the file into memory and we read posting lists as raw
+        - code [ref=e466]: u32
+        - text: slices directly from the mapped region.
+    - generic [ref=e467]:
+      - generic [ref=e468]: fast.idx memory layout
+      - generic [ref=e469]:
+        - generic [ref=e470]:
+          - generic [ref=e471]: Header
+          - generic [ref=e472]: 96 B
+        - generic [ref=e473]:
+          - generic [ref=e474]: Content Trigram Table
+          - generic [ref=e475]: 12 B × N
+        - generic [ref=e476]:
+          - generic [ref=e477]: Content Postings
+          - generic [ref=e478]: 4 B × total
+        - generic [ref=e479]:
+          - generic [ref=e480]: Path Trigram Table
+          - generic [ref=e481]: 12 B × M
+        - generic [ref=e482]:
+          - generic [ref=e483]: Path Postings
+          - generic [ref=e484]: 4 B × total
+        - generic [ref=e485]:
+          - generic [ref=e486]: Doc Table
+          - generic [ref=e487]: 46 B × docs
+        - generic [ref=e488]:
+          - generic [ref=e489]: String Pool
+          - generic [ref=e490]: variable
+      - generic [ref=e491]:
+        - generic [ref=e492]: Header (magic, version, section offsets)
+        - generic [ref=e494]: Content trigrams + postings
+        - generic [ref=e496]: Path trigrams + postings
+        - generic [ref=e498]: Document metadata + strings
+    - generic [ref=e500]:
+      - generic [ref=e501]:
+        - generic [ref=e502]: Before (bincode)
+        - generic [ref=e503]: ~600ms
+        - paragraph [ref=e504]:
+          - text: Index load time
+          - text: Deserialize + allocate
+      - generic [ref=e505]: vs
+      - generic [ref=e506]:
+        - generic [ref=e507]: After (mmap)
+        - generic [ref=e508]: <5ms
+        - paragraph [ref=e509]:
+          - text: Index load time
+          - text: Zero-copy mmap
+    - generic [ref=e510]:
+      - generic [ref=e511]:
+        - generic [ref=e512]: ⚡
+        - heading "Why mmap matters" [level=3] [ref=e513]
+      - paragraph [ref=e514]:
+        - text: Traditional deserialization reads the entire file into memory, allocates new data structures, and copies data. With
+        - code [ref=e515]: mmap
+        - text: ", the operating system maps the file directly into virtual memory. Reading a posting list is just casting a pointer — the data stays on disk until accessed, and the OS manages caching."
+      - generic [ref=e516]:
+        - generic [ref=e517]: fastindex.rs — zero-copy posting list read
+        - generic [ref=e522]: "// Posting list is a raw slice of u32 from mapped memory let ptr = mmap[offset..offset + count * 4].as_ptr() as *const u32; let postings = unsafe { slice::from_raw_parts(ptr, count) }; // No allocation. No copy. Just a pointer cast."
+  - generic [ref=e524]:
+    - generic [ref=e525]:
+      - generic [ref=e526]: 06 — Parallel Verification
+      - heading "Rayon Parallelism" [level=2] [ref=e527]
+      - paragraph [ref=e528]: After intersection narrows candidates to a handful of files, TriSeek verifies each one in parallel across all CPU cores using Rayon's work-stealing thread pool.
+    - generic [ref=e529]:
+      - generic [ref=e530]: Parallel file verification across 8 threads
+      - generic [ref=e531]:
+        - generic [ref=e533]: Thread 0
+        - generic [ref=e536]: Thread 1
+        - generic [ref=e539]: Thread 2
+        - generic [ref=e542]: Thread 3
+        - generic [ref=e545]: Thread 4
+        - generic [ref=e548]: Thread 5
+        - generic [ref=e551]: Thread 6
+        - generic [ref=e554]: Thread 7
+      - generic [ref=e556]:
+        - button "▶ Animate" [ref=e557] [cursor=pointer]
+        - generic [ref=e558]: Click to visualize parallel verification
+    - generic [ref=e559]:
+      - generic [ref=e560]: engine.rs — parallel verification
+      - generic [ref=e565]: "use rayon::prelude::*; candidates.par_iter().for_each(|(doc_id, path, rel)| { if done.load(Ordering::Relaxed) { return; } // Read file (mmap for large, Vec for small) let bytes = read_candidate(&path); // Run actual pattern match let hits = match_in_bytes(&bytes, &pattern); if !hits.is_empty() { results.lock().extend(hits); let count = total_found.fetch_add( hits.len(), Ordering::Relaxed ); if count >= max_results { done.store(true, Ordering::Relaxed); } } });"
+    - generic [ref=e566]:
+      - generic [ref=e567]:
+        - generic [ref=e568]:
+          - generic [ref=e569]: 🎯
+          - heading "Early Termination" [level=3] [ref=e570]
+        - paragraph [ref=e571]:
+          - text: An
+          - code [ref=e572]: AtomicBool
+          - text: flag signals all threads to stop once we have enough results. This prevents unnecessary I/O when only the first N matches are needed — common in editor integrations.
+      - generic [ref=e573]:
+        - generic [ref=e574]:
+          - generic [ref=e575]: 📋
+          - heading "Work Stealing" [level=3] [ref=e576]
+        - paragraph [ref=e577]: Rayon's work-stealing scheduler automatically balances load. If one thread finishes its files quickly (small files), it steals work from threads with larger files. No manual balancing needed.
+  - generic [ref=e579]:
+    - generic [ref=e580]:
+      - generic [ref=e581]: 07 — Results
+      - heading "Benchmark Results" [level=2] [ref=e582]
+      - paragraph [ref=e583]: On the fresh full rerun, TriSeek auto mode wins 38 of 65 single-query benchmarks overall, or 38 of 39 after excluding the two small repos where cold shell scans remain cheaper, and 8 of 10 session benchmarks across all repo sizes.
+    - generic [ref=e584]:
+      - paragraph [ref=e585]: Note
+      - paragraph [ref=e586]:
+        - text: The charts below show representative results for
+        - strong [ref=e587]: medium and large repositories only
+        - text: (Kubernetes, Linux, Rust). Small repos (serde, ripgrep) are excluded from the charts because the fresh full rerun still shows shell tools ahead on cold single-query latency at that scale. Session benchmarks include all 5 repos.
+    - generic [ref=e588]:
+      - heading "Kubernetes — 28,132 files, 257 MB" [level=3] [ref=e589]
+      - generic [ref=e590]:
+        - generic [ref=e591]:
+          - generic [ref=e592]: literal_selective
+          - generic [ref=e593]:
+            - generic [ref=e596]: 48 ms
+            - generic [ref=e599]: 493 ms
+          - generic [ref=e600]: 10.2x
+        - generic [ref=e601]:
+          - generic [ref=e602]: literal_moderate
+          - generic [ref=e603]:
+            - generic [ref=e606]: 58 ms
+            - generic [ref=e609]: 599 ms
+          - generic [ref=e610]: 10.3x
+        - generic [ref=e611]:
+          - generic [ref=e612]: literal_high
+          - generic [ref=e613]:
+            - generic [ref=e616]: 78 ms
+            - generic [ref=e619]: 652 ms
+          - generic [ref=e620]: 8.3x
+        - generic [ref=e621]:
+          - generic [ref=e622]: regex_anchor
+          - generic [ref=e623]:
+            - generic [ref=e626]: 69 ms
+            - generic [ref=e629]: 665 ms
+          - generic [ref=e630]: 9.6x
+        - generic [ref=e631]:
+          - generic [ref=e632]: regex_weak
+          - generic [ref=e633]:
+            - generic [ref=e636]: 650 ms
+            - generic [ref=e639]: 1214 ms
+          - generic [ref=e640]: 1.9x
+        - generic [ref=e641]:
+          - generic [ref=e642]: literal_no_match
+          - generic [ref=e643]:
+            - generic [ref=e646]: 64 ms
+            - generic [ref=e649]: 674 ms
+          - generic [ref=e650]: 10.5x
+        - generic [ref=e651]:
+          - generic [ref=e652]: regex_no_match
+          - generic [ref=e653]:
+            - generic [ref=e656]: 72 ms
+            - generic [ref=e659]: 729 ms
+          - generic [ref=e660]: 10.1x
+        - generic [ref=e661]:
+          - generic [ref=e662]: multi_or
+          - generic [ref=e663]:
+            - generic [ref=e666]: 90 ms
+            - generic [ref=e669]: 751 ms
+          - generic [ref=e670]: 8.3x
+        - generic [ref=e671]:
+          - generic [ref=e672]: path_all
+          - generic [ref=e673]:
+            - generic [ref=e676]: 42 ms
+            - generic [ref=e679]: 80 ms
+          - generic [ref=e680]: 1.9x
+        - generic [ref=e681]:
+          - generic [ref=e682]: path_substring
+          - generic [ref=e683]:
+            - generic [ref=e686]: 38 ms
+            - generic [ref=e689]: 101 ms
+          - generic [ref=e690]: 2.6x
+        - generic [ref=e691]:
+          - generic [ref=e692]: path_plus_content
+          - generic [ref=e693]:
+            - generic [ref=e696]: 73 ms
+            - generic [ref=e699]: 405 ms
+          - generic [ref=e700]: 5.6x
+    - generic [ref=e701]:
+      - heading "Linux Kernel — 92,916 files, 1.5 GB" [level=3] [ref=e702]
+      - generic [ref=e703]:
+        - generic [ref=e704]:
+          - generic [ref=e705]: literal_selective
+          - generic [ref=e706]:
+            - generic [ref=e709]: 197 ms
+            - generic [ref=e712]: 3972 ms
+          - generic [ref=e713]: 20.2x
+        - generic [ref=e714]:
+          - generic [ref=e715]: literal_moderate
+          - generic [ref=e716]:
+            - generic [ref=e719]: 289 ms
+            - generic [ref=e722]: 4407 ms
+          - generic [ref=e723]: 15.3x
+        - generic [ref=e724]:
+          - generic [ref=e725]: literal_high
+          - generic [ref=e726]:
+            - generic [ref=e729]: 512 ms
+            - generic [ref=e732]: 5971 ms
+          - generic [ref=e733]: 11.7x
+        - generic [ref=e734]:
+          - generic [ref=e735]: regex_anchor
+          - generic [ref=e736]:
+            - generic [ref=e739]: 406 ms
+            - generic [ref=e742]: 5859 ms
+          - generic [ref=e743]: 14.4x
+        - generic [ref=e744]:
+          - generic [ref=e745]: regex_weak
+          - generic [ref=e746]:
+            - generic [ref=e749]: 2760 ms
+            - generic [ref=e752]: 4023 ms
+          - generic [ref=e753]: 1.5x
+        - generic [ref=e754]:
+          - generic [ref=e755]: literal_no_match
+          - generic [ref=e756]:
+            - generic [ref=e759]: 123 ms
+            - generic [ref=e762]: 2025 ms
+          - generic [ref=e763]: 16.5x
+        - generic [ref=e764]:
+          - generic [ref=e765]: regex_no_match
+          - generic [ref=e766]:
+            - generic [ref=e769]: 153 ms
+            - generic [ref=e772]: 2167 ms
+          - generic [ref=e773]: 14.2x
+        - generic [ref=e774]:
+          - generic [ref=e775]: multi_or
+          - generic [ref=e776]:
+            - generic [ref=e779]: 195 ms
+            - generic [ref=e782]: 2130 ms
+          - generic [ref=e783]: 10.9x
+        - generic [ref=e784]:
+          - generic [ref=e785]: path_substring
+          - generic [ref=e786]:
+            - generic [ref=e789]: 188 ms
+            - generic [ref=e792]: 242 ms
+          - generic [ref=e793]: 1.3x
+        - generic [ref=e794]:
+          - generic [ref=e795]: path_plus_content
+          - generic [ref=e796]:
+            - generic [ref=e799]: 140 ms
+            - generic [ref=e802]: 733 ms
+          - generic [ref=e803]: 5.2x
+    - generic [ref=e804]:
+      - heading "Rust Compiler — 58,472 files, 198 MB" [level=3] [ref=e805]
+      - generic [ref=e806]:
+        - generic [ref=e807]:
+          - generic [ref=e808]: literal_selective
+          - generic [ref=e809]:
+            - generic [ref=e812]: 74 ms
+            - generic [ref=e815]: 1003 ms
+          - generic [ref=e816]: 13.6x
+        - generic [ref=e817]:
+          - generic [ref=e818]: literal_moderate
+          - generic [ref=e819]:
+            - generic [ref=e822]: 97 ms
+            - generic [ref=e825]: 1225 ms
+          - generic [ref=e826]: 12.6x
+        - generic [ref=e827]:
+          - generic [ref=e828]: literal_high
+          - generic [ref=e829]:
+            - generic [ref=e832]: 123 ms
+            - generic [ref=e835]: 1254 ms
+          - generic [ref=e836]: 10.2x
+        - generic [ref=e837]:
+          - generic [ref=e838]: regex_anchor
+          - generic [ref=e839]:
+            - generic [ref=e842]: 101 ms
+            - generic [ref=e845]: 1204 ms
+          - generic [ref=e846]: 11.9x
+        - generic [ref=e847]:
+          - generic [ref=e848]: regex_weak
+          - generic [ref=e849]:
+            - generic [ref=e852]: 1258 ms
+            - generic [ref=e855]: 1406 ms
+          - generic [ref=e856]: 1.1x
+        - generic [ref=e857]:
+          - generic [ref=e858]: literal_no_match
+          - generic [ref=e859]:
+            - generic [ref=e862]: 99 ms
+            - generic [ref=e865]: 1255 ms
+          - generic [ref=e866]: 12.7x
+        - generic [ref=e867]:
+          - generic [ref=e868]: regex_no_match
+          - generic [ref=e869]:
+            - generic [ref=e872]: 96 ms
+            - generic [ref=e875]: 1166 ms
+          - generic [ref=e876]: 12.2x
+        - generic [ref=e877]:
+          - generic [ref=e878]: multi_or
+          - generic [ref=e879]:
+            - generic [ref=e882]: 122 ms
+            - generic [ref=e885]: 1162 ms
+          - generic [ref=e886]: 9.5x
+        - generic [ref=e887]:
+          - generic [ref=e888]: path_all
+          - generic [ref=e889]:
+            - generic [ref=e892]: 76 ms
+            - generic [ref=e895]: 79 ms
+          - generic [ref=e896]: 1.0x
+        - generic [ref=e897]:
+          - generic [ref=e898]: path_substring
+          - generic [ref=e899]:
+            - generic [ref=e902]: 66 ms
+            - generic [ref=e905]: 89 ms
+          - generic [ref=e906]: 1.3x
+        - generic [ref=e907]:
+          - generic [ref=e908]: path_plus_content
+          - generic [ref=e909]:
+            - generic [ref=e912]: 104 ms
+            - generic [ref=e915]: 670 ms
+          - generic [ref=e916]: 6.4x
+    - generic [ref=e917]:
+      - heading "Session Benchmarks — 20 sequential queries (agent workload)" [level=3] [ref=e918]
+      - table [ref=e919]:
+        - rowgroup [ref=e920]:
+          - row "Repository TriSeek p50 rg p50 Speedup" [ref=e921]:
+            - columnheader "Repository" [ref=e922]
+            - columnheader "TriSeek p50" [ref=e923]
+            - columnheader "rg p50" [ref=e924]
+            - columnheader "Speedup" [ref=e925]
+        - rowgroup [ref=e926]:
+          - row "serde (small) 34 ms 82 ms 2.4x" [ref=e927]:
+            - cell "serde (small)" [ref=e928]
+            - cell "34 ms" [ref=e929]
+            - cell "82 ms" [ref=e930]
+            - cell "2.4x" [ref=e931]:
+              - generic [ref=e932]: 2.4x
+          - row "kubernetes (medium) 292 ms 3,575 ms 12.2x" [ref=e933]:
+            - cell "kubernetes (medium)" [ref=e934]
+            - cell "292 ms" [ref=e935]
+            - cell "3,575 ms" [ref=e936]
+            - cell "12.2x" [ref=e937]:
+              - generic [ref=e938]: 12.2x
+          - row "linux (large) 613 ms 10,342 ms 16.9x" [ref=e939]:
+            - cell "linux (large)" [ref=e940]
+            - cell "613 ms" [ref=e941]
+            - cell "10,342 ms" [ref=e942]
+            - cell "16.9x" [ref=e943]:
+              - generic [ref=e944]: 16.9x
+          - row "rust (large) 375 ms 5,954 ms 15.9x" [ref=e945]:
+            - cell "rust (large)" [ref=e946]
+            - cell "375 ms" [ref=e947]
+            - cell "5,954 ms" [ref=e948]
+            - cell "15.9x" [ref=e949]:
+              - generic [ref=e950]: 15.9x
+          - row "ripgrep (small) 39 ms 92 ms 2.3x" [ref=e951]:
+            - cell "ripgrep (small)" [ref=e952]
+            - cell "39 ms" [ref=e953]
+            - cell "92 ms" [ref=e954]
+            - cell "2.3x" [ref=e955]:
+              - generic [ref=e956]: 2.3x
+    - generic [ref=e957]:
+      - generic [ref=e958]:
+        - generic [ref=e959]: 38/39
+        - paragraph [ref=e960]: medium+ repo benchmarks won
+        - paragraph [ref=e961]: "Overall full-rerun result: 38/65 wins. All 26 losses came from the two small repos."
+      - generic [ref=e962]:
+        - generic [ref=e963]: 20.1x
+        - paragraph [ref=e964]: peak measured speedup
+        - paragraph [ref=e965]:
+          - text: Linux kernel,
+          - code [ref=e966]: literal_selective
+          - text: single-query workload
+  - generic [ref=e968]:
+    - generic [ref=e969]:
+      - generic [ref=e970]: References & Prior Art
+      - heading "Standing on Shoulders" [level=2] [ref=e971]
+    - generic [ref=e972]:
+      - paragraph [ref=e973]: "TriSeek's trigram indexing approach builds on decades of research in string matching and code search:"
+      - generic [ref=e974]:
+        - generic [ref=e975]:
+          - generic [ref=e976]: "1"
+          - generic [ref=e977]:
+            - paragraph [ref=e978]: Ukkonen, "Approximate string-matching with q-grams and maximal matches" (1992)
+            - paragraph [ref=e979]: The theoretical foundation for q-gram (n-gram) based string matching. Established that decomposing strings into overlapping q-length substrings enables efficient approximate and exact matching through set intersection. TriSeek's trigram decomposition (q=3) directly descends from this framework.
+            - paragraph [ref=e980]: Theoretical Computer Science, Volume 92, Issue 1, pp. 191–211
+            - paragraph [ref=e981]:
+              - link "sciencedirect.com/science/article/pii/0304397592901434" [ref=e982] [cursor=pointer]:
+                - /url: https://www.sciencedirect.com/science/article/pii/0304397592901434
+        - generic [ref=e983]:
+          - generic [ref=e984]: "2"
+          - generic [ref=e985]:
+            - paragraph [ref=e986]: "Manber & Wu, \"GLIMPSE: A Tool to Search Through Entire File Systems\" (1994)"
+            - paragraph [ref=e987]: "The first practical system to use an inverted index over character n-grams for searching entire file systems. GLIMPSE demonstrated the core tradeoff TriSeek exploits: a small index enables dramatic pruning of the search space, making queries sub-linear in corpus size."
+            - paragraph [ref=e988]: USENIX Winter Technical Conference, 1994
+            - paragraph [ref=e989]:
+              - link "usenix.org/.../glimpse-tool-search-through-entire-file-systems" [ref=e990] [cursor=pointer]:
+                - /url: https://www.usenix.org/conference/usenix-winter-1994-technical-conference/glimpse-tool-search-through-entire-file-systems
+        - generic [ref=e991]:
+          - generic [ref=e992]: "3"
+          - generic [ref=e993]:
+            - paragraph [ref=e994]: Navarro & Baeza-Yates, "A Practical q-Gram Index for Text Retrieval Allowing Errors" (1998)
+            - paragraph [ref=e995]: Extended q-gram indexing to support approximate matching and established cost models for choosing optimal q values. Their analysis of posting list intersection costs informed TriSeek's sorted-merge intersection strategy and the choice of q=3 as the selectivity sweet spot.
+            - paragraph [ref=e996]: CLEI Electronic Journal, Volume 1, Number 2, 1998
+            - paragraph [ref=e997]:
+              - link "clei.org/cleiej/.../article/view/379" [ref=e998] [cursor=pointer]:
+                - /url: https://www.clei.org/cleiej/index.php/cleiej/article/view/379
+        - generic [ref=e999]:
+          - generic [ref=e1000]: "4"
+          - generic [ref=e1001]:
+            - paragraph [ref=e1002]: Russ Cox, "Regular Expression Matching with a Trigram Index" (2012)
+            - paragraph [ref=e1003]: The engineering blueprint for applying trigram indexing to code search at scale. Described how Google Code Search extracted trigram sets from regex queries, intersected posting lists to find candidate files, and verified matches with full regex evaluation. This is the direct algorithmic ancestor of TriSeek's search pipeline.
+            - paragraph [ref=e1004]:
+              - link "swtch.com/~rsc/regexp/regexp4.html" [ref=e1005] [cursor=pointer]:
+                - /url: https://swtch.com/~rsc/regexp/regexp4.html
+        - generic [ref=e1006]:
+          - generic [ref=e1007]: "5"
+          - generic [ref=e1008]:
+            - paragraph [ref=e1009]: GitHub, "The technology behind GitHub's new code search" (2023)
+            - paragraph [ref=e1010]: GitHub's engineering blog describing their Blackbird code search system, which uses n-gram indexing with content-defined chunking, delta-encoded posting lists, and a Rust-based query engine. Demonstrated that trigram-style indexing remains the state of the art for code search even at the scale of 200M+ repositories.
+            - paragraph [ref=e1011]:
+              - link "github.blog/2023-02-06-the-technology-behind-githubs-new-code-search" [ref=e1012] [cursor=pointer]:
+                - /url: https://github.blog/2023-02-06-the-technology-behind-githubs-new-code-search/
+  - contentinfo [ref=e1013]:
+    - generic [ref=e1014]:
+      - paragraph [ref=e1015]: TriSeek — Trigram-Indexed Code Search Engine
+      - paragraph [ref=e1016]: Built with Rust. Benchmarked against ripgrep on macOS, 16 cores.

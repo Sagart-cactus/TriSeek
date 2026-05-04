@@ -1,0 +1,25 @@
+{
+  "run_id": "serde-bugfix-lowercase-screaming-rule-aliases",
+  "task": "serde bugfix: lowercase screaming rename-rule aliases",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-serde-bugfix-lowercase-screaming-rule-aliases/2b8b66f8-8503-4d71-96d3-5bf45fbe6dde.jsonl",
+  "rust_replay": {
+    "session_id": "48d2b629-7ba1-461a-8e66-31da39cd41bb",
+    "total_reads": 9,
+    "redundant_reads_prevented": 0,
+    "tokens_saved": 0,
+    "false_negatives": 0,
+    "actual_navigation_tokens": 4131,
+    "memo_navigation_tokens": 4131,
+    "reduction_ratio_vs_redundant": 0.0
+  },
+  "oracle": {
+    "elimination_ratio": 0.9682886823400766,
+    "eliminated_tokens": 3542,
+    "redundant_read_tokens": 3191
+  },
+  "python_simulation": {
+    "saved_navigation_tokens": 85,
+    "navigation_reduction_ratio": 0.023236741388737013
+  },
+  "verdict": "FAIL"
+}

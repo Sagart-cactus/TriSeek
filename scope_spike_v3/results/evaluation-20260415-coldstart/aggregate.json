@@ -1,0 +1,14 @@
+{
+  "total_runs": 6,
+  "lexical_avg_recall_at_5": 0.7314814814814815,
+  "lexical_avg_recall_at_10": 0.8055555555555556,
+  "lexical_avg_mrr": 0.7638888888888888,
+  "lexical_full_coverage_at_10_runs": 4,
+  "scope_avg_recall_at_5": 0.7129629629629629,
+  "scope_avg_recall_at_10": 0.787037037037037,
+  "scope_avg_mrr": 0.6722222222222223,
+  "scope_full_coverage_at_10_runs": 4,
+  "avg_scope_top5_read_budget": 56897.833333333336,
+  "avg_scope_top10_read_budget": 92542.66666666667,
+  "verdict": "FAIL"
+}

@@ -1,0 +1,324 @@
+{
+  "run_id": "serde-feature-train-case-rule",
+  "task": "serde feature: Train-Case rename rule",
+  "prompt": "Add a new serde derive `rename_all = \"Train-Case\"` style. For fields it should convert `very_tasty` to `Very-Tasty`; for variants it should convert `VeryTasty` to `Very-Tasty`. Wire it through parsing, rename application, and focused tests, then verify the relevant serde_derive tests before finishing.",
+  "repo_root": "/Users/trivedi/Documents/Projects/Triseek-bench/repos/serde-rs_serde",
+  "ground_truth_files": [
+    "serde_derive/src/internals/case.rs"
+  ],
+  "actual_navigation_tokens": 5198,
+  "lexical": {
+    "metrics": {
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "precision_at_5": 0.2,
+      "precision_at_10": 0.1,
+      "first_hit_rank": 1,
+      "mrr": 1.0,
+      "full_coverage_at_5": true,
+      "full_coverage_at_10": true
+    },
+    "top_files": [
+      {
+        "path": "serde_derive/src/internals/case.rs",
+        "score": 1.0,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "//! Code to convert the Rust-styled field/variant (e.g. `my_field`, `MyType`) to the | //! case of the source (e.g. `my-field`, `MY_FIELD`). | /// The different possible ways to change case of fields in a struct, or variants in an enum. | p",
+        "feature_scores": {
+          "lexical": 1.0
+        }
+      },
+      {
+        "path": "serde_derive/src/deprecated.rs",
+        "score": 0.3115445751137231,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "pub fn allow_deprecated(input: &syn::DeriveInput) -> Option<TokenStream> { | /// Determine if an `#[allow(deprecated)]` should be added to the derived impl. | /// | /// This should happen if the derive input or an enum variant it contains h",
+        "feature_scores": {
+          "lexical": 0.3115445751137231
+        }
+      },
+      {
+        "path": "serde_derive/src/internals/check.rs",
+        "score": 0.28368573332602615,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "// Cross-cutting checks that require looking at more than a single attrs object. | // Simpler checks should happen when parsing and building the attrs. | pub fn check(cx: &Ctxt, cont: &mut Container, derive: Derive) { | // If some field of ",
+        "feature_scores": {
+          "lexical": 0.28368573332602615
+        }
+      },
+      {
+        "path": "serde_core/src/de/mod.rs",
+        "score": 0.2779678228851891,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "//! Generic data structure deserialization framework. | //! | //! The two most important traits in this module are [`Deserialize`] and | //! [`Deserializer`].",
+        "feature_scores": {
+          "lexical": 0.2779678228851891
+        }
+      },
+      {
+        "path": "serde_derive_internals/lib.rs",
+        "score": 0.2624656536299991,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "// Ignored clippy lints | // clippy bug: https://github.com/rust-lang/rust-clippy/issues/7575 | // clippy bug: https://github.com/rust-lang/rust-clippy/issues/6797 | // clippy bug: https://github.com/rust-lang/rust-clippy/issues/5704",
+        "feature_scores": {
+          "lexical": 0.2624656536299991
+        }
+      },
+      {
+        "path": "serde_derive_internals/build.rs",
+        "score": 0.2587047032482677,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "fn main() { | // Warning: build.rs is not published to crates.io. | // Sometimes on Windows the git checkout does not correctly wire up the | // symlink from serde_derive_internals/src to serde_derive/src/internals.",
+        "feature_scores": {
+          "lexical": 0.2587047032482677
+        }
+      },
+      {
+        "path": "serde_derive/src/internals/ast.rs",
+        "score": 0.24942182915543296,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "//! A Serde ast, parsed from the Syn ast and ready to generate Rust code. | /// A source data structure annotated with `#[derive(Serialize)]` and/or `#[derive(Deserialize)]`, | /// parsed into an internal representation. | pub struct Contai",
+        "feature_scores": {
+          "lexical": 0.24942182915543296
+        }
+      },
+      {
+        "path": "serde_derive/src/de/enum_untagged.rs",
+        "score": 0.24072086975873935,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "//! Deserialization for untagged enums: | //! | //! ```ignore | //! #[serde(untagged)]",
+        "feature_scores": {
+          "lexical": 0.24072086975873935
+        }
+      },
+      {
+        "path": "serde_derive/Cargo.toml",
+        "score": 0.2370737592434664,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "[package] | name = \"serde_derive\" | version = \"1.0.228\" | authors = [\"Erick Tryzelaar <erick.tryzelaar@gmail.com>\", \"David Tolnay <dtolnay@gmail.com>\"]",
+        "feature_scores": {
+          "lexical": 0.2370737592434664
+        }
+      },
+      {
+        "path": "serde_derive_internals/Cargo.toml",
+        "score": 0.23555623253835586,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "[package] | name = \"serde_derive_internals\" | version = \"0.29.1\" | authors = [\"Erick Tryzelaar <erick.tryzelaar@gmail.com>\", \"David Tolnay <dtolnay@gmail.com>\"]",
+        "feature_scores": {
+          "lexical": 0.23555623253835586
+        }
+      }
+    ],
+    "top5_read_budget": 26230,
+    "top10_read_budget": 29813
+  },
+  "scope": {
+    "metrics": {
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "precision_at_5": 0.2,
+      "precision_at_10": 0.1,
+      "first_hit_rank": 1,
+      "mrr": 1.0,
+      "full_coverage_at_5": true,
+      "full_coverage_at_10": true
+    },
+    "top_files": [
+      {
+        "path": "serde_derive/src/internals/case.rs",
+        "score": 0.6908404725525247,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "//! Code to convert the Rust-styled field/variant (e.g. `my_field`, `MyType`) to the | //! case of the source (e.g. `my-field`, `MY_FIELD`). | /// The different possible ways to change case of fields in a struct, or variants in an enum. | p",
+        "feature_scores": {
+          "lexical": 1.0,
+          "graph": 0.13267719785675913,
+          "cochange": 0.6533208106572311,
+          "mirror": 0.0,
+          "lexical_raw": 38.30882045258916
+        }
+      },
+      {
+        "path": "serde_core/src/de/mod.rs",
+        "score": 0.3272762082858105,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "//! Generic data structure deserialization framework. | //! | //! The two most important traits in this module are [`Deserialize`] and | //! [`Deserializer`].",
+        "feature_scores": {
+          "lexical": 0.2779678228851891,
+          "graph": 0.5903243632649297,
+          "cochange": 0.9036343404987882,
+          "mirror": 0.0,
+          "lexical_raw": 10.648619418505815
+        }
+      },
+      {
+        "path": "serde_core/src/de/ignored_any.rs",
+        "score": 0.32473450699470935,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// An efficient way of discarding data from a deserializer. | /// | /// Think of this like `serde_json::Value` in that it can be deserialized from | /// any type, except that it does not store any information about the data that",
+        "feature_scores": {
+          "lexical": 0.19756553415503955,
+          "graph": 0.87317054156132,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 7.568502575565281
+        }
+      },
+      {
+        "path": "serde_core/src/de/value.rs",
+        "score": 0.31341353070339334,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "//! Building blocks for deserializing basic values using the `IntoDeserializer` | //! trait. | //! | //! ```edition2021",
+        "feature_scores": {
+          "lexical": 0.15739402317422974,
+          "graph": 0.9702088309669351,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 6.029579374092224
+        }
+      },
+      {
+        "path": "serde_derive/src/de/enum_.rs",
+        "score": 0.31088004306174477,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// Generates `Deserialize::deserialize` body for an `enum Enum {...}` | // The variants have already been checked (in ast.rs) that all untagged variants appear at the end | // Ignore any error associated with non-untagged deserialization s",
+        "feature_scores": {
+          "lexical": 0.18717863617681174,
+          "graph": 0.8202092045151536,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 7.170592765857991
+        }
+      },
+      {
+        "path": "serde_derive/src/de/enum_externally.rs",
+        "score": 0.3103576823542908,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "//! Deserialization for externally tagged enums: | //! | //! ```ignore | //! enum Enum {}",
+        "feature_scores": {
+          "lexical": 0.17086287818413665,
+          "graph": 0.8887335562866147,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 6.545555322368704
+        }
+      },
+      {
+        "path": "serde/src/private/de.rs",
+        "score": 0.30720607538968914,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "pub use self::content::{ | pub use crate::serde_core_private::InPlaceSeed; | /// If the missing field is of type `Option<T>` then treat is as `None`, | /// otherwise it is an error.",
+        "feature_scores": {
+          "lexical": 0.14065496030595018,
+          "graph": 1.0,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 5.3883256201267
+        }
+      },
+      {
+        "path": "test_suite/tests/test_annotations.rs",
+        "score": 0.30547960839796484,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "// Clippy bug: https://github.com/rust-lang/rust-clippy/issues/7422 | fn my_default() -> Self; | fn should_skip(&self) -> bool; | fn serialize_with<S>(&self, ser: S) -> Result<S::Ok, S::Error>",
+        "feature_scores": {
+          "lexical": 0.14042541977442688,
+          "graph": 0.9886846295558581,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 5.379532193117983
+        }
+      },
+      {
+        "path": "serde_derive/src/de/identifier.rs",
+        "score": 0.3050484672702151,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "//! Deserialization of struct field identifiers and enum variant identifiers by | //! way of a Rust enum. | // Generates `Deserialize::deserialize` body for an enum with | // `serde(field_identifier)` or `serde(variant_identifier)` attribut",
+        "feature_scores": {
+          "lexical": 0.17300448573926996,
+          "graph": 0.8413263293704839,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 6.627597781678214
+        }
+      },
+      {
+        "path": "serde/src/lib.rs",
+        "score": 0.3026404060019298,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "//! # Serde | //! | //! Serde is a framework for ***ser***ializing and ***de***serializing Rust data | //! structures efficiently and generically.",
+        "feature_scores": {
+          "lexical": 0.21122845861928696,
+          "graph": 0.6548482975569421,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 8.091913095723424
+        }
+      }
+    ],
+    "top5_read_budget": 37028,
+    "top10_read_budget": 91025
+  }
+}

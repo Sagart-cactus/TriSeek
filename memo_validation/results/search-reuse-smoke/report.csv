@@ -1,0 +1,2 @@
+run_id,verdict,file_tokens_saved,file_eligible_tokens,file_false_negatives,search_tokens_saved,search_eligible_tokens,search_false_negatives,search_reuse_hits,duplicate_search_calls,combined_tokens_saved,combined_eligible_tokens
+ripgrep-bugfix-lowercase-size-suffixes,PASS,0,0,0,0,0,0,0,0,0,0

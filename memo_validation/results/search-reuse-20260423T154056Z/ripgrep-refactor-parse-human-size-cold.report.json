@@ -1,0 +1,34 @@
+{
+  "run_id": "ripgrep-refactor-parse-human-size-cold",
+  "task": "ripgrep cold-start refactor: shorten verbose size-parser API",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-refactor-parse-human-size-cold/a26379be-df81-4d73-a60d-39068cbcab3a.jsonl",
+  "compact_at_turn": null,
+  "file_replay": {
+    "session_id": "272e76ec-b861-4448-a595-9ae4d23b2724",
+    "tokens_saved": 0,
+    "eligible_tokens": 0,
+    "false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_navigation_tokens": 1556,
+    "optimized_navigation_tokens": 1556
+  },
+  "search_replay": {
+    "session_id": "9f49fda7-9843-45e2-a603-78899a7ee54b",
+    "total_search_calls": 3,
+    "duplicate_search_calls": 0,
+    "search_reuse_hits": 0,
+    "search_tokens_saved": 0,
+    "search_eligible_tokens": 0,
+    "search_false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_search_tokens": 1657,
+    "replay_search_tokens": 329
+  },
+  "combined": {
+    "actual_navigation_tokens": 3213,
+    "optimized_navigation_tokens": 1885,
+    "combined_eligible_tokens": 0,
+    "combined_tokens_saved": 0
+  },
+  "verdict": "PASS"
+}

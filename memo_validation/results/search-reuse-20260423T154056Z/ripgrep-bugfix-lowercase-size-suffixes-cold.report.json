@@ -1,0 +1,34 @@
+{
+  "run_id": "ripgrep-bugfix-lowercase-size-suffixes-cold",
+  "task": "ripgrep cold-start bugfix: lowercase unit spellings",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-bugfix-lowercase-size-suffixes-cold/5933dca0-4fee-4794-81aa-eca77979ee59.jsonl",
+  "compact_at_turn": null,
+  "file_replay": {
+    "session_id": "40811e0b-e800-4364-a2f8-29f69dcae786",
+    "tokens_saved": 0,
+    "eligible_tokens": 0,
+    "false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_navigation_tokens": 1208,
+    "optimized_navigation_tokens": 1208
+  },
+  "search_replay": {
+    "session_id": "7ea1e5f8-5875-4017-9c03-9d75d1e1aba0",
+    "total_search_calls": 3,
+    "duplicate_search_calls": 0,
+    "search_reuse_hits": 0,
+    "search_tokens_saved": 0,
+    "search_eligible_tokens": 0,
+    "search_false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_search_tokens": 1974,
+    "replay_search_tokens": 442
+  },
+  "combined": {
+    "actual_navigation_tokens": 3182,
+    "optimized_navigation_tokens": 1650,
+    "combined_eligible_tokens": 0,
+    "combined_tokens_saved": 0
+  },
+  "verdict": "PASS"
+}

@@ -1,9 +1,13 @@
+mod brief;
 mod build_output;
 mod context_pack;
+mod handoff;
+mod hydration_writer;
 mod install;
 mod mcp;
 mod memo_shim;
 mod output_format;
+mod pack;
 mod rg;
 mod search_runner;
 
@@ -11,9 +15,12 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use search_core::{
     AdaptiveRoute, AdaptiveRoutingDecision, CaseMode, DAEMON_HOST, DAEMON_PID_FILE,
-    DAEMON_PORT_FILE, DaemonSearchParams, DaemonStatusParams, ProcessMetrics, QueryRequest,
-    RpcRequest, RpcResponse, SearchEngineKind, SearchHit, SearchKind, SearchResponse,
-    SessionMetrics, SessionQuery, plan_query, route_query,
+    DAEMON_PORT_FILE, DaemonSearchParams, DaemonStatusParams, FullSnapshot, PinnedSnippetSpec,
+    PortabilitySessionStatus, ProcessMetrics, QueryRequest, RpcRequest, RpcResponse,
+    SearchEngineKind, SearchHit, SearchKind, SearchResponse, SessionListParams,
+    SessionListResponse, SessionMetrics, SessionQuery, SessionResumePrepareParams,
+    SessionSnapshotCreateParams, SessionSnapshotCreateResponse, SessionSnapshotDiffParams,
+    SessionSnapshotGetParams, SessionSnapshotListParams, plan_query, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
 use search_index::{
@@ -64,6 +71,16 @@ enum Commands {
     Doctor,
     /// Observe a harness hook event and forward it to Memo state in the daemon.
     MemoObserve(MemoObserveArgs),
+    /// Create, list, show, or diff context portability snapshots.
+    Snapshot(SnapshotArgs),
+    /// Create a snapshot and briefing for another harness to resume.
+    Handoff(HandoffArgs),
+    /// Prepare a snapshot for resume in another harness.
+    Resume(ResumeArgs),
+    /// Export or import portable snapshot packs.
+    Pack(PackArgs),
+    /// Generate a briefing for a snapshot.
+    Brief(BriefArgs),
 }
 
 #[derive(Args)]
@@ -321,6 +338,111 @@ struct MemoObserveArgs {
     repo: Option<PathBuf>,
 }
 
+#[derive(Args)]
+struct SnapshotArgs {
+    #[command(subcommand)]
+    command: SnapshotCommands,
+}
+
+#[derive(Subcommand)]
+enum SnapshotCommands {
+    Create(SnapshotCreateArgs),
+    List(SnapshotListCliArgs),
+    Show(SnapshotShowArgs),
+    Diff(SnapshotDiffCliArgs),
+}
+
+#[derive(Args)]
+struct SnapshotCreateArgs {
+    #[arg(long)]
+    session: String,
+    #[arg(long)]
+    source_harness: Option<String>,
+    #[arg(long)]
+    source_model: Option<String>,
+    #[arg(long = "pin", value_parser = parse_pin)]
+    pins: Vec<PinnedSnippetSpec>,
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct HandoffArgs {
+    /// Target harness that will resume this session: `codex` or `claude`.
+    target_harness: String,
+    /// TriSeek session id. Defaults to the newest open session in this repo.
+    #[arg(long)]
+    session: Option<String>,
+    /// Source harness for snapshot metadata: `claude`, `claude_code`, or `codex`.
+    #[arg(long = "from")]
+    source_harness: Option<String>,
+    /// Briefing mode to generate after the snapshot.
+    #[arg(long, default_value = "no-inference")]
+    brief_mode: String,
+    /// Pin a snippet as `path:start:end`.
+    #[arg(long = "pin", value_parser = parse_pin)]
+    pins: Vec<PinnedSnippetSpec>,
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct SnapshotListCliArgs {
+    #[arg(long)]
+    session: Option<String>,
+}
+
+#[derive(Args)]
+struct SnapshotShowArgs {
+    snapshot_id: String,
+    #[arg(long, default_value = "summary")]
+    format: String,
+}
+
+#[derive(Args)]
+struct SnapshotDiffCliArgs {
+    snapshot_a: String,
+    snapshot_b: String,
+}
+
+#[derive(Args)]
+struct ResumeArgs {
+    snapshot_id: String,
+    #[arg(long)]
+    write_to: Option<PathBuf>,
+    #[arg(long)]
+    budget_tokens: Option<usize>,
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct PackArgs {
+    #[command(subcommand)]
+    command: PackCommands,
+}
+
+#[derive(Subcommand)]
+enum PackCommands {
+    Export {
+        snapshot_id: String,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    Import {
+        pack_path: PathBuf,
+    },
+}
+
+#[derive(Args)]
+struct BriefArgs {
+    snapshot_id: String,
+    #[arg(long, default_value = "no-inference")]
+    mode: String,
+    #[arg(long)]
+    transcript: Option<PathBuf>,
+}
+
 // ---------------------------------------------------------------------------
 // Install subcommands
 // ---------------------------------------------------------------------------
@@ -436,6 +558,11 @@ fn main() -> Result<()> {
         },
         Commands::Doctor => install::doctor::run(),
         Commands::MemoObserve(args) => handle_memo_observe(args),
+        Commands::Snapshot(args) => handle_snapshot(args),
+        Commands::Handoff(args) => handle_handoff(args),
+        Commands::Resume(args) => handle_resume(args),
+        Commands::Pack(args) => handle_pack(args),
+        Commands::Brief(args) => handle_brief(args),
     }
 }
 
@@ -612,6 +739,248 @@ fn handle_context_pack(args: ContextPackArgs) -> Result<()> {
         );
         Ok(())
     }
+}
+
+fn handle_snapshot(args: SnapshotArgs) -> Result<()> {
+    match args.command {
+        SnapshotCommands::Create(args) => {
+            let repo_root = resolve_cli_root(args.path.as_deref(), None, None)?;
+            let mut stream = connect_to_daemon().context("TriSeek daemon is not running")?;
+            let result = rpc_call(
+                &mut stream,
+                "session_snapshot_create",
+                serde_json::to_value(SessionSnapshotCreateParams {
+                    target_root: repo_root.display().to_string(),
+                    session_id: args.session,
+                    source_harness: args.source_harness,
+                    source_model: args.source_model,
+                    pinned_snippet_paths: args.pins,
+                })?,
+            )?;
+            print_json(&result)
+        }
+        SnapshotCommands::List(args) => {
+            let repo_root = std::env::current_dir()?.canonicalize()?;
+            let mut stream = connect_to_daemon().context("TriSeek daemon is not running")?;
+            let result = rpc_call(
+                &mut stream,
+                "session_snapshot_list",
+                serde_json::to_value(SessionSnapshotListParams {
+                    target_root: repo_root.display().to_string(),
+                    session_id: args.session,
+                })?,
+            )?;
+            print_json(&result)
+        }
+        SnapshotCommands::Show(args) => {
+            let repo_root = std::env::current_dir()?.canonicalize()?;
+            let snapshot = get_snapshot(&repo_root, &args.snapshot_id)?;
+            if args.format == "json" {
+                print_json(&snapshot)
+            } else {
+                println!(
+                    "snapshot_id: {}\nsession_id: {}\nfiles: {}\nsearches: {}\nactions: {}",
+                    snapshot.manifest.snapshot_id,
+                    snapshot.manifest.session_id,
+                    snapshot.working_set.files_read.len(),
+                    snapshot.working_set.searches_run.len(),
+                    snapshot.action_log.len()
+                );
+                Ok(())
+            }
+        }
+        SnapshotCommands::Diff(args) => {
+            let repo_root = std::env::current_dir()?.canonicalize()?;
+            let mut stream = connect_to_daemon().context("TriSeek daemon is not running")?;
+            let result = rpc_call(
+                &mut stream,
+                "session_snapshot_diff",
+                serde_json::to_value(SessionSnapshotDiffParams {
+                    target_root: repo_root.display().to_string(),
+                    snapshot_a: args.snapshot_a,
+                    snapshot_b: args.snapshot_b,
+                })?,
+            )?;
+            print_json(&result)
+        }
+    }
+}
+
+fn handle_handoff(args: HandoffArgs) -> Result<()> {
+    let target_harness = handoff::normalize_harness(&args.target_harness)?;
+    let source_harness = args
+        .source_harness
+        .as_deref()
+        .map(handoff::normalize_harness)
+        .transpose()?;
+    let repo_root = resolve_cli_root(args.path.as_deref(), None, None)?;
+    let session_id = match args.session {
+        Some(session_id) => session_id,
+        None => select_newest_open_session(&repo_root)?,
+    };
+    let mut stream = connect_to_daemon().context("TriSeek daemon is not running")?;
+
+    let result = rpc_call(
+        &mut stream,
+        "session_snapshot_create",
+        serde_json::to_value(SessionSnapshotCreateParams {
+            target_root: repo_root.display().to_string(),
+            session_id: session_id.clone(),
+            source_harness: source_harness.clone(),
+            source_model: None,
+            pinned_snippet_paths: args.pins,
+        })?,
+    )?;
+    let snapshot: SessionSnapshotCreateResponse =
+        serde_json::from_value(result).context("failed to decode snapshot create response")?;
+    let briefing_path = write_briefing(&repo_root, &snapshot.snapshot_id, &args.brief_mode, None)?;
+
+    println!(
+        "{}",
+        handoff::render_handoff_block(
+            source_harness.as_deref(),
+            &target_harness,
+            &session_id,
+            &snapshot.snapshot_id,
+            &briefing_path
+        )
+    );
+    Ok(())
+}
+
+fn select_newest_open_session(repo_root: &Path) -> Result<String> {
+    let mut stream = connect_to_daemon().context("TriSeek daemon is not running")?;
+    let result = rpc_call(
+        &mut stream,
+        "session_list",
+        serde_json::to_value(SessionListParams {
+            target_root: repo_root.display().to_string(),
+        })?,
+    )?;
+    let response: SessionListResponse =
+        serde_json::from_value(result).context("failed to decode session list response")?;
+    response
+        .sessions
+        .into_iter()
+        .find(|session| session.status == PortabilitySessionStatus::Open)
+        .map(|session| session.session_id)
+        .context("No open TriSeek session found. Open one first, or rerun with --session <id>.")
+}
+
+fn handle_resume(args: ResumeArgs) -> Result<()> {
+    let repo_root = resolve_cli_root(args.path.as_deref(), None, None)?;
+    let mut stream = connect_to_daemon().context("TriSeek daemon is not running")?;
+    let result = rpc_call(
+        &mut stream,
+        "session_resume_prepare",
+        serde_json::to_value(SessionResumePrepareParams {
+            target_root: repo_root.display().to_string(),
+            snapshot_id: args.snapshot_id,
+            budget_tokens: args.budget_tokens,
+        })?,
+    )?;
+    let payload = result
+        .get("payload_markdown")
+        .and_then(serde_json::Value::as_str)
+        .context("resume response missing payload_markdown")?;
+    let target = args
+        .write_to
+        .map_or(hydration_writer::Target::Stdout, |path| {
+            hydration_writer::Target::ProjectFile { path }
+        });
+    hydration_writer::write_payload(target, payload)
+}
+
+fn handle_pack(args: PackArgs) -> Result<()> {
+    match args.command {
+        PackCommands::Export {
+            snapshot_id,
+            output,
+        } => {
+            let snapshot_dir = daemon_dir().join("snapshots").join(&snapshot_id);
+            pack::export(&snapshot_dir, &output)?;
+            println!("{}", output.display());
+            Ok(())
+        }
+        PackCommands::Import { pack_path } => {
+            let id = pack::import(&pack_path, &daemon_dir().join("snapshots"))?;
+            println!("{id}");
+            Ok(())
+        }
+    }
+}
+
+fn handle_brief(args: BriefArgs) -> Result<()> {
+    let repo_root = std::env::current_dir()?.canonicalize()?;
+    let transcript = args
+        .transcript
+        .as_ref()
+        .map(fs::read_to_string)
+        .transpose()?;
+    let path = write_briefing(
+        &repo_root,
+        &args.snapshot_id,
+        &args.mode,
+        transcript.as_deref(),
+    )?;
+    println!("{}", path.display());
+    Ok(())
+}
+
+fn write_briefing(
+    repo_root: &Path,
+    snapshot_id: &str,
+    mode: &str,
+    transcript: Option<&str>,
+) -> Result<PathBuf> {
+    let snapshot = get_snapshot(repo_root, snapshot_id)?;
+    let mode = match mode {
+        "no-inference" => brief::BriefingMode::NoInference,
+        "local-model" => brief::BriefingMode::LocalModel {
+            endpoint: "http://localhost:11434".into(),
+            model: "llama3.1".into(),
+        },
+        "cloud-model" => brief::BriefingMode::CloudModel {
+            provider: "openai".into(),
+            model: "gpt-5.2".into(),
+            api_key_env: "OPENAI_API_KEY".into(),
+        },
+        other => bail!("unsupported briefing mode {other}"),
+    };
+    let markdown = brief::generate_briefing(&snapshot, &mode, transcript)?;
+    brief::validate_briefing(&snapshot, &markdown)?;
+    let path = daemon_dir()
+        .join("snapshots")
+        .join(snapshot_id)
+        .join("briefing.md");
+    fs::write(&path, markdown)?;
+    Ok(path)
+}
+
+fn get_snapshot(repo_root: &Path, snapshot_id: &str) -> Result<FullSnapshot> {
+    let mut stream = connect_to_daemon().context("TriSeek daemon is not running")?;
+    let result = rpc_call(
+        &mut stream,
+        "session_snapshot_get",
+        serde_json::to_value(SessionSnapshotGetParams {
+            target_root: repo_root.display().to_string(),
+            snapshot_id: snapshot_id.to_string(),
+        })?,
+    )?;
+    let response: search_core::SessionSnapshotGetResponse = serde_json::from_value(result)?;
+    Ok(response.snapshot)
+}
+
+fn parse_pin(value: &str) -> std::result::Result<PinnedSnippetSpec, String> {
+    let parts = value.split(':').collect::<Vec<_>>();
+    if parts.len() != 3 {
+        return Err("expected path:start:end".to_string());
+    }
+    Ok(PinnedSnippetSpec {
+        path: parts[0].to_string(),
+        line_start: parts[1].parse().map_err(|_| "invalid start line")?,
+        line_end: parts[2].parse().map_err(|_| "invalid end line")?,
+    })
 }
 
 fn handle_session(args: SessionArgs) -> Result<SessionOutput> {
@@ -894,6 +1263,11 @@ where
             | "uninstall"
             | "doctor"
             | "memo-observe"
+            | "snapshot"
+            | "handoff"
+            | "resume"
+            | "pack"
+            | "brief"
             | "help"
     );
     let is_global_help = matches!(first_str.as_ref(), "-h" | "--help" | "-V" | "--version");
@@ -1158,6 +1532,7 @@ fn try_daemon_search(repo_root: &Path, request: &QueryRequest) -> Option<SearchR
     let params = serde_json::to_value(DaemonSearchParams {
         target_root: repo_root.display().to_string(),
         request: request.clone(),
+        session_id: None,
     })
     .ok()?;
     let result = rpc_call(&mut stream, "search", params).ok()?;
@@ -1216,6 +1591,35 @@ mod tests {
             OsString::from("."),
         ]);
         assert_eq!(args[1], OsString::from("build"));
+    }
+
+    #[test]
+    fn keeps_handoff_subcommand_intact() {
+        let args = rewrite_default_search_args([
+            OsString::from("triseek"),
+            OsString::from("handoff"),
+            OsString::from("codex"),
+        ]);
+        assert_eq!(args[1], OsString::from("handoff"));
+    }
+
+    #[test]
+    fn parses_handoff_command() {
+        let cli = Cli::parse_from([
+            OsString::from("triseek"),
+            OsString::from("handoff"),
+            OsString::from("codex"),
+            OsString::from("--session"),
+            OsString::from("demo"),
+            OsString::from("--from"),
+            OsString::from("claude_code"),
+        ]);
+        let Commands::Handoff(args) = cli.command else {
+            panic!("expected handoff command");
+        };
+        assert_eq!(args.target_harness, "codex");
+        assert_eq!(args.session.as_deref(), Some("demo"));
+        assert_eq!(args.source_harness.as_deref(), Some("claude_code"));
     }
 
     #[test]

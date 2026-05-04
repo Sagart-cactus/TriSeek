@@ -1,0 +1,27 @@
+{
+  "run_id": "ripgrep-feature-terabyte-size-suffix",
+  "task": "ripgrep feature: terabyte size suffix",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-feature-terabyte-size-suffix/0bfd0fa4-dbe5-4137-b473-fddb6fda0daa.jsonl",
+  "rust_replay": {
+    "session_id": "40a81e3b-3cd9-48d4-b23f-6f4f4b2c6f4f",
+    "total_reads": 3,
+    "redundant_reads_prevented": 1,
+    "tokens_saved": 202,
+    "false_negatives": 0,
+    "actual_navigation_tokens": 1603,
+    "memo_navigation_tokens": 1401,
+    "memo_eligible_redundant_tokens": 202,
+    "reduction_ratio_vs_eligible": 1.0,
+    "reduction_ratio_vs_oracle": 0.1386410432395333
+  },
+  "oracle": {
+    "elimination_ratio": 0.994748687171793,
+    "eliminated_tokens": 7956,
+    "redundant_read_tokens": 1457
+  },
+  "python_simulation": {
+    "saved_navigation_tokens": 124,
+    "navigation_reduction_ratio": 0.015488383712215838
+  },
+  "verdict": "PASS"
+}

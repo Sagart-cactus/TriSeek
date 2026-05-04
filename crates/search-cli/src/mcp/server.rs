@@ -42,6 +42,7 @@ pub struct McpState {
     index_mutation_lock: Mutex<()>,
     pub query_cache: QueryCache,
     pub search_memo: SearchMemo,
+    current_session_id: Mutex<Option<String>>,
 }
 
 pub struct IndexMutationGuard<'a> {
@@ -70,6 +71,7 @@ impl McpState {
             index_mutation_lock: Mutex::new(()),
             query_cache: QueryCache::new(Duration::from_secs(ttl_secs), 256),
             search_memo: SearchMemo::new(256),
+            current_session_id: Mutex::new(None),
         }
     }
 
@@ -151,6 +153,20 @@ impl McpState {
             state: self,
             _guard: guard,
         }
+    }
+
+    pub fn current_session_id(&self) -> Option<String> {
+        self.current_session_id
+            .lock()
+            .expect("MCP session mutex poisoned")
+            .clone()
+    }
+
+    pub fn set_current_session_id(&self, session_id: Option<String>) {
+        *self
+            .current_session_id
+            .lock()
+            .expect("MCP session mutex poisoned") = session_id;
     }
 }
 

@@ -1,0 +1,7 @@
+{
+  "status": "blocked",
+  "error": "The local `claude` CLI reported a 401 authentication failure. Re-authenticate Claude Code before attempting fresh study captures.",
+  "blocked_run": "ripgrep-bugfix-lowercase-size-suffixes",
+  "completed_runs": 0,
+  "total_runs": 6
+}

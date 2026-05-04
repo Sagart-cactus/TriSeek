@@ -1,0 +1,34 @@
+{
+  "run_id": "serde-refactor-multiname-accessors",
+  "task": "serde refactor: rename MultiName accessors",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-serde-refactor-multiname-accessors/e9eb0dff-4ff9-4cd1-80f2-c2290fb52890.jsonl",
+  "compact_at_turn": 1,
+  "file_replay": {
+    "session_id": "05680da9-e87d-425f-8c40-d6e8301b03c3",
+    "tokens_saved": 0,
+    "eligible_tokens": 0,
+    "false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_navigation_tokens": 276,
+    "optimized_navigation_tokens": 276
+  },
+  "search_replay": {
+    "session_id": "f04b53b6-bd13-4f55-9842-f0cd2fa5f7e9",
+    "total_search_calls": 6,
+    "duplicate_search_calls": 1,
+    "search_reuse_hits": 1,
+    "search_tokens_saved": 628,
+    "search_eligible_tokens": 679,
+    "search_false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_search_tokens": 1510,
+    "replay_search_tokens": 720
+  },
+  "combined": {
+    "actual_navigation_tokens": 1786,
+    "optimized_navigation_tokens": 996,
+    "combined_eligible_tokens": 679,
+    "combined_tokens_saved": 628
+  },
+  "verdict": "PASS"
+}

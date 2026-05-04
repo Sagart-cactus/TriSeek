@@ -487,6 +487,108 @@ pub fn claude_hooks_settings_path(scope: Scope) -> Result<PathBuf> {
     })
 }
 
+pub fn claude_triseek_command_path(scope: Scope) -> Result<PathBuf> {
+    let cwd = std::env::current_dir().context("failed to read current working directory")?;
+    let home = home_dir().context("failed to resolve user home directory")?;
+    Ok(match scope {
+        Scope::Project | Scope::Local => cwd.join(".claude").join("commands").join("triseek.md"),
+        Scope::User => home.join(".claude").join("commands").join("triseek.md"),
+    })
+}
+
+pub fn codex_triseek_plugin_dir() -> Result<PathBuf> {
+    let home = home_dir().context("failed to resolve user home directory")?;
+    Ok(home.join(".codex").join("plugins").join("triseek"))
+}
+
+pub fn write_claude_triseek_command(path: &Path) -> Result<()> {
+    atomic_write(path, &triseek_command_markdown("claude_code"))
+}
+
+pub fn write_codex_triseek_plugin(plugin_dir: &Path) -> Result<()> {
+    let manifest = json!({
+        "name": "triseek",
+        "version": "0.1.0",
+        "description": "TriSeek handoff and resume commands for Codex.",
+    });
+    atomic_write(
+        &plugin_dir.join(".codex-plugin").join("plugin.json"),
+        &(serde_json::to_string_pretty(&manifest)? + "\n"),
+    )?;
+    atomic_write(
+        &plugin_dir.join("commands").join("triseek.md"),
+        &triseek_command_markdown("codex"),
+    )
+}
+
+pub fn remove_triseek_owned_file(path: &Path) -> Result<bool> {
+    let Ok(existing) = fs::read_to_string(path) else {
+        return Ok(false);
+    };
+    if !existing.contains("TRISEEK_MANAGED_COMMAND") {
+        return Ok(false);
+    }
+    fs::remove_file(path).with_context(|| format!("failed to remove {}", path.display()))?;
+    Ok(true)
+}
+
+pub fn remove_triseek_owned_plugin_dir(plugin_dir: &Path) -> Result<bool> {
+    let command_path = plugin_dir.join("commands").join("triseek.md");
+    let manifest_path = plugin_dir.join(".codex-plugin").join("plugin.json");
+    let command_owned = fs::read_to_string(&command_path)
+        .map(|text| text.contains("TRISEEK_MANAGED_COMMAND"))
+        .unwrap_or(false);
+    let manifest_owned = fs::read_to_string(&manifest_path)
+        .map(|text| text.contains("\"name\": \"triseek\""))
+        .unwrap_or(false);
+    if !command_owned || !manifest_owned {
+        return Ok(false);
+    }
+    fs::remove_dir_all(plugin_dir)
+        .with_context(|| format!("failed to remove {}", plugin_dir.display()))?;
+    Ok(true)
+}
+
+fn triseek_command_markdown(source_harness: &str) -> String {
+    format!(
+        r#"---
+description: Create or resume TriSeek handoffs between Claude and Codex
+argument-hint: handoff <codex|claude> | resume <snapshot_id>
+---
+<!-- TRISEEK_MANAGED_COMMAND: source_harness={source_harness} -->
+
+You are handling the TriSeek command for the current harness.
+
+Invocation arguments: `$ARGUMENTS`
+Current harness: `{source_harness}`
+
+Supported forms:
+- `handoff codex`
+- `handoff claude`
+- `resume <snapshot_id>`
+
+For `handoff <target-harness>`:
+1. Prefer the TriSeek MCP tool `session_handoff` with `source_harness` set to `{source_harness}` and the target harness from the user arguments.
+2. If MCP cannot create the handoff because there is no current TriSeek session, run the CLI fallback:
+   `triseek handoff <target-harness> --from {source_harness}`
+3. If the MCP result does not include a briefing path, create one with:
+   `triseek brief <snapshot_id> --mode no-inference`
+4. End by prominently showing the exact target command:
+   - For Codex: `In Codex, paste: $triseek resume <snapshot_id>`
+   - For Claude: `In Claude, paste: /triseek resume <snapshot_id>`
+
+For `resume <snapshot_id>`:
+1. Call the TriSeek MCP tool `session_resume` for the snapshot id.
+2. Read the returned hydration payload into the live context before doing more work.
+3. Summarize the restored goal, relevant files, searches, and suggested next step.
+4. Ask the user to press Enter or say "continue" before making edits or running a new implementation step.
+
+Raw shell fallback remains available as:
+`triseek resume <snapshot_id>`
+"#
+    )
+}
+
 pub fn opencode_config_path() -> Result<PathBuf> {
     let config_home = config_home_dir()?;
     Ok(config_home.join("opencode").join("opencode.json"))
@@ -778,6 +880,48 @@ args = ["mcp", "serve"]
         let out = ensure_codex_hooks_enabled(Some("[features]\nfoo=true\n")).unwrap();
         assert!(codex_hooks_enabled(&out).unwrap());
         assert!(out.contains("foo"));
+    }
+
+    #[test]
+    fn write_claude_command_emits_handoff_and_resume_contract() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join(".claude/commands/triseek.md");
+        write_claude_triseek_command(&path).unwrap();
+        let generated = std::fs::read_to_string(path).unwrap();
+        assert!(generated.contains("TRISEEK_MANAGED_COMMAND"));
+        assert!(generated.contains("handoff <codex|claude> | resume <snapshot_id>"));
+        assert!(generated.contains("session_handoff"));
+        assert!(generated.contains("session_resume"));
+        assert!(generated.contains("In Codex, paste: $triseek resume <snapshot_id>"));
+        assert!(generated.contains("In Claude, paste: /triseek resume <snapshot_id>"));
+    }
+
+    #[test]
+    fn write_codex_plugin_emits_command_prompt() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plugin_dir = tmp.path().join("triseek");
+        write_codex_triseek_plugin(&plugin_dir).unwrap();
+        let manifest =
+            std::fs::read_to_string(plugin_dir.join(".codex-plugin/plugin.json")).unwrap();
+        let command = std::fs::read_to_string(plugin_dir.join("commands/triseek.md")).unwrap();
+        assert!(manifest.contains("\"name\": \"triseek\""));
+        assert!(command.contains("Current harness: `codex`"));
+        assert!(command.contains("`$ARGUMENTS`"));
+        assert!(command.contains("In Codex, paste: $triseek resume <snapshot_id>"));
+        assert!(command.contains("In Claude, paste: /triseek resume <snapshot_id>"));
+    }
+
+    #[test]
+    fn remove_triseek_owned_file_preserves_user_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("triseek.md");
+        std::fs::write(&path, "user command").unwrap();
+        assert!(!remove_triseek_owned_file(&path).unwrap());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "user command");
+
+        write_claude_triseek_command(&path).unwrap();
+        assert!(remove_triseek_owned_file(&path).unwrap());
+        assert!(!path.exists());
     }
 
     #[test]

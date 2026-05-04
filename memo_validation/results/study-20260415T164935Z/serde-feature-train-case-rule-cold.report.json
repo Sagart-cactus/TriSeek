@@ -1,0 +1,27 @@
+{
+  "run_id": "serde-feature-train-case-rule-cold",
+  "task": "serde cold-start feature: dashed title-case rename style",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-serde-feature-train-case-rule-cold/753c51d6-aa98-4a5f-8159-8938d9536668.jsonl",
+  "rust_replay": {
+    "session_id": "cfca73e3-5b81-4d5d-9ee6-f87f044da353",
+    "total_reads": 3,
+    "redundant_reads_prevented": 0,
+    "tokens_saved": 0,
+    "false_negatives": 0,
+    "actual_navigation_tokens": 4999,
+    "memo_navigation_tokens": 4999,
+    "memo_eligible_redundant_tokens": 0,
+    "reduction_ratio_vs_eligible": null,
+    "reduction_ratio_vs_oracle": 0.0
+  },
+  "oracle": {
+    "elimination_ratio": 0.4511777301927195,
+    "eliminated_tokens": 2107,
+    "redundant_read_tokens": 1699
+  },
+  "python_simulation": {
+    "saved_navigation_tokens": 0,
+    "navigation_reduction_ratio": 0.0
+  },
+  "verdict": "PASS"
+}

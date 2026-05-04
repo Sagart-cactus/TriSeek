@@ -1,0 +1,12 @@
+{
+  "total_runs": 12,
+  "false_negatives_total": 0,
+  "total_memo_eligible_redundant_tokens": 496,
+  "total_tokens_saved": 496,
+  "overall_eligible_reduction_ratio": 1.0,
+  "avg_per_run_eligible_reduction_ratio": 1.0,
+  "meets_80pct_target": true,
+  "pass_count": 12,
+  "marginal_count": 0,
+  "fail_count": 0
+}

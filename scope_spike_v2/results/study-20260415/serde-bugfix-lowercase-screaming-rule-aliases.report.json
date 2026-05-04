@@ -1,0 +1,334 @@
+{
+  "run_id": "serde-bugfix-lowercase-screaming-rule-aliases",
+  "task": "serde bugfix: lowercase screaming rename-rule aliases",
+  "prompt": "Serde derive accepts `rename_all` strings like `SCREAMING_SNAKE_CASE` and `SCREAMING-KEBAB-CASE`. Make the parser accept lowercase spellings of those two existing styles as aliases while preserving canonical behavior. Add focused tests and verify the relevant serde_derive tests before finishing.",
+  "repo_root": "/Users/trivedi/Documents/Projects/Triseek-bench/repos/serde-rs_serde",
+  "ground_truth_files": [
+    "serde_derive/src/internals/case.rs",
+    "test_suite/tests/test_macros.rs"
+  ],
+  "actual_navigation_tokens": 3658,
+  "lexical": {
+    "metrics": {
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "precision_at_5": 0.4,
+      "precision_at_10": 0.2,
+      "first_hit_rank": 1,
+      "mrr": 1.0,
+      "full_coverage_at_5": true,
+      "full_coverage_at_10": true
+    },
+    "top_files": [
+      {
+        "path": "serde_derive/src/internals/case.rs",
+        "score": 1.0,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "//! Code to convert the Rust-styled field/variant (e.g. `my_field`, `MyType`) to the | //! case of the source (e.g. `my-field`, `MY_FIELD`). | /// The different possible ways to change case of fields in a struct, or variants in an enum. | p",
+        "feature_scores": {
+          "lexical": 1.0
+        }
+      },
+      {
+        "path": "test_suite/tests/test_macros.rs",
+        "score": 0.6094166325843415,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "// That tests that the derived Serialize implementation doesn't trigger | // any warning about `serializer` not being used, in case of empty enums. | enum Void {} | struct NamedUnit;",
+        "feature_scores": {
+          "lexical": 0.6094166325843415
+        }
+      },
+      {
+        "path": "serde_derive/src/internals/attr.rs",
+        "score": 0.29199819227829976,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "// This module handles parsing of `#[serde(...)]` attributes. The entrypoints | // are `attr::Container::from_ast`, `attr::Variant::from_ast`, and | // `attr::Field::from_ast`. Each returns an instance of the corresponding | // struct. Note",
+        "feature_scores": {
+          "lexical": 0.29199819227829976
+        }
+      },
+      {
+        "path": "serde_core/src/ser/fmt.rs",
+        "score": 0.28530829338121866,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "fn custom<T: Display>(_msg: T) -> Self { | fn $f(self, v: $t) -> fmt::Result { | /// ```edition2021 | /// use serde::ser::Serialize;",
+        "feature_scores": {
+          "lexical": 0.28530829338121866
+        }
+      },
+      {
+        "path": "serde_core/Cargo.toml",
+        "score": 0.2685619569273408,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "# This cfg cannot be enabled, but it still forces Cargo to keep serde_derive's | # version in lockstep with serde's, even if someone depends on the two crates | # separately with serde's \"derive\" feature disabled. Every serde_derive release",
+        "feature_scores": {
+          "lexical": 0.2685619569273408
+        }
+      },
+      {
+        "path": "test_suite/tests/ui/duplicate-attribute/two-rename-ser.rs",
+        "score": 0.2630503344849323,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "struct S { | fn main() {}",
+        "feature_scores": {
+          "lexical": 0.2630503344849323
+        }
+      },
+      {
+        "path": "serde_derive/src/de/identifier.rs",
+        "score": 0.23159028491145087,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "//! Deserialization of struct field identifiers and enum variant identifiers by | //! way of a Rust enum. | // Generates `Deserialize::deserialize` body for an enum with | // `serde(field_identifier)` or `serde(variant_identifier)` attribut",
+        "feature_scores": {
+          "lexical": 0.23159028491145087
+        }
+      },
+      {
+        "path": "serde_derive/src/internals/name.rs",
+        "score": 0.2300479670494129,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "pub struct MultiName { | /// Return the container name for the container when serializing. | pub fn serialize_name(&self) -> &Name { | /// Return the container name for the container when deserializing.",
+        "feature_scores": {
+          "lexical": 0.2300479670494129
+        }
+      },
+      {
+        "path": "test_suite/tests/test_identifier.rs",
+        "score": 0.22820796300032703,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match"
+        ],
+        "summary": "//! Tests for `#[serde(field_identifier)]` and `#[serde(variant_identifier)]` | enum V { | fn variant1() { | fn aliases() {",
+        "feature_scores": {
+          "lexical": 0.22820796300032703
+        }
+      },
+      {
+        "path": "serde_derive/src/de/enum_.rs",
+        "score": 0.22600666138790484,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "/// Generates `Deserialize::deserialize` body for an `enum Enum {...}` | // The variants have already been checked (in ast.rs) that all untagged variants appear at the end | // Ignore any error associated with non-untagged deserialization s",
+        "feature_scores": {
+          "lexical": 0.22600666138790484
+        }
+      }
+    ],
+    "top5_read_budget": 22788,
+    "top10_read_budget": 29811
+  },
+  "scope": {
+    "metrics": {
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "precision_at_5": 0.4,
+      "precision_at_10": 0.2,
+      "first_hit_rank": 1,
+      "mrr": 1.0,
+      "full_coverage_at_5": true,
+      "full_coverage_at_10": true
+    },
+    "top_files": [
+      {
+        "path": "serde_derive/src/internals/case.rs",
+        "score": 0.7098629423512594,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "//! Code to convert the Rust-styled field/variant (e.g. `my_field`, `MyType`) to the | //! case of the source (e.g. `my-field`, `MY_FIELD`). | /// The different possible ways to change case of fields in a struct, or variants in an enum. | p",
+        "feature_scores": {
+          "lexical": 1.0,
+          "graph": 0.25014559587449026,
+          "cochange": 0.685531986610384,
+          "mirror": 0.0,
+          "lexical_raw": 40.96121716586965
+        }
+      },
+      {
+        "path": "test_suite/tests/test_macros.rs",
+        "score": 0.5013050280120434,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "// That tests that the derived Serialize implementation doesn't trigger | // any warning about `serializer` not being used, in case of empty enums. | enum Void {} | struct NamedUnit;",
+        "feature_scores": {
+          "lexical": 0.6094166325843415,
+          "graph": 0.419986277369876,
+          "cochange": 0.8083579622246125,
+          "mirror": 0.0,
+          "lexical_raw": 24.962447031780208
+        }
+      },
+      {
+        "path": "serde_core/src/de/impls.rs",
+        "score": 0.3479701360393577,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "//////////////////////////////////////////////////////////////////////////////// | struct UnitVisitor; | fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result { | fn visit_unit<E>(self) -> Result<Self::Value, E>",
+        "feature_scores": {
+          "lexical": 0.22556135846493341,
+          "graph": 0.915157812793564,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 9.239267788310707
+        }
+      },
+      {
+        "path": "serde_core/src/de/mod.rs",
+        "score": 0.3379382771025747,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "//! Generic data structure deserialization framework. | //! | //! The two most important traits in this module are [`Deserialize`] and | //! [`Deserializer`].",
+        "feature_scores": {
+          "lexical": 0.20516193988178938,
+          "graph": 0.9338419598276091,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 8.403682773669068
+        }
+      },
+      {
+        "path": "serde_derive/src/de/enum_.rs",
+        "score": 0.3268378662403907,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// Generates `Deserialize::deserialize` body for an `enum Enum {...}` | // The variants have already been checked (in ast.rs) that all untagged variants appear at the end | // Ignore any error associated with non-untagged deserialization s",
+        "feature_scores": {
+          "lexical": 0.22600666138790484,
+          "graph": 0.7622409727134977,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 9.257507938043137
+        }
+      },
+      {
+        "path": "serde_derive/src/de/struct_.rs",
+        "score": 0.32386596148085534,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// Generates `Deserialize::deserialize` body for a `struct Struct {...}` | // If there are getters (implying private fields), construct the local type | // and use an `Into` conversion to get the remote type. If there are no | // getters t",
+        "feature_scores": {
+          "lexical": 0.20173721235677883,
+          "graph": 0.8484920701403744,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 8.263401765783179
+        }
+      },
+      {
+        "path": "serde_derive/src/internals/attr.rs",
+        "score": 0.321796581894079,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "// This module handles parsing of `#[serde(...)]` attributes. The entrypoints | // are `attr::Container::from_ast`, `attr::Variant::from_ast`, and | // `attr::Field::from_ast`. Each returns an instance of the corresponding | // struct. Note",
+        "feature_scores": {
+          "lexical": 0.29199819227829976,
+          "graph": 0.4864544999761603,
+          "cochange": 0.9081759085608838,
+          "mirror": 0.0,
+          "lexical_raw": 11.960601365952797
+        }
+      },
+      {
+        "path": "serde_core/src/ser/fmt.rs",
+        "score": 0.320117284952615,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "fn custom<T: Display>(_msg: T) -> Self { | fn $f(self, v: $t) -> fmt::Result { | /// ```edition2021 | /// use serde::ser::Serialize;",
+        "feature_scores": {
+          "lexical": 0.28530829338121866,
+          "graph": 0.502884068815095,
+          "cochange": 0.9102796677768263,
+          "mirror": 0.0,
+          "lexical_raw": 11.686574964411747
+        }
+      },
+      {
+        "path": "test_suite/tests/test_identifier.rs",
+        "score": 0.31790619205533255,
+        "reasons": [
+          "exact symbol match",
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "//! Tests for `#[serde(field_identifier)]` and `#[serde(variant_identifier)]` | enum V { | fn variant1() { | fn aliases() {",
+        "feature_scores": {
+          "lexical": 0.22820796300032703,
+          "graph": 0.6886946785366412,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 9.347675931437141
+        }
+      },
+      {
+        "path": "serde_core/src/de/ignored_any.rs",
+        "score": 0.3165615167698858,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// An efficient way of discarding data from a deserializer. | /// | /// Think of this like `serde_json::Value` in that it can be deserialized from | /// any type, except that it does not store any information about the data that",
+        "feature_scores": {
+          "lexical": 0.18477240422122096,
+          "graph": 0.8714473296623486,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 7.568502575565281
+        }
+      }
+    ],
+    "top5_read_budget": 51483,
+    "top10_read_budget": 76126
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "run_id": "ripgrep-refactor-parse-human-size",
+  "task": "ripgrep refactor: rename parse_human_readable_size",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-refactor-parse-human-size/ed2ad386-68e6-4842-bf7f-230866812ba5.jsonl",
+  "compact_at_turn": null,
+  "file_replay": {
+    "session_id": "578aee63-a7bb-4c66-99fa-35d13754d253",
+    "tokens_saved": 0,
+    "eligible_tokens": 0,
+    "false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_navigation_tokens": 802,
+    "optimized_navigation_tokens": 802
+  },
+  "search_replay": {
+    "session_id": "9a25ea5d-5aa9-49ea-9dd3-86f494dc5abb",
+    "total_search_calls": 1,
+    "duplicate_search_calls": 0,
+    "search_reuse_hits": 0,
+    "search_tokens_saved": 0,
+    "search_eligible_tokens": 0,
+    "search_false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_search_tokens": 394,
+    "replay_search_tokens": 47
+  },
+  "combined": {
+    "actual_navigation_tokens": 1196,
+    "optimized_navigation_tokens": 849,
+    "combined_eligible_tokens": 0,
+    "combined_tokens_saved": 0
+  },
+  "verdict": "PASS"
+}

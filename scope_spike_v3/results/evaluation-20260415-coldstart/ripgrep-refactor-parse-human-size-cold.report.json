@@ -1,0 +1,315 @@
+{
+  "run_id": "ripgrep-refactor-parse-human-size-cold",
+  "task": "ripgrep cold-start refactor: shorten verbose size-parser API",
+  "prompt": "Within ripgrep's CLI crate there is a public helper for parsing human-readable byte limits whose current name is longer than it needs to be. Rename that API to a shorter, cleaner name everywhere it is re-exported or called, keep behavior unchanged, update any affected docs, and verify the relevant CLI test target before finishing.",
+  "repo_root": "/Users/trivedi/Documents/Projects/Triseek-bench/repos/BurntSushi_ripgrep",
+  "ground_truth_files": [
+    "crates/cli/src/human.rs",
+    "crates/cli/src/lib.rs",
+    "crates/core/flags/defs.rs"
+  ],
+  "actual_navigation_tokens": 2726,
+  "lexical": {
+    "metrics": {
+      "recall_at_5": 0.6666666666666666,
+      "recall_at_10": 1.0,
+      "precision_at_5": 0.4,
+      "precision_at_10": 0.3,
+      "first_hit_rank": 1,
+      "mrr": 1.0,
+      "full_coverage_at_5": false,
+      "full_coverage_at_10": true
+    },
+    "top_files": [
+      {
+        "path": "crates/cli/src/human.rs",
+        "score": 1.0,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "/// An error that occurs when parsing a human readable size description. | /// | /// This error provides an end user friendly message describing why the | /// description couldn't be parsed and what the expected format is.",
+        "feature_scores": {
+          "lexical": 1.0
+        }
+      },
+      {
+        "path": "crates/core/flags/hiargs.rs",
+        "score": 0.8822203817601797,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "/// A high level representation of CLI arguments. | /// | /// The distinction between low and high level arguments is somewhat arbitrary | /// and wishy washy. The main idea here is that high level arguments generally",
+        "feature_scores": {
+          "lexical": 0.8822203817601797
+        }
+      },
+      {
+        "path": "FAQ.md",
+        "score": 0.864627051699037,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "## FAQ | * [Does ripgrep support configuration files?](#config) | * [What's changed in ripgrep recently?](#changelog) | * [When is the next release?](#release)",
+        "feature_scores": {
+          "lexical": 0.864627051699037
+        }
+      },
+      {
+        "path": "crates/cli/src/lib.rs",
+        "score": 0.7630252753670893,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "# Standard I/O | # Coloring and buffering | # Escaping | // Note the use of a raw string!",
+        "feature_scores": {
+          "lexical": 0.7630252753670893
+        }
+      },
+      {
+        "path": "GUIDE.md",
+        "score": 0.757033600705789,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "# Don't let ripgrep vomit really long lines to my terminal, and show a preview. | # Add my 'web' type. | # Search hidden files / directories (e.g. dotfiles) by default | # Using glob patterns to include/exclude files or folders",
+        "feature_scores": {
+          "lexical": 0.757033600705789
+        }
+      },
+      {
+        "path": "tests/binary.rs",
+        "score": 0.7525524920961091,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "// This file contains a smattering of tests specifically for checking ripgrep's | // handling of binary files. There's quite a bit of discussion on this in this | // bug report: https://github.com/BurntSushi/ripgrep/issues/306 | // Our hays",
+        "feature_scores": {
+          "lexical": 0.7525524920961091
+        }
+      },
+      {
+        "path": "crates/core/flags/defs.rs",
+        "score": 0.7298886566853047,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "/// A list of all flags in ripgrep via implementations of `Flag`. | /// | /// The order of these flags matter. It determines the order of the flags in | /// the generated documentation (`-h`, `--help` and the man page) within each",
+        "feature_scores": {
+          "lexical": 0.7298886566853047
+        }
+      },
+      {
+        "path": "crates/printer/src/hyperlink/mod.rs",
+        "score": 0.7163167015888139,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "/// Hyperlink configuration. | /// | /// This configuration specifies both the [hyperlink format](HyperlinkFormat) | /// and an [environment](HyperlinkConfig) for interpolating a subset of",
+        "feature_scores": {
+          "lexical": 0.7163167015888139
+        }
+      },
+      {
+        "path": "crates/printer/src/json.rs",
+        "score": 0.7135278130087804,
+        "reasons": [
+          "content keyword match"
+        ],
+        "summary": "/// The configuration for the JSON printer. | /// | /// This is manipulated by the JSONBuilder and then referenced by the actual | /// implementation. Once a printer is build, the configuration is frozen and",
+        "feature_scores": {
+          "lexical": 0.7135278130087804
+        }
+      },
+      {
+        "path": "tests/util.rs",
+        "score": 0.7023845514442859,
+        "reasons": [
+          "path/keyword match"
+        ],
+        "summary": "/// Setup an empty work directory and return a command pointing to the ripgrep | /// executable whose CWD is set to the work directory. | /// | /// The name given will be used to create the directory. Generally, it should",
+        "feature_scores": {
+          "lexical": 0.7023845514442859
+        }
+      }
+    ],
+    "top5_read_budget": 37526,
+    "top10_read_budget": 125896
+  },
+  "scope": {
+    "metrics": {
+      "recall_at_5": 0.6666666666666666,
+      "recall_at_10": 1.0,
+      "precision_at_5": 0.4,
+      "precision_at_10": 0.3,
+      "first_hit_rank": 1,
+      "mrr": 1.0,
+      "full_coverage_at_5": false,
+      "full_coverage_at_10": true
+    },
+    "top_files": [
+      {
+        "path": "crates/cli/src/human.rs",
+        "score": 0.7658458457249737,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// An error that occurs when parsing a human readable size description. | /// | /// This error provides an end user friendly message describing why the | /// description couldn't be parsed and what the expected format is.",
+        "feature_scores": {
+          "lexical": 1.0,
+          "graph": 0.5587064135751086,
+          "cochange": 0.8453368478057315,
+          "mirror": 0.0,
+          "lexical_raw": 30.341000218458746
+        }
+      },
+      {
+        "path": "crates/core/flags/hiargs.rs",
+        "score": 0.7070118129854749,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// A high level representation of CLI arguments. | /// | /// The distinction between low and high level arguments is somewhat arbitrary | /// and wishy washy. The main idea here is that high level arguments generally",
+        "feature_scores": {
+          "lexical": 0.8822203817601797,
+          "graph": 0.6496495364857736,
+          "cochange": 0.8635530148269396,
+          "mirror": 0.0,
+          "lexical_raw": 26.76744879571437
+        }
+      },
+      {
+        "path": "crates/printer/src/json.rs",
+        "score": 0.6505616097217606,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// The configuration for the JSON printer. | /// | /// This is manipulated by the JSONBuilder and then referenced by the actual | /// implementation. Once a printer is build, the configuration is frozen and",
+        "feature_scores": {
+          "lexical": 0.7135278130087804,
+          "graph": 0.9155311832594054,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 21.6491475303758
+        }
+      },
+      {
+        "path": "crates/globset/src/glob.rs",
+        "score": 0.6287082264551338,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// Describes a matching strategy for a particular pattern. | /// | /// This provides a way to more quickly determine whether a pattern matches | /// a particular file path in a way that scales with a large number of",
+        "feature_scores": {
+          "lexical": 0.6652294217203273,
+          "graph": 0.9733284642037924,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 20.183726029741635
+        }
+      },
+      {
+        "path": "crates/core/flags/defs.rs",
+        "score": 0.6284469389185594,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// A list of all flags in ripgrep via implementations of `Flag`. | /// | /// The order of these flags matter. It determines the order of the flags in | /// the generated documentation (`-h`, `--help` and the man page) within each",
+        "feature_scores": {
+          "lexical": 0.7298886566853047,
+          "graph": 0.7496208728940981,
+          "cochange": 0.8871131196062105,
+          "mirror": 0.0,
+          "lexical_raw": 22.14555189193939
+        }
+      },
+      {
+        "path": "crates/cli/src/lib.rs",
+        "score": 0.623810425078438,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "# Standard I/O | # Coloring and buffering | # Escaping | // Note the use of a raw string!",
+        "feature_scores": {
+          "lexical": 0.7630252753670893,
+          "graph": 0.5726836135301175,
+          "cochange": 0.8819881057078263,
+          "mirror": 0.0,
+          "lexical_raw": 23.1509500466024
+        }
+      },
+      {
+        "path": "tests/util.rs",
+        "score": 0.6232050570515466,
+        "reasons": [
+          "path/keyword match",
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// Setup an empty work directory and return a command pointing to the ripgrep | /// executable whose CWD is set to the work directory. | /// | /// The name given will be used to create the directory. Generally, it should",
+        "feature_scores": {
+          "lexical": 0.7023845514442859,
+          "graph": 0.7694759654006381,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 21.311049828813125
+        }
+      },
+      {
+        "path": "crates/printer/src/hyperlink/mod.rs",
+        "score": 0.6123394230934857,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// Hyperlink configuration. | /// | /// This configuration specifies both the [hyperlink format](HyperlinkFormat) | /// and an [environment](HyperlinkConfig) for interpolating a subset of",
+        "feature_scores": {
+          "lexical": 0.7163167015888139,
+          "graph": 0.6934720859385082,
+          "cochange": 0.8892122009628729,
+          "mirror": 0.0,
+          "lexical_raw": 21.73376519939185
+        }
+      },
+      {
+        "path": "crates/ignore/src/walk.rs",
+        "score": 0.609439756025156,
+        "reasons": [
+          "import-neighbor signal",
+          "git co-change signal"
+        ],
+        "summary": "/// A directory entry with a possible error attached. | /// | /// The error typically refers to a problem parsing ignore files in a | /// particular directory.",
+        "feature_scores": {
+          "lexical": 0.6422614053064633,
+          "graph": 0.9374120338224913,
+          "cochange": 1.0,
+          "mirror": 0.0,
+          "lexical_raw": 19.486853438711023
+        }
+      },
+      {
+        "path": "FAQ.md",
+        "score": 0.6053706964303462,
+        "reasons": [
+          "git co-change signal"
+        ],
+        "summary": "## FAQ | * [Does ripgrep support configuration files?](#config) | * [What's changed in ripgrep recently?](#changelog) | * [When is the next release?](#release)",
+        "feature_scores": {
+          "lexical": 0.864627051699037,
+          "graph": 0.0,
+          "cochange": 0.8662740547117902,
+          "mirror": 0.0,
+          "lexical_raw": 26.233649564485823
+        }
+      }
+    ],
+    "top5_read_budget": 99233,
+    "top10_read_budget": 145971
+  }
+}

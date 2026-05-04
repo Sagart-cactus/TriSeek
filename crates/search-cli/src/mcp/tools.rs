@@ -12,9 +12,13 @@ use crate::mcp::search_memo::SearchMemoEntry;
 use crate::mcp::server::McpState;
 use crate::search_runner::{self, ExecutedSearch};
 use search_core::{
-    CaseMode, DAEMON_PORT_FILE, DaemonStatus, DaemonStatusParams, MemoCheckParams,
-    MemoSessionParams, MemoStatusParams, QueryRequest, RpcRequest, RpcResponse, SearchEngineKind,
-    SearchHit, SearchKind, SearchReuseCheckParams, SearchReuseReason,
+    ActionKind, CaseMode, DAEMON_PORT_FILE, DaemonStatus, DaemonStatusParams, MemoCheckParams,
+    MemoSessionParams, MemoStatusParams, PinnedSnippetSpec, PortabilitySessionStatus,
+    PortabilitySessionStatusParams, QueryRequest, RpcRequest, RpcResponse, SearchEngineKind,
+    SearchHit, SearchKind, SearchReuseCheckParams, SearchReuseReason, SessionCloseParams,
+    SessionListParams, SessionListResponse, SessionOpenParams, SessionRecordActionParams,
+    SessionResumePrepareParams, SessionSnapshotCreateParams, SessionSnapshotDiffParams,
+    SessionSnapshotGetParams, SessionSnapshotListParams,
 };
 use search_index::{BuildConfig, SearchEngine, daemon_dir, index_exists, read_index_metadata};
 use serde::Deserialize;
@@ -55,6 +59,16 @@ pub fn dispatch(
         "memo_status" => memo_status(state, arguments, session_id_hint),
         "memo_session" => memo_session(arguments, session_id_hint),
         "memo_check" => memo_check(state, arguments, session_id_hint),
+        "session_open" => session_open(state, arguments),
+        "session_status" => session_status(state, arguments),
+        "session_list" => session_list(state, arguments),
+        "session_close" => session_close(state, arguments),
+        "session_handoff" => session_handoff(state, arguments),
+        "session_snapshot" => session_snapshot(state, arguments),
+        "session_snapshot_list" => session_snapshot_list(state, arguments),
+        "session_snapshot_get" => session_snapshot_get(state, arguments),
+        "session_snapshot_diff" => session_snapshot_diff(state, arguments),
+        "session_resume" => session_resume(state, arguments),
         other => ToolOutcome::Error(McpToolError::invalid_query(format!(
             "unknown tool `{other}`"
         ))),
@@ -434,6 +448,11 @@ fn memo_status(state: &McpState, arguments: &Value, session_id_hint: Option<&str
         repo_root: state.repo_root().display().to_string(),
         files: args.files,
     };
+    record_action(
+        state,
+        ActionKind::Read,
+        json!({"method": "memo_status", "paths": params.files.clone()}),
+    );
     match daemon_rpc("memo_status", json!(params)) {
         Ok(value) => ToolOutcome::Success(value),
         Err(error) => ToolOutcome::Error(error),
@@ -513,10 +532,351 @@ fn memo_check(state: &McpState, arguments: &Value, session_id_hint: Option<&str>
         repo_root: state.repo_root().display().to_string(),
         path: args.path,
     };
+    record_action(
+        state,
+        ActionKind::MemoCheck,
+        json!({"method": "memo_check", "path": params.path.clone()}),
+    );
     match daemon_rpc("memo_check", json!(params)) {
         Ok(value) => ToolOutcome::Success(value),
         Err(error) => ToolOutcome::Error(error),
     }
+}
+
+// ---------------------------------------------------------------------------
+// session tools
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct SessionOpenArgs {
+    #[serde(default)]
+    session_id: Option<String>,
+    #[serde(default)]
+    goal: String,
+}
+
+fn session_open(state: &McpState, arguments: &Value) -> ToolOutcome {
+    let args: SessionOpenArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    match daemon_rpc(
+        "session_open",
+        json!(SessionOpenParams {
+            target_root: state.repo_root().display().to_string(),
+            session_id: args.session_id,
+            goal: args.goal,
+        }),
+    ) {
+        Ok(value) => {
+            if let Some(session_id) = value
+                .get("session")
+                .and_then(|session| session.get("session_id"))
+                .and_then(Value::as_str)
+            {
+                state.set_current_session_id(Some(session_id.to_string()));
+            }
+            ToolOutcome::Success(value)
+        }
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionIdArgs {
+    #[serde(default)]
+    session_id: Option<String>,
+}
+
+fn session_status(state: &McpState, arguments: &Value) -> ToolOutcome {
+    let args: SessionIdArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    let Some(session_id) = args.session_id.or_else(|| state.current_session_id()) else {
+        return ToolOutcome::Error(McpToolError::invalid_query(
+            "`session_id` is required when no current session is open",
+        ));
+    };
+    match daemon_rpc(
+        "session_status",
+        json!(PortabilitySessionStatusParams {
+            target_root: state.repo_root().display().to_string(),
+            session_id,
+        }),
+    ) {
+        Ok(value) => ToolOutcome::Success(value),
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+fn session_list(state: &McpState, _arguments: &Value) -> ToolOutcome {
+    match daemon_rpc(
+        "session_list",
+        json!(SessionListParams {
+            target_root: state.repo_root().display().to_string(),
+        }),
+    ) {
+        Ok(value) => ToolOutcome::Success(value),
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionCloseArgs {
+    #[serde(default)]
+    session_id: Option<String>,
+    #[serde(default = "default_resolved_status")]
+    status: String,
+}
+
+fn default_resolved_status() -> String {
+    "resolved".to_string()
+}
+
+fn parse_session_status(status: &str) -> Result<PortabilitySessionStatus, McpToolError> {
+    match status {
+        "open" => Ok(PortabilitySessionStatus::Open),
+        "resolved" => Ok(PortabilitySessionStatus::Resolved),
+        "abandoned" => Ok(PortabilitySessionStatus::Abandoned),
+        other => Err(McpToolError::invalid_query(format!(
+            "invalid session status `{other}`"
+        ))),
+    }
+}
+
+fn session_close(state: &McpState, arguments: &Value) -> ToolOutcome {
+    let args: SessionCloseArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    let Some(session_id) = args.session_id.or_else(|| state.current_session_id()) else {
+        return ToolOutcome::Error(McpToolError::invalid_query(
+            "`session_id` is required when no current session is open",
+        ));
+    };
+    let status = match parse_session_status(&args.status) {
+        Ok(status) => status,
+        Err(error) => return ToolOutcome::Error(error),
+    };
+    match daemon_rpc(
+        "session_close",
+        json!(SessionCloseParams {
+            target_root: state.repo_root().display().to_string(),
+            session_id: session_id.clone(),
+            status,
+        }),
+    ) {
+        Ok(value) => {
+            state.set_current_session_id(None);
+            ToolOutcome::Success(value)
+        }
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionSnapshotArgs {
+    #[serde(default)]
+    session_id: Option<String>,
+    #[serde(default)]
+    source_harness: Option<String>,
+    #[serde(default)]
+    source_model: Option<String>,
+    #[serde(default)]
+    pinned_snippet_paths: Vec<PinnedSnippetSpec>,
+}
+
+fn session_snapshot(state: &McpState, arguments: &Value) -> ToolOutcome {
+    let args: SessionSnapshotArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    let Some(session_id) = args
+        .session_id
+        .or_else(|| state.current_session_id())
+        .or_else(|| newest_open_session_id(state).ok().flatten())
+    else {
+        return ToolOutcome::Error(McpToolError::invalid_query(
+            "`session_id` is required when no current session is open",
+        ));
+    };
+    state.set_current_session_id(Some(session_id.clone()));
+    match daemon_rpc(
+        "session_snapshot_create",
+        json!(SessionSnapshotCreateParams {
+            target_root: state.repo_root().display().to_string(),
+            session_id,
+            source_harness: args.source_harness,
+            source_model: args.source_model,
+            pinned_snippet_paths: args.pinned_snippet_paths,
+        }),
+    ) {
+        Ok(value) => ToolOutcome::Success(value),
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SnapshotListArgs {
+    #[serde(default)]
+    session_id: Option<String>,
+}
+
+fn session_snapshot_list(state: &McpState, arguments: &Value) -> ToolOutcome {
+    let args: SnapshotListArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    match daemon_rpc(
+        "session_snapshot_list",
+        json!(SessionSnapshotListParams {
+            target_root: state.repo_root().display().to_string(),
+            session_id: args.session_id,
+        }),
+    ) {
+        Ok(value) => ToolOutcome::Success(value),
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SnapshotGetArgs {
+    snapshot_id: String,
+}
+
+fn session_snapshot_get(state: &McpState, arguments: &Value) -> ToolOutcome {
+    let args: SnapshotGetArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    match daemon_rpc(
+        "session_snapshot_get",
+        json!(SessionSnapshotGetParams {
+            target_root: state.repo_root().display().to_string(),
+            snapshot_id: args.snapshot_id,
+        }),
+    ) {
+        Ok(value) => ToolOutcome::Success(value),
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SnapshotDiffArgs {
+    snapshot_a: String,
+    snapshot_b: String,
+}
+
+fn session_snapshot_diff(state: &McpState, arguments: &Value) -> ToolOutcome {
+    let args: SnapshotDiffArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    match daemon_rpc(
+        "session_snapshot_diff",
+        json!(SessionSnapshotDiffParams {
+            target_root: state.repo_root().display().to_string(),
+            snapshot_a: args.snapshot_a,
+            snapshot_b: args.snapshot_b,
+        }),
+    ) {
+        Ok(value) => ToolOutcome::Success(value),
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionResumeArgs {
+    snapshot_id: String,
+    #[serde(default)]
+    budget_tokens: Option<usize>,
+}
+
+fn session_resume(state: &McpState, arguments: &Value) -> ToolOutcome {
+    let args: SessionResumeArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    match daemon_rpc(
+        "session_resume_prepare",
+        json!(SessionResumePrepareParams {
+            target_root: state.repo_root().display().to_string(),
+            snapshot_id: args.snapshot_id,
+            budget_tokens: args.budget_tokens,
+        }),
+    ) {
+        Ok(value) => {
+            if let Some(session_id) = value.get("session_id").and_then(Value::as_str) {
+                state.set_current_session_id(Some(session_id.to_string()));
+            }
+            if let Some(searches) = value.get("searches").and_then(Value::as_array) {
+                let entries = searches
+                    .iter()
+                    .filter_map(|search| {
+                        Some(SearchMemoEntry {
+                            search_id: search.get("search_id")?.as_str()?.to_string(),
+                            recorded_generation: 0,
+                            recorded_context_epoch: 0,
+                            matched_paths: search
+                                .get("result_paths")
+                                .and_then(Value::as_array)
+                                .into_iter()
+                                .flatten()
+                                .filter_map(Value::as_str)
+                                .map(ToString::to_string)
+                                .collect(),
+                            files_with_matches: search
+                                .get("result_paths")
+                                .and_then(Value::as_array)
+                                .map(|paths| paths.len() as u64)
+                                .unwrap_or(0),
+                            total_line_matches: 0,
+                            strategy: "hydrated_snapshot".to_string(),
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                state.search_memo.warm_from_snapshot(entries);
+            }
+            ToolOutcome::Success(value)
+        }
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+fn session_handoff(state: &McpState, arguments: &Value) -> ToolOutcome {
+    let snapshot = match session_snapshot(state, arguments) {
+        ToolOutcome::Success(value) => value,
+        ToolOutcome::Error(error) => return ToolOutcome::Error(error),
+    };
+    if let Some(session_id) = state.current_session_id() {
+        let _ = daemon_rpc(
+            "session_close",
+            json!(SessionCloseParams {
+                target_root: state.repo_root().display().to_string(),
+                session_id,
+                status: PortabilitySessionStatus::Resolved,
+            }),
+        );
+    }
+    ToolOutcome::Success(snapshot)
+}
+
+fn newest_open_session_id(state: &McpState) -> Result<Option<String>, McpToolError> {
+    let value = daemon_rpc(
+        "session_list",
+        json!(SessionListParams {
+            target_root: state.repo_root().display().to_string(),
+        }),
+    )?;
+    let response: SessionListResponse = serde_json::from_value(value).map_err(|error| {
+        McpToolError::backend_failure(format!("invalid session_list response: {error}"))
+    })?;
+    Ok(response
+        .sessions
+        .into_iter()
+        .find(|session| session.status == PortabilitySessionStatus::Open)
+        .map(|session| session.session_id))
 }
 
 // ---------------------------------------------------------------------------
@@ -680,6 +1040,7 @@ fn run_and_envelope(
         && let Some(entry) = state.search_memo.get(&cache_key)
         && let Some(reuse_envelope) = build_context_reuse_envelope(state, request, &entry)
     {
+        record_search_action(state, tool_name, request, &reuse_envelope, true);
         return ToolOutcome::Success(reuse_envelope);
     }
 
@@ -758,6 +1119,7 @@ fn run_and_envelope(
         }
     }
 
+    record_search_action(state, tool_name, request, &envelope, false);
     ToolOutcome::Success(envelope)
 }
 
@@ -819,6 +1181,41 @@ fn build_context_reuse_envelope(
         "results_omitted": true,
         "truncated": false,
     }))
+}
+
+fn record_search_action(
+    state: &McpState,
+    tool_name: &str,
+    request: &QueryRequest,
+    envelope: &Value,
+    cache_hit: bool,
+) {
+    record_action(
+        state,
+        ActionKind::Search,
+        json!({
+            "method": tool_name,
+            "query": request.pattern,
+            "kind": format!("{:?}", request.kind).to_ascii_lowercase(),
+            "cache_hit": cache_hit,
+            "result_paths": collect_matched_paths(envelope),
+        }),
+    );
+}
+
+fn record_action(state: &McpState, kind: ActionKind, payload: Value) {
+    let Some(session_id) = state.current_session_id() else {
+        return;
+    };
+    let _ = daemon_rpc(
+        "session_record_action",
+        json!(SessionRecordActionParams {
+            target_root: state.repo_root().display().to_string(),
+            session_id,
+            kind,
+            payload,
+        }),
+    );
 }
 
 fn collect_matched_paths(envelope: &Value) -> Vec<String> {

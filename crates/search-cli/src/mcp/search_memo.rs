@@ -7,7 +7,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SearchMemoEntry {
     pub search_id: String,
     pub recorded_generation: u64,
@@ -72,6 +72,24 @@ impl SearchMemo {
         let mut guard = self.inner.lock().expect("search_memo mutex poisoned");
         guard.entries.clear();
         guard.order.clear();
+    }
+
+    #[allow(dead_code)]
+    pub fn snapshot_state(&self) -> Vec<SearchMemoEntry> {
+        self.inner
+            .lock()
+            .expect("search_memo mutex poisoned")
+            .entries
+            .values()
+            .cloned()
+            .collect()
+    }
+
+    pub fn warm_from_snapshot(&self, entries: Vec<SearchMemoEntry>) {
+        for entry in entries {
+            let key = format!("hydrated|{}", entry.search_id);
+            self.put(key, entry);
+        }
     }
 }
 

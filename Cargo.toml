@@ -39,6 +39,9 @@ which = "7"
 rayon = "1.10.0"
 xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
 notify = "7"
+flate2 = "1.0"
+sha2 = "0.10"
+tar = "0.4"
 
 [profile.release]
 codegen-units = 1

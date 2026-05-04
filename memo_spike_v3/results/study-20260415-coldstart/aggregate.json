@@ -1,0 +1,20 @@
+{
+  "total_runs": 6,
+  "profiles": {
+    "conservative": {
+      "avg_navigation_reduction_ratio": 0.003851445945677911,
+      "avg_total_reduction_ratio": 0.0008306239560474347,
+      "verdict": "FAIL"
+    },
+    "default": {
+      "avg_navigation_reduction_ratio": 0.005645029672011968,
+      "avg_total_reduction_ratio": 0.0012177129581183177,
+      "verdict": "FAIL"
+    },
+    "aggressive": {
+      "avg_navigation_reduction_ratio": 0.0064975439294709635,
+      "avg_total_reduction_ratio": 0.0014107965082563398,
+      "verdict": "FAIL"
+    }
+  }
+}

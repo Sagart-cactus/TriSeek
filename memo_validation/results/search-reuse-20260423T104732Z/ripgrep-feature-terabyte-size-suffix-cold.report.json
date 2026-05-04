@@ -1,0 +1,34 @@
+{
+  "run_id": "ripgrep-feature-terabyte-size-suffix-cold",
+  "task": "ripgrep cold-start feature: next larger byte unit",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-feature-terabyte-size-suffix-cold/491ac634-ab18-436c-864e-11cd9d639d69.jsonl",
+  "compact_at_turn": null,
+  "file_replay": {
+    "session_id": "19029bbe-3056-4c2f-b771-3ef7a843194c",
+    "tokens_saved": 105,
+    "eligible_tokens": 105,
+    "false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_navigation_tokens": 1429,
+    "optimized_navigation_tokens": 1324
+  },
+  "search_replay": {
+    "session_id": "b04acb1f-51fb-4c79-a574-fab6d7381ff9",
+    "total_search_calls": 4,
+    "duplicate_search_calls": 0,
+    "search_reuse_hits": 0,
+    "search_tokens_saved": 0,
+    "search_eligible_tokens": 0,
+    "search_false_negatives": 0,
+    "post_compact_false_negatives": 0,
+    "actual_search_tokens": 474,
+    "replay_search_tokens": 894
+  },
+  "combined": {
+    "actual_navigation_tokens": 1903,
+    "optimized_navigation_tokens": 2218,
+    "combined_eligible_tokens": 105,
+    "combined_tokens_saved": 105
+  },
+  "verdict": "PASS"
+}

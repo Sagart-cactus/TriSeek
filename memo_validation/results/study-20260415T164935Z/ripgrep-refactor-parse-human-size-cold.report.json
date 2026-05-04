@@ -1,0 +1,27 @@
+{
+  "run_id": "ripgrep-refactor-parse-human-size-cold",
+  "task": "ripgrep cold-start refactor: shorten verbose size-parser API",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-ripgrep-refactor-parse-human-size-cold/a26379be-df81-4d73-a60d-39068cbcab3a.jsonl",
+  "rust_replay": {
+    "session_id": "f09bbb65-944c-4cf5-9d4c-3ca0060dc2ff",
+    "total_reads": 2,
+    "redundant_reads_prevented": 0,
+    "tokens_saved": 0,
+    "false_negatives": 0,
+    "actual_navigation_tokens": 1556,
+    "memo_navigation_tokens": 1556,
+    "memo_eligible_redundant_tokens": 0,
+    "reduction_ratio_vs_eligible": null,
+    "reduction_ratio_vs_oracle": 0.0
+  },
+  "oracle": {
+    "elimination_ratio": 0.962582538517975,
+    "eliminated_tokens": 2624,
+    "redundant_read_tokens": 1923
+  },
+  "python_simulation": {
+    "saved_navigation_tokens": 0,
+    "navigation_reduction_ratio": 0.0
+  },
+  "verdict": "PASS"
+}

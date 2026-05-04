@@ -1,0 +1,76 @@
+{
+  "run_id": "serde-refactor-multiname-accessors-cold",
+  "task": "serde cold-start refactor: clearer serializer/deserializer name accessors",
+  "trace_path": "/Users/trivedi/.claude/projects/-Users-trivedi-Documents-Projects-TriSeek-scope-spike-workdirs-serde-refactor-multiname-accessors-cold/6a11db62-4ca9-4496-affb-ca104347849c.jsonl",
+  "policies": [
+    {
+      "policy": "conservative",
+      "actual_navigation_tokens": 7436,
+      "memo_navigation_tokens": 7384,
+      "saved_navigation_tokens": 52,
+      "navigation_reduction_ratio": 0.006993006993006993,
+      "actual_total_tokens": 57591,
+      "memo_total_tokens": 57539,
+      "saved_total_tokens": 52,
+      "total_reduction_ratio": 0.000902918858849473,
+      "first_reads": 11,
+      "unchanged_rereads": 0,
+      "changed_rereads": 0,
+      "cached_searches": 1,
+      "changed_searches": 0,
+      "passthrough_tokens": 0,
+      "top_saved_files": [
+        {
+          "path": "serde_derive/src/internals/name.rs",
+          "saved_tokens": 52
+        }
+      ]
+    },
+    {
+      "policy": "default",
+      "actual_navigation_tokens": 7436,
+      "memo_navigation_tokens": 7360,
+      "saved_navigation_tokens": 76,
+      "navigation_reduction_ratio": 0.010220548682087143,
+      "actual_total_tokens": 57591,
+      "memo_total_tokens": 57515,
+      "saved_total_tokens": 76,
+      "total_reduction_ratio": 0.0013196506398569221,
+      "first_reads": 11,
+      "unchanged_rereads": 0,
+      "changed_rereads": 0,
+      "cached_searches": 1,
+      "changed_searches": 0,
+      "passthrough_tokens": 0,
+      "top_saved_files": [
+        {
+          "path": "serde_derive/src/internals/name.rs",
+          "saved_tokens": 76
+        }
+      ]
+    },
+    {
+      "policy": "aggressive",
+      "actual_navigation_tokens": 7436,
+      "memo_navigation_tokens": 7352,
+      "saved_navigation_tokens": 84,
+      "navigation_reduction_ratio": 0.011296395911780527,
+      "actual_total_tokens": 57591,
+      "memo_total_tokens": 57507,
+      "saved_total_tokens": 84,
+      "total_reduction_ratio": 0.0014585612335260719,
+      "first_reads": 11,
+      "unchanged_rereads": 0,
+      "changed_rereads": 0,
+      "cached_searches": 1,
+      "changed_searches": 0,
+      "passthrough_tokens": 0,
+      "top_saved_files": [
+        {
+          "path": "serde_derive/src/internals/name.rs",
+          "saved_tokens": 84
+        }
+      ]
+    }
+  ]
+}

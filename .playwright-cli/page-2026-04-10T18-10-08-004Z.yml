@@ -1,0 +1,968 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - link "▲ TriSeek" [ref=e3] [cursor=pointer]:
+      - /url: index.html
+    - generic [ref=e4]:
+      - link "workspace" [ref=e5] [cursor=pointer]:
+        - /url: "#workspace"
+      - link "crates" [ref=e6] [cursor=pointer]:
+        - /url: "#crates"
+      - link "types" [ref=e7] [cursor=pointer]:
+        - /url: "#data-types"
+      - link "build" [ref=e8] [cursor=pointer]:
+        - /url: "#index-build"
+      - link "search" [ref=e9] [cursor=pointer]:
+        - /url: "#search-flow"
+      - link "routing" [ref=e10] [cursor=pointer]:
+        - /url: "#routing"
+      - link "engine" [ref=e11] [cursor=pointer]:
+        - /url: "#engine"
+      - link "fastindex" [ref=e12] [cursor=pointer]:
+        - /url: "#fastindex"
+    - generic [ref=e13]:
+      - link "home" [ref=e14] [cursor=pointer]:
+        - /url: index.html
+      - link "install" [ref=e15] [cursor=pointer]:
+        - /url: install.html
+      - link "mcp" [ref=e16] [cursor=pointer]:
+        - /url: mcp.html
+      - link "how it works" [ref=e17] [cursor=pointer]:
+        - /url: triseek-explained.html
+      - link "architecture" [ref=e18] [cursor=pointer]:
+        - /url: triseek-architecture.html
+  - banner [ref=e19]:
+    - generic [ref=e20]: Rust Workspace · 4 Crates · ~3,500 LOC
+    - heading "Code Architecture" [level=1] [ref=e21]
+    - paragraph [ref=e22]: A deep dive into every crate, module, struct, and data flow in TriSeek — how the pieces fit together, what each component does, and how a search query travels through the system.
+  - generic [ref=e24]:
+    - generic [ref=e25]:
+      - generic [ref=e26]: 01 — Workspace
+      - heading "Project Structure" [level=2] [ref=e27]
+      - paragraph [ref=e28]: "TriSeek is a Cargo workspace with 4 crates, each with a clear responsibility boundary. Dependencies flow downward: CLI depends on everything, Index depends on Core, Core depends on nothing."
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]: Entry Points
+        - generic [ref=e32]:
+          - generic [ref=e33]:
+            - generic [ref=e34]: triseek
+            - generic [ref=e35]: CLI binary. Parses args, routes commands (build, search, session, update, stats), formats output as JSON.
+          - generic [ref=e36]:
+            - generic [ref=e37]: search-bench
+            - generic [ref=e38]: Benchmark harness. Loads manifest YAML, runs cold/warm trials, measures p50/p90, compares against ripgrep baseline.
+      - generic [ref=e39]: ↓
+      - generic [ref=e40]:
+        - generic [ref=e41]: Index & Engine
+        - generic [ref=e42]:
+          - generic [ref=e43]:
+            - generic [ref=e44]: engine.rs
+            - generic [ref=e45]: SearchEngine struct. Dual-backend (Fast/Legacy). Parallel verification via rayon. Regex matching + line extraction.
+          - generic [ref=e46]:
+            - generic [ref=e47]: fastindex.rs
+            - generic [ref=e48]: Mmap-based binary index. Zero-copy posting list reads. 96-byte header, trigram tables, doc table, string pool.
+          - generic [ref=e49]:
+            - generic [ref=e50]: build.rs
+            - generic [ref=e51]: Index construction. Full builds + delta updates. BuildAccumulator collects trigrams per file, then persists.
+          - generic [ref=e52]:
+            - generic [ref=e53]: walker.rs
+            - generic [ref=e54]: Parallel file walker using ignore crate. Respects .gitignore. Binary detection. Up to 8 threads.
+          - generic [ref=e55]:
+            - generic [ref=e56]: model.rs
+            - generic [ref=e57]: "Data models: PersistedIndex, RuntimeIndex, DeltaSnapshot, DocumentRecord. Merge logic for base+delta."
+          - generic [ref=e58]:
+            - generic [ref=e59]: storage.rs
+            - generic [ref=e60]: File I/O layer. Reads/writes base.bin, delta.bin, metadata.json, fast.idx. Path conventions.
+      - generic [ref=e61]: ↓
+      - generic [ref=e62]:
+        - generic [ref=e63]: Core
+        - generic [ref=e64]:
+          - generic [ref=e65]:
+            - generic [ref=e66]: planner.rs
+            - generic [ref=e67]: Query planning + adaptive routing. Classifies query shape, selectivity, repo size. Chooses Indexed/Scan/Ripgrep.
+          - generic [ref=e68]:
+            - generic [ref=e69]: trigram.rs
+            - generic [ref=e70]: Trigram encoding (3 bytes → u32), extraction from text/bytes. Normalization for case-insensitive matching.
+          - generic [ref=e71]:
+            - generic [ref=e72]: query.rs
+            - generic [ref=e73]: QueryRequest struct with pattern, kind, filters (path, extension, glob), case mode, max_results.
+          - generic [ref=e74]:
+            - generic [ref=e75]: result.rs
+            - generic [ref=e76]: SearchResponse, SearchHit (Content/Path), SearchLineMatch, SearchSummary. Full query audit trail.
+          - generic [ref=e77]:
+            - generic [ref=e78]: repo.rs
+            - generic [ref=e79]: RepoStats, RepoCategory (Small/Medium/Large/VeryLarge), IndexMetadata, FileFingerprint, BuildStats.
+          - generic [ref=e80]:
+            - generic [ref=e81]: metrics.rs
+            - generic [ref=e82]: ProcessMetrics (wall/cpu/rss), SearchMetrics (candidates/verified/bytes), SessionMetrics (amortized costs).
+    - generic [ref=e83]:
+      - heading "Directory Layout" [level=3] [ref=e84]
+      - generic [ref=e85]:
+        - generic [ref=e86]: file tree
+        - generic [ref=e91]: "TriSeek/ Cargo.toml # workspace root crates/ search-core/src/ lib.rs # re-exports all modules query.rs # QueryRequest, SearchKind, CaseMode result.rs # SearchResponse, SearchHit, SearchLineMatch planner.rs # plan_query(), route_query(), extract_regex_literals() trigram.rs # encode_trigram(), trigrams_from_bytes() repo.rs # RepoStats, RepoCategory, IndexMetadata metrics.rs # ProcessMetrics, SearchMetrics, SessionMetrics search-index/src/ lib.rs # re-exports engine.rs # SearchEngine, IndexBackend, parallel verification fastindex.rs # FastIndex mmap format, write_fast_index() build.rs # build_index(), update_index(), BuildAccumulator walker.rs # walk_repository_parallel(), binary detection model.rs # PersistedIndex, RuntimeIndex, DeltaSnapshot storage.rs # file I/O: base.bin, delta.bin, fast.idx crates/search-cli/src/ main.rs # CLI entry: build, search, session, update, stats search-bench/src/ main.rs # benchmark harness with cold/warm trials ~/.triseek/indexes/<root-key>/ # generated index directory base.bin # bincode-serialized full index fast.idx # mmap binary format (primary) delta.bin # optional incremental changes metadata.json # index metadata + repo stats"
+    - generic [ref=e92]:
+      - heading "Key Dependencies" [level=3] [ref=e93]
+      - table [ref=e94]:
+        - rowgroup [ref=e95]:
+          - row "Crate Purpose Used In" [ref=e96]:
+            - columnheader "Crate" [ref=e97]
+            - columnheader "Purpose" [ref=e98]
+            - columnheader "Used In" [ref=e99]
+        - rowgroup [ref=e100]:
+          - row "rayon 1.10 Work-stealing parallelism engine.rs — parallel file verification" [ref=e101]:
+            - cell "rayon 1.10" [ref=e102]
+            - cell "Work-stealing parallelism" [ref=e103]
+            - cell "engine.rs — parallel file verification" [ref=e104]
+          - row "memmap2 0.9 Memory-mapped file I/O fastindex.rs — zero-copy index, engine.rs — large file reads" [ref=e105]:
+            - cell "memmap2 0.9" [ref=e106]
+            - cell "Memory-mapped file I/O" [ref=e107]
+            - cell "fastindex.rs — zero-copy index, engine.rs — large file reads" [ref=e108]
+          - row "ignore 0.4 Git-aware parallel file walking walker.rs — respects .gitignore" [ref=e109]:
+            - cell "ignore 0.4" [ref=e110]
+            - cell "Git-aware parallel file walking" [ref=e111]
+            - cell "walker.rs — respects .gitignore" [ref=e112]
+          - row "regex / regex-syntax Pattern matching + AST parsing engine.rs — verification, planner.rs — literal extraction" [ref=e113]:
+            - cell "regex / regex-syntax" [ref=e114]
+            - cell "Pattern matching + AST parsing" [ref=e115]
+            - cell "engine.rs — verification, planner.rs — literal extraction" [ref=e116]
+          - row "bincode 2.0 Binary serialization storage.rs — base.bin / delta.bin format" [ref=e117]:
+            - cell "bincode 2.0" [ref=e118]
+            - cell "Binary serialization" [ref=e119]
+            - cell "storage.rs — base.bin / delta.bin format" [ref=e120]
+          - row "xxhash-rust Fast 64-bit hashing walker.rs — file fingerprinting for delta detection" [ref=e121]:
+            - cell "xxhash-rust" [ref=e122]
+            - cell "Fast 64-bit hashing" [ref=e123]
+            - cell "walker.rs — file fingerprinting for delta detection" [ref=e124]
+          - row "clap 4.5 CLI argument parsing triseek main.rs" [ref=e125]:
+            - cell "clap 4.5" [ref=e126]
+            - cell "CLI argument parsing" [ref=e127]
+            - cell "triseek main.rs" [ref=e128]
+          - row "globset 0.4 Glob pattern matching engine.rs — --glob path filters" [ref=e129]:
+            - cell "globset 0.4" [ref=e130]
+            - cell "Glob pattern matching" [ref=e131]
+            - cell "engine.rs — --glob path filters" [ref=e132]
+  - generic [ref=e134]:
+    - generic [ref=e135]:
+      - generic [ref=e136]: 02 — Crate Deep Dive
+      - 'heading "search-core: The Brain" [level=2] [ref=e137]'
+      - paragraph [ref=e138]:
+        - text: The core crate has zero I/O. It defines query types, result types, the trigram encoding scheme, repo classification, and — most importantly — the query planner that decides
+        - emphasis [ref=e139]: how
+        - text: to execute each search.
+    - generic [ref=e140]:
+      - generic [ref=e141]:
+        - generic [ref=e142]: Q
+        - heading "QueryRequest query.rs" [level=3] [ref=e143]:
+          - text: QueryRequest
+          - generic [ref=e144]: query.rs
+      - paragraph [ref=e145]: Every search starts here. The CLI parses user input into this struct, which flows through the entire pipeline.
+      - generic [ref=e146]:
+        - generic [ref=e147]: struct QueryRequest
+        - generic [ref=e148]:
+          - generic [ref=e149]: kind
+          - generic [ref=e150]: SearchKind
+          - generic [ref=e151]: Literal | Regex | Path | Auto
+        - generic [ref=e152]:
+          - generic [ref=e153]: engine
+          - generic [ref=e154]: SearchEngineKind
+          - generic [ref=e155]: Indexed | DirectScan | Ripgrep | Auto
+        - generic [ref=e156]:
+          - generic [ref=e157]: pattern
+          - generic [ref=e158]: String
+          - generic [ref=e159]: The search pattern
+        - generic [ref=e160]:
+          - generic [ref=e161]: case_mode
+          - generic [ref=e162]: CaseMode
+          - generic [ref=e163]: Sensitive | Insensitive
+        - generic [ref=e164]:
+          - generic [ref=e165]: path_substrings
+          - generic [ref=e166]: Vec<String>
+          - generic [ref=e167]: "Filter: path must contain these"
+        - generic [ref=e168]:
+          - generic [ref=e169]: path_prefixes
+          - generic [ref=e170]: Vec<String>
+          - generic [ref=e171]: "Filter: path starts with these"
+        - generic [ref=e172]:
+          - generic [ref=e173]: exact_paths
+          - generic [ref=e174]: Vec<String>
+          - generic [ref=e175]: "Filter: exact path match"
+        - generic [ref=e176]:
+          - generic [ref=e177]: exact_names
+          - generic [ref=e178]: Vec<String>
+          - generic [ref=e179]: "Filter: exact filename"
+        - generic [ref=e180]:
+          - generic [ref=e181]: extensions
+          - generic [ref=e182]: Vec<String>
+          - generic [ref=e183]: "Filter: file extensions (.rs, .go)"
+        - generic [ref=e184]:
+          - generic [ref=e185]: globs
+          - generic [ref=e186]: Vec<String>
+          - generic [ref=e187]: "Filter: glob patterns"
+        - generic [ref=e188]:
+          - generic [ref=e189]: max_results
+          - generic [ref=e190]: Option<usize>
+          - generic [ref=e191]: Early termination limit
+    - generic [ref=e192]:
+      - generic [ref=e193]:
+        - generic [ref=e194]: P
+        - heading "Query Planner planner.rs" [level=3] [ref=e195]:
+          - text: Query Planner
+          - generic [ref=e196]: planner.rs
+      - paragraph [ref=e197]:
+        - text: "The planner runs in two phases:"
+        - strong [ref=e198]: plan
+        - text: (what shape is this query?) then
+        - strong [ref=e199]: route
+        - text: (which engine should execute it?).
+      - generic [ref=e200]:
+        - generic [ref=e201]:
+          - heading "QueryShape enum" [level=3] [ref=e202]:
+            - text: QueryShape
+            - generic [ref=e203]: enum
+          - generic [ref=e204]:
+            - generic [ref=e205]:
+              - generic [ref=e206]: Literal
+              - generic [ref=e207]: Plain string, 3+ chars
+            - generic [ref=e208]:
+              - generic [ref=e209]: ShortLiteral
+              - generic [ref=e210]: < 3 chars (no useful trigrams)
+            - generic [ref=e211]:
+              - generic [ref=e212]: RegexAnchored
+              - generic [ref=e213]: Regex with extractable literals
+            - generic [ref=e214]:
+              - generic [ref=e215]: RegexWeak
+              - generic [ref=e216]: Pure regex, no literal seeds
+            - generic [ref=e217]:
+              - generic [ref=e218]: Path
+              - generic [ref=e219]: Path-only search
+        - generic [ref=e220]:
+          - heading "QuerySelectivity enum" [level=3] [ref=e221]:
+            - text: QuerySelectivity
+            - generic [ref=e222]: enum
+          - generic [ref=e223]:
+            - generic [ref=e224]:
+              - generic [ref=e225]: High
+              - generic [ref=e226]: "> 5 chars → very few candidates"
+            - generic [ref=e227]:
+              - generic [ref=e228]: Medium
+              - generic [ref=e229]: 3-5 chars → moderate candidates
+            - generic [ref=e230]:
+              - generic [ref=e231]: Low
+              - generic [ref=e232]: < 3 chars → many candidates
+            - generic [ref=e233]:
+              - generic [ref=e234]: Unknown
+              - generic [ref=e235]: Regex without clear literal length
+      - generic [ref=e236]:
+        - generic [ref=e237]: planner.rs — plan_query()
+        - generic [ref=e242]: "pub fn plan_query(request: &QueryRequest) -> QueryPlan { match request.kind { Path => strategy: PathIndex, Literal|Auto => { if pattern.len() < 3 => ShortLiteral + DirectScan else => Literal + Indexed } Regex => { seeds = extract_regex_literals(pattern) if longest_seed >= 3 => RegexAnchored + Indexed else => RegexWeak + DirectScan } } }"
+    - generic [ref=e243]:
+      - generic [ref=e244]:
+        - generic [ref=e245]: T
+        - heading "Trigram Encoding trigram.rs" [level=3] [ref=e246]:
+          - text: Trigram Encoding
+          - generic [ref=e247]: trigram.rs
+      - paragraph [ref=e248]: 3 bytes packed into a u32. All text is lowercased before encoding for case-insensitive index lookups.
+      - generic [ref=e249]:
+        - generic [ref=e250]: trigram.rs
+        - generic [ref=e255]: "pub type Trigram = u32; pub fn encode_trigram(bytes: &[u8]) -> Option<Trigram> { (bytes[0] as u32) << 16 | (bytes[1] as u32) << 8 | bytes[2] as u32 } pub fn trigrams_from_bytes(bytes: &[u8]) -> Vec<Trigram> { let normalized = normalize_for_index(bytes); // lowercase normalized.windows(3) .filter_map(encode_trigram) .collect::<BTreeSet<_>>() // dedup + sort .into_iter().collect() }"
+    - generic [ref=e256]:
+      - generic [ref=e257]:
+        - generic [ref=e258]: R
+        - heading "SearchResponse result.rs" [level=3] [ref=e259]:
+          - text: SearchResponse
+          - generic [ref=e260]: result.rs
+      - paragraph [ref=e261]: "The full audit trail: what was requested, how it was planned, which engine ran it, and every hit found."
+      - generic [ref=e262]:
+        - generic [ref=e263]: struct SearchResponse
+        - generic [ref=e264]:
+          - generic [ref=e265]: request
+          - generic [ref=e266]: QueryRequest
+          - generic [ref=e267]: Original query
+        - generic [ref=e268]:
+          - generic [ref=e269]: effective_kind
+          - generic [ref=e270]: SearchKind
+          - generic [ref=e271]: Resolved search kind
+        - generic [ref=e272]:
+          - generic [ref=e273]: engine
+          - generic [ref=e274]: SearchEngineKind
+          - generic [ref=e275]: Which engine ran
+        - generic [ref=e276]:
+          - generic [ref=e277]: routing
+          - generic [ref=e278]: AdaptiveRoutingDecision
+          - generic [ref=e279]: Why this engine was chosen
+        - generic [ref=e280]:
+          - generic [ref=e281]: plan
+          - generic [ref=e282]: QueryPlan
+          - generic [ref=e283]: Shape, selectivity, seeds
+        - generic [ref=e284]:
+          - generic [ref=e285]: hits
+          - generic [ref=e286]: Vec<SearchHit>
+          - generic [ref=e287]: "Content { path, lines } | Path { path }"
+        - generic [ref=e288]:
+          - generic [ref=e289]: summary
+          - generic [ref=e290]: SearchSummary
+          - generic [ref=e291]: files_with_matches, total_line_matches
+        - generic [ref=e292]:
+          - generic [ref=e293]: metrics
+          - generic [ref=e294]: SearchMetrics
+          - generic [ref=e295]: Timing, candidates, bytes scanned
+    - generic [ref=e296]:
+      - generic [ref=e297]:
+        - generic [ref=e298]: C
+        - heading "Repo Classification repo.rs" [level=3] [ref=e299]:
+          - text: Repo Classification
+          - generic [ref=e300]: repo.rs
+      - table [ref=e301]:
+        - rowgroup [ref=e302]:
+          - row "Category Files Disk Size Example" [ref=e303]:
+            - columnheader "Category" [ref=e304]
+            - columnheader "Files" [ref=e305]
+            - columnheader "Disk Size" [ref=e306]
+            - columnheader "Example" [ref=e307]
+        - rowgroup [ref=e308]:
+          - row "Small < 5K < 200 MB serde, ripgrep" [ref=e309]:
+            - cell "Small" [ref=e310]
+            - cell "< 5K" [ref=e311]
+            - cell "< 200 MB" [ref=e312]
+            - cell "serde, ripgrep" [ref=e313]
+          - row "Medium 5K–50K 200 MB–2 GB kubernetes" [ref=e314]:
+            - cell "Medium" [ref=e315]
+            - cell "5K–50K" [ref=e316]
+            - cell "200 MB–2 GB" [ref=e317]
+            - cell "kubernetes" [ref=e318]
+          - row "Large 50K–500K 2–20 GB linux, rust" [ref=e319]:
+            - cell "Large" [ref=e320]
+            - cell "50K–500K" [ref=e321]
+            - cell "2–20 GB" [ref=e322]
+            - cell "linux, rust" [ref=e323]
+          - row "VeryLarge > 500K > 20 GB chromium" [ref=e324]:
+            - cell "VeryLarge" [ref=e325]
+            - cell "> 500K" [ref=e326]
+            - cell "> 20 GB" [ref=e327]
+            - cell "chromium" [ref=e328]
+  - generic [ref=e330]:
+    - generic [ref=e331]:
+      - generic [ref=e332]: 03 — Index Data Model
+      - heading "How Data is Stored" [level=2] [ref=e333]
+      - paragraph [ref=e334]: "The index exists in three layers: PersistedIndex (full snapshot), optional DeltaSnapshot (incremental changes), and RuntimeIndex (merged in-memory view). The FastIndex provides the same data via mmap."
+    - generic [ref=e335]:
+      - generic [ref=e336]:
+        - generic [ref=e337]: D
+        - heading "DocumentRecord model.rs" [level=3] [ref=e338]:
+          - text: DocumentRecord
+          - generic [ref=e339]: model.rs
+      - paragraph [ref=e340]: Each file in the repo gets a DocumentRecord with a unique doc_id. The fingerprint enables delta detection on subsequent builds.
+      - generic [ref=e341]:
+        - generic [ref=e342]: struct DocumentRecord
+        - generic [ref=e343]:
+          - generic [ref=e344]: doc_id
+          - generic [ref=e345]: u32
+          - generic [ref=e346]: Unique identifier within index
+        - generic [ref=e347]:
+          - generic [ref=e348]: relative_path
+          - generic [ref=e349]: String
+          - generic [ref=e350]: "\"src/engine.rs\" (always / separators)"
+        - generic [ref=e351]:
+          - generic [ref=e352]: file_name
+          - generic [ref=e353]: String
+          - generic [ref=e354]: "\"engine.rs\""
+        - generic [ref=e355]:
+          - generic [ref=e356]: extension
+          - generic [ref=e357]: Option<String>
+          - generic [ref=e358]: "\"rs\" (lowercase)"
+        - generic [ref=e359]:
+          - generic [ref=e360]: fingerprint
+          - generic [ref=e361]: FileFingerprint
+          - generic [ref=e362]: "{ size, modified_unix_secs, hash: xxh3_64 }"
+    - generic [ref=e363]:
+      - generic [ref=e364]:
+        - generic [ref=e365]:
+          - generic [ref=e366]: P
+          - heading "PersistedIndex base.bin" [level=3] [ref=e367]:
+            - text: PersistedIndex
+            - generic [ref=e368]: base.bin
+        - paragraph [ref=e369]: Full snapshot serialized with bincode. Contains everything needed to answer queries.
+        - generic [ref=e370]:
+          - generic [ref=e371]: struct PersistedIndex
+          - generic [ref=e372]:
+            - generic [ref=e373]: docs
+            - generic [ref=e374]: Vec<DocumentRecord>
+          - generic [ref=e375]:
+            - generic [ref=e376]: content_postings
+            - generic [ref=e377]: Vec<PostingListEntry>
+          - generic [ref=e378]:
+            - generic [ref=e379]: path_postings
+            - generic [ref=e380]: Vec<PostingListEntry>
+          - generic [ref=e381]:
+            - generic [ref=e382]: filename_map
+            - generic [ref=e383]: Vec<NamePostingEntry>
+          - generic [ref=e384]:
+            - generic [ref=e385]: extension_map
+            - generic [ref=e386]: Vec<NamePostingEntry>
+      - generic [ref=e387]:
+        - generic [ref=e388]:
+          - generic [ref=e389]: D
+          - heading "DeltaSnapshot delta.bin" [level=3] [ref=e390]:
+            - text: DeltaSnapshot
+            - generic [ref=e391]: delta.bin
+        - paragraph [ref=e392]: Incremental changes since last full build. Merged into base at load time via RuntimeIndex::from_snapshots().
+        - generic [ref=e393]:
+          - generic [ref=e394]: struct DeltaSnapshot
+          - generic [ref=e395]:
+            - generic [ref=e396]: removed_paths
+            - generic [ref=e397]: Vec<String>
+          - generic [ref=e398]:
+            - generic [ref=e399]: docs
+            - generic [ref=e400]: Vec<DocumentRecord>
+          - generic [ref=e401]:
+            - generic [ref=e402]: content_postings
+            - generic [ref=e403]: Vec<PostingListEntry>
+          - emphasis [ref=e406]: + same maps
+        - paragraph [ref=e407]: If delta_ratio > 25% of base, triggers a full rebuild instead.
+    - generic [ref=e408]:
+      - generic [ref=e409]:
+        - generic [ref=e410]: B
+        - heading "IndexBackend engine.rs" [level=3] [ref=e411]:
+          - text: IndexBackend
+          - generic [ref=e412]: engine.rs
+      - paragraph [ref=e413]: The engine abstracts over two index implementations. It prefers Fast (mmap) but falls back to Legacy when a delta layer exists.
+      - generic [ref=e414]:
+        - generic [ref=e415]: enum IndexBackend
+        - generic [ref=e416]:
+          - generic [ref=e417]: Fast(FastIndex)
+          - generic [ref=e418]: mmap'd binary format. Used when fast.idx exists and no delta layer. <5ms open time.
+        - generic [ref=e419]:
+          - generic [ref=e420]: Legacy(RuntimeIndex)
+          - generic [ref=e421]: Deserialized from bincode. Merges base + delta. HashMaps in memory. ~600ms open time.
+      - generic [ref=e422]:
+        - generic [ref=e423]: engine.rs — open()
+        - generic [ref=e428]: "pub fn open(index_dir: &Path) -> Result<Self> { let metadata = read_index_metadata(index_dir)?; let has_delta = delta_exists(index_dir); if fast_index_exists(index_dir) && !has_delta { // Preferred: zero-copy mmap let fast = FastIndex::open(fast_index_path(index_dir))?; return Ok(SearchEngine { backend: Fast(fast), .. }); } // Fallback: deserialize + merge let base = load_base(index_dir)?; let delta = load_delta(index_dir)?; let runtime = RuntimeIndex::from_snapshots(base, delta); Ok(SearchEngine { backend: Legacy(runtime), .. }) }"
+  - generic [ref=e430]:
+    - generic [ref=e431]:
+      - generic [ref=e432]: 04 — Index Build Pipeline
+      - heading "Building the Index" [level=2] [ref=e433]
+      - paragraph [ref=e434]: The build pipeline walks the repository in parallel, extracts trigrams from each file, accumulates posting lists, and writes both bincode (legacy) and mmap (fast) index formats.
+    - generic [ref=e435]:
+      - generic [ref=e437]:
+        - generic [ref=e438]: walk_parallel()
+        - generic [ref=e439]: walker.rs
+        - generic [ref=e440]: 8 threads, .gitignore
+      - generic [ref=e441]: →
+      - generic [ref=e443]:
+        - generic [ref=e444]: BuildAccumulator
+        - generic [ref=e445]: build.rs
+        - generic [ref=e446]: trigrams per file
+      - generic [ref=e447]: →
+      - generic [ref=e449]:
+        - generic [ref=e450]: PersistedIndex
+        - generic [ref=e451]: model.rs
+        - generic [ref=e452]: posting lists + docs
+      - generic [ref=e453]: →
+      - generic [ref=e455]:
+        - generic [ref=e456]: persist()
+        - generic [ref=e457]: storage.rs
+        - generic [ref=e458]: base.bin + metadata.json
+      - generic [ref=e459]: →
+      - generic [ref=e461]:
+        - generic [ref=e462]: write_fast_index()
+        - generic [ref=e463]: fastindex.rs
+        - generic [ref=e464]: fast.idx (mmap)
+    - generic [ref=e465]:
+      - generic [ref=e466]:
+        - generic [ref=e467]: W
+        - heading "Parallel Walker walker.rs" [level=3] [ref=e468]:
+          - text: Parallel Walker
+          - generic [ref=e469]: walker.rs
+      - paragraph [ref=e470]:
+        - text: Uses the
+        - code [ref=e471]: ignore
+        - text: crate's parallel walker which natively respects
+        - code [ref=e472]: .gitignore
+        - text: ","
+        - code [ref=e473]: .ignore
+        - text: ", and hidden file rules."
+      - generic [ref=e474]:
+        - generic [ref=e475]:
+          - heading "For each file:" [level=3] [ref=e476]
+          - list [ref=e477]:
+            - listitem [ref=e478]: "1. Check file size ≤ max (default: no limit)"
+            - listitem [ref=e479]: 2. Read full contents into memory
+            - listitem [ref=e480]: "3. Binary detection: null bytes in first 4KB, or >20% control chars"
+            - listitem [ref=e481]: 4. Compute xxh3_64 hash for fingerprinting
+            - listitem [ref=e482]: 5. Emit ScannedFile to shared Mutex<Vec>
+        - generic [ref=e484]:
+          - generic [ref=e485]: struct ScannedFile
+          - generic [ref=e486]:
+            - generic [ref=e487]: relative_path
+            - generic [ref=e488]: String
+          - generic [ref=e489]:
+            - generic [ref=e490]: contents
+            - generic [ref=e491]: Vec<u8>
+          - generic [ref=e492]:
+            - generic [ref=e493]: content_hash
+            - generic [ref=e494]: u64 (xxh3)
+          - generic [ref=e495]:
+            - generic [ref=e496]: extension
+            - generic [ref=e497]: Option<String>
+          - generic [ref=e498]:
+            - generic [ref=e499]: file_size
+            - generic [ref=e500]: u64
+    - generic [ref=e501]:
+      - generic [ref=e502]:
+        - generic [ref=e503]: A
+        - heading "BuildAccumulator build.rs" [level=3] [ref=e504]:
+          - text: BuildAccumulator
+          - generic [ref=e505]: build.rs
+      - paragraph [ref=e506]: For each ScannedFile, the accumulator assigns a doc_id, extracts content + path trigrams, and builds inverted posting lists.
+      - generic [ref=e507]:
+        - generic [ref=e508]: build.rs — push()
+        - generic [ref=e513]: "fn push(&mut self, file: ScannedFile) { let doc_id = self.next_doc_id; // sequential u32 self.next_doc_id += 1; // Content trigrams → posting lists for tri in trigrams_from_bytes(&file.contents) { self.content_postings .entry(tri).or_default().push(doc_id); } // Path trigrams → separate posting lists for tri in trigrams_from_bytes(file.relative_path.as_bytes()) { self.path_postings .entry(tri).or_default().push(doc_id); } // Filename + extension maps for exact lookups self.filename_map.entry(file.file_name.to_lowercase())...; self.extension_map.entry(ext.to_lowercase())...; }"
+    - generic [ref=e514]:
+      - generic [ref=e515]:
+        - generic [ref=e516]: U
+        - heading "Delta Updates build.rs — update_index()" [level=3] [ref=e517]:
+          - text: Delta Updates
+          - generic [ref=e518]: build.rs — update_index()
+      - paragraph [ref=e519]:
+        - text: Instead of rebuilding from scratch,
+        - code [ref=e520]: update_index()
+        - text: compares fingerprints (size + mtime + xxh3 hash) to detect changes.
+      - generic [ref=e521]:
+        - generic [ref=e523]: How many files changed since last build?
+        - generic [ref=e524]:
+          - generic [ref=e526]: "> 25% of files → full rebuild (faster than delta merge)"
+          - generic [ref=e528]: ≤ 25% → create DeltaSnapshot with only changed/new/removed files
+      - paragraph [ref=e529]: "Delta exists as delta.bin alongside base.bin. At load time, RuntimeIndex::from_snapshots() merges them. Note: when a delta exists, the Fast (mmap) backend is not used — it falls back to Legacy to apply the merge."
+  - generic [ref=e531]:
+    - generic [ref=e532]:
+      - generic [ref=e533]: 05 — Search Execution
+      - heading "End-to-End Search Flow" [level=2] [ref=e534]
+      - paragraph [ref=e535]: "What happens from the moment you type a query to when results appear. Every search travels through the same pipeline: parse → plan → route → filter → candidates → verify → results."
+    - generic [ref=e536]:
+      - generic [ref=e538]:
+        - generic [ref=e539]: CLI Parse
+        - generic [ref=e540]: main.rs
+        - generic [ref=e541]: args → QueryRequest
+      - generic [ref=e542]: →
+      - generic [ref=e544]:
+        - generic [ref=e545]: plan_query()
+        - generic [ref=e546]: planner.rs
+        - generic [ref=e547]: shape + selectivity
+      - generic [ref=e548]: →
+      - generic [ref=e550]:
+        - generic [ref=e551]: route_query()
+        - generic [ref=e552]: planner.rs
+        - generic [ref=e553]: Indexed / rg / Scan
+      - generic [ref=e554]: →
+      - generic [ref=e556]:
+        - generic [ref=e557]: Path Filters
+        - generic [ref=e558]: engine.rs
+        - generic [ref=e559]: ext, name, glob, prefix
+      - generic [ref=e560]: →
+      - generic [ref=e562]:
+        - generic [ref=e563]: Trigram Candidates
+        - generic [ref=e564]: engine.rs
+        - generic [ref=e565]: posting list intersect
+      - generic [ref=e566]: →
+      - generic [ref=e568]:
+        - generic [ref=e569]: Parallel Verify
+        - generic [ref=e570]: engine.rs + rayon
+        - generic [ref=e571]: regex on candidates
+      - generic [ref=e572]: →
+      - generic [ref=e574]:
+        - generic [ref=e575]: SearchResponse
+        - generic [ref=e576]: result.rs
+        - generic [ref=e577]: hits + metrics
+    - generic [ref=e578]:
+      - generic [ref=e579]:
+        - generic [ref=e580]: E
+        - 'heading "Example: Searching for \"HttpResponse\" in Kubernetes" [level=3] [ref=e581]'
+      - generic [ref=e582]:
+        - generic [ref=e583]:
+          - generic [ref=e584]: "1"
+          - generic [ref=e585]:
+            - paragraph [ref=e586]: CLI parses input
+            - paragraph [ref=e587]:
+              - code [ref=e588]: triseek search "HttpResponse"
+              - text: "→ QueryRequest { kind: Auto, pattern: \"HttpResponse\", engine: Auto }"
+        - generic [ref=e589]:
+          - generic [ref=e590]: "2"
+          - generic [ref=e591]:
+            - paragraph [ref=e592]: plan_query() classifies the query
+            - paragraph [ref=e593]: "12 chars → shape: Literal, selectivity: High, strategy: Indexed, seeds: [\"httpresponse\"]"
+        - generic [ref=e594]:
+          - generic [ref=e595]: "3"
+          - generic [ref=e596]:
+            - paragraph [ref=e597]: route_query() selects engine
+            - paragraph [ref=e598]: "Kubernetes = Medium repo, High selectivity → route: Indexed. Reason: \"medium_repo, high selectivity, index available\""
+        - generic [ref=e599]:
+          - generic [ref=e600]: "4"
+          - generic [ref=e601]:
+            - paragraph [ref=e602]: SearchEngine::open() loads fast.idx via mmap
+            - paragraph [ref=e603]: No delta exists → Fast backend. Mmap maps file into address space in <5ms. No deserialization.
+        - generic [ref=e604]:
+          - generic [ref=e605]: "5"
+          - generic [ref=e606]:
+            - paragraph [ref=e607]: fast_path_filtered_docs() applies path filters
+            - paragraph [ref=e608]: No path filters in this query → all 28,132 doc_ids pass through.
+        - generic [ref=e609]:
+          - generic [ref=e610]: "6"
+          - generic [ref=e611]:
+            - paragraph [ref=e612]: fast_index_candidates() intersects posting lists
+            - paragraph [ref=e613]: "Extract trigrams from \"httpresponse\" (lowercased): \"htt\", \"ttp\", \"tpr\", \"pre\", \"res\", \"esp\", \"spo\", \"pon\", \"ons\", \"nse\". Look up each in content_table → 10 posting lists. Sorted intersection yields ~5 candidate doc_ids."
+        - generic [ref=e614]:
+          - generic [ref=e615]: "7"
+          - generic [ref=e616]:
+            - paragraph [ref=e617]: collect_content_hits_parallel() verifies candidates
+            - paragraph [ref=e618]: "5 candidates distributed across rayon thread pool. Each file: read (mmap if >32KB), compile regex from escaped literal, scan lines. AtomicBool for early termination if max_results reached."
+        - generic [ref=e619]:
+          - generic [ref=e620]: "8"
+          - generic [ref=e621]:
+            - paragraph [ref=e622]: Return SearchResponse
+            - paragraph [ref=e623]: "Hits with file paths + line matches, summary (files_with_matches, total_line_matches), metrics (wall_millis: ~50ms, candidate_docs: 5, bytes_scanned: 45KB)."
+  - generic [ref=e625]:
+    - generic [ref=e626]:
+      - generic [ref=e627]: 06 — Adaptive Routing
+      - heading "The Decision Tree" [level=2] [ref=e628]
+      - paragraph [ref=e629]: route_query() in planner.rs decides which execution engine handles each query. The decision considers repo size, query shape, selectivity, whether an index exists, and session context.
+    - generic [ref=e630]:
+      - generic [ref=e631]:
+        - generic [ref=e632]: "?"
+        - heading "Routing Logic" [level=3] [ref=e633]
+      - generic [ref=e634]:
+        - generic [ref=e636]: Did user explicitly choose an engine? (--engine index/scan/rg)
+        - generic [ref=e639]: Yes → use that engine directly
+        - generic [ref=e641]: Is an index available?
+        - generic [ref=e642]:
+          - generic [ref=e644]: No + Path query → DirectScan (walk files, match paths)
+          - generic [ref=e646]: No + Content query → Ripgrep (fastest without index)
+        - generic [ref=e648]: Index exists. What's the repo category?
+        - generic [ref=e649]:
+          - generic [ref=e651]: Small + not repeated_session → Ripgrep (page cache makes brute force free)
+          - generic [ref=e653]: Medium + not repeated_session + Low selectivity → Ripgrep
+          - generic [ref=e655]: Medium/Large/VeryLarge + High/Medium selectivity → Indexed
+          - generic [ref=e657]: Any size + repeated_session hint → Indexed (amortize index load)
+      - paragraph [ref=e658]:
+        - text: After routing,
+        - code [ref=e659]: adjust_route_for_filters()
+        - text: "in main.rs may override: if heavy path filters are set and the route was Ripgrep, it may switch to Indexed if the index can narrow candidates faster than rg can walk+filter."
+    - generic [ref=e660]:
+      - generic [ref=e661]:
+        - generic [ref=e662]:
+          - generic [ref=e663]: I
+          - heading "Indexed" [level=3] [ref=e664]
+        - paragraph [ref=e665]: "Open index → path filter → trigram candidates → parallel verify. Cost: O(posting lists + candidates)."
+        - paragraph [ref=e666]: "Best for: medium+ repos, selective queries, session workloads."
+      - generic [ref=e667]:
+        - generic [ref=e668]:
+          - generic [ref=e669]: R
+          - heading "Ripgrep" [level=3] [ref=e670]
+        - paragraph [ref=e671]:
+          - text: Spawn
+          - code [ref=e672]: rg --json
+          - text: "subprocess. Parse JSON output for hits. Cost: O(all files)."
+        - paragraph [ref=e673]: "Best for: small repos, weak regex, one-off queries, no index built yet."
+      - generic [ref=e674]:
+        - generic [ref=e675]:
+          - generic [ref=e676]: S
+          - heading "DirectScan" [level=3] [ref=e677]
+        - paragraph [ref=e678]: "Walk repo with scanner, apply path/content filters inline. Cost: O(all files)."
+        - paragraph [ref=e679]: "Best for: short literals (<3 chars), path-only queries without index."
+  - generic [ref=e681]:
+    - generic [ref=e682]:
+      - generic [ref=e683]: 07 — Search Engine Internals
+      - heading "Inside engine.rs" [level=2] [ref=e684]
+      - paragraph [ref=e685]: The ~1000-line engine module is the heart of TriSeek. It orchestrates path filtering, candidate selection, parallel verification, and line-level match extraction.
+    - generic [ref=e686]:
+      - generic [ref=e687]:
+        - generic [ref=e688]: F
+        - heading "Path Filtering Pipeline" [level=3] [ref=e689]
+      - paragraph [ref=e690]: Before any content search, path filters narrow the doc set. Each filter type uses the most efficient lookup available.
+      - table [ref=e691]:
+        - rowgroup [ref=e692]:
+          - row "Filter Fast Backend Legacy Backend" [ref=e693]:
+            - columnheader "Filter" [ref=e694]
+            - columnheader "Fast Backend" [ref=e695]
+            - columnheader "Legacy Backend" [ref=e696]
+        - rowgroup [ref=e697]:
+          - row "exact_paths path_to_doc HashMap O(1) path_lookup HashMap O(1)" [ref=e698]:
+            - cell "exact_paths" [ref=e699]
+            - cell "path_to_doc HashMap O(1)" [ref=e700]
+            - cell "path_lookup HashMap O(1)" [ref=e701]
+          - row "exact_names filename_map HashMap O(1) filename_map HashMap O(1)" [ref=e702]:
+            - cell "exact_names" [ref=e703]
+            - cell "filename_map HashMap O(1)" [ref=e704]
+            - cell "filename_map HashMap O(1)" [ref=e705]
+          - row "extensions extension_map HashMap O(1) extension_map HashMap O(1)" [ref=e706]:
+            - cell "extensions" [ref=e707]
+            - cell "extension_map HashMap O(1)" [ref=e708]
+            - cell "extension_map HashMap O(1)" [ref=e709]
+          - row "path_substrings Trigram search on path postings (3+ chars) or linear scan (<3) Same, via path_postings HashMap" [ref=e710]:
+            - cell "path_substrings" [ref=e711]
+            - cell "Trigram search on path postings (3+ chars) or linear scan (<3)" [ref=e712]
+            - cell "Same, via path_postings HashMap" [ref=e713]
+          - row "path_prefixes Linear scan all_docs(), starts_with check Same" [ref=e714]:
+            - cell "path_prefixes" [ref=e715]
+            - cell "Linear scan all_docs(), starts_with check" [ref=e716]
+            - cell "Same" [ref=e717]
+          - row "globs GlobSet match on all_docs() Same" [ref=e718]:
+            - cell "globs" [ref=e719]
+            - cell "GlobSet match on all_docs()" [ref=e720]
+            - cell "Same" [ref=e721]
+      - paragraph [ref=e722]: "Multiple filters are intersected: a doc must pass ALL filters. Result is a sorted Vec<u32> of surviving doc_ids."
+    - generic [ref=e723]:
+      - generic [ref=e724]:
+        - generic [ref=e725]: C
+        - heading "Trigram Candidate Selection" [level=3] [ref=e726]
+      - generic [ref=e727]:
+        - generic [ref=e728]: engine.rs — fast_index_candidates()
+        - generic [ref=e733]: "match plan.shape { Literal | Auto if pattern.len() < 3 => { // Too short for trigrams — return all filtered docs return filtered_docs; } Literal | Auto => { // Extract trigrams from the literal, intersect posting lists let candidates = fast_candidates_for_seed(fast, pattern); sorted_intersect(&candidates, &filtered_docs) } RegexAnchored => { // Use extracted literal seeds from the regex if regex_has_unescaped_alternation(pattern) { // OR pattern: union of each seed's candidates seeds.iter().fold(Vec::new(), |acc, seed| sorted_union(&acc, &fast_candidates_for_seed(fast, seed)) ) } else { // AND pattern: intersection of each seed's candidates seeds.iter().fold(None, |acc, seed| intersect_sorted(acc, fast_candidates_for_seed(fast, seed)) ) } } }"
+    - generic [ref=e734]:
+      - generic [ref=e735]:
+        - generic [ref=e736]: V
+        - heading "Parallel Verification rayon par_iter()" [level=3] [ref=e737]:
+          - text: Parallel Verification
+          - generic [ref=e738]: rayon par_iter()
+      - paragraph [ref=e739]: "The final step: read each candidate file and run the actual pattern match. This is the only phase that touches the filesystem."
+      - generic [ref=e740]:
+        - generic [ref=e741]:
+          - heading "How it works" [level=3] [ref=e742]
+          - list [ref=e743]:
+            - listitem [ref=e744]: Resolve all candidates upfront as (doc_id, PathBuf, rel_path)
+            - listitem [ref=e745]: Build regex matcher from pattern + case mode
+            - listitem [ref=e746]: Rayon distributes files across work-stealing thread pool
+            - listitem [ref=e747]: "Each thread: read file (mmap >32KB, Vec <32KB)"
+            - listitem [ref=e748]: match_lines() scans for regex matches, extracts line number + column
+            - listitem [ref=e749]:
+              - text: AtomicBool
+              - code [ref=e750]: done
+              - text: flag for early termination
+            - listitem [ref=e751]:
+              - text: AtomicUsize
+              - code [ref=e752]: total_found
+              - text: tracks match count
+            - listitem [ref=e753]: Mutex protects shared results Vec
+        - generic [ref=e754]:
+          - heading "CandidateBytes" [level=3] [ref=e755]
+          - generic [ref=e756]:
+            - generic [ref=e757]: enum CandidateBytes
+            - generic [ref=e758]:
+              - generic [ref=e759]: Owned(Vec<u8>)
+              - generic [ref=e760]: < 32KB files
+            - generic [ref=e761]:
+              - generic [ref=e762]: Mapped(Mmap)
+              - generic [ref=e763]: ≥ 32KB files, zero-copy
+          - paragraph [ref=e764]: Both implement Deref<Target=[u8]> so the matcher doesn't care which variant it gets.
+    - generic [ref=e765]:
+      - generic [ref=e766]:
+        - generic [ref=e767]: O
+        - heading "Set Operations on Sorted Arrays" [level=3] [ref=e768]
+      - paragraph [ref=e769]: All posting lists and candidate sets are sorted Vec<u32>. Two-pointer merge avoids HashSet allocation overhead.
+      - generic [ref=e770]:
+        - generic [ref=e771]:
+          - generic [ref=e772]: sorted_intersect() — O(n+m)
+          - generic [ref=e777]: "while i < a.len() && j < b.len() { match a[i].cmp(&b[j]) { Equal => { out.push(a[i]); i+=1; j+=1; } Less => i += 1, Greater => j += 1, } }"
+        - generic [ref=e778]:
+          - generic [ref=e779]: sorted_union() — O(n+m)
+          - generic [ref=e784]: "while i < a.len() && j < b.len() { match a[i].cmp(&b[j]) { Equal => { out.push(a[i]); i+=1; j+=1; } Less => { out.push(a[i]); i+=1; } Greater => { out.push(b[j]); j+=1; } } } // drain remaining from both sides"
+  - generic [ref=e786]:
+    - generic [ref=e787]:
+      - generic [ref=e788]: 08 — Fast Index Format
+      - heading "Inside fast.idx" [level=2] [ref=e789]
+      - paragraph [ref=e790]: A custom flat binary format designed for mmap. No parsing step — posting lists are read as raw &[u32] slices directly from mapped memory. Every section is at a fixed or header-declared offset.
+    - generic [ref=e791]:
+      - generic [ref=e792]:
+        - generic [ref=e793]: L
+        - heading "Binary Layout" [level=3] [ref=e794]
+      - generic [ref=e795]:
+        - generic [ref=e796]:
+          - text: Header
+          - text: 96B
+        - generic [ref=e797]:
+          - text: Content
+          - text: Trigram Table
+        - generic [ref=e798]:
+          - text: Content
+          - text: Postings
+        - generic [ref=e799]:
+          - text: Path
+          - text: Trigram Table
+        - generic [ref=e800]:
+          - text: Path
+          - text: Postings
+        - generic [ref=e801]:
+          - text: Doc
+          - text: Table
+        - generic [ref=e802]:
+          - text: String
+          - text: Pool
+      - generic [ref=e803]:
+        - generic [ref=e804]: Header (96 bytes)
+        - generic [ref=e805]:
+          - generic [ref=e806]: magic
+          - generic [ref=e807]: "[u8; 8]"
+          - generic [ref=e808]: "\"TRISEEK\\0\""
+        - generic [ref=e809]:
+          - generic [ref=e810]: version
+          - generic [ref=e811]: u32
+          - generic [ref=e812]: Currently 2
+        - generic [ref=e813]:
+          - generic [ref=e814]: num_docs
+          - generic [ref=e815]: u32
+          - generic [ref=e816]: Total documents indexed
+        - generic [ref=e817]:
+          - generic [ref=e818]: num_content_trigrams
+          - generic [ref=e819]: u32
+          - generic [ref=e820]: Distinct content trigrams
+        - generic [ref=e821]:
+          - generic [ref=e822]: num_path_trigrams
+          - generic [ref=e823]: u32
+          - generic [ref=e824]: Distinct path trigrams
+        - generic [ref=e825]:
+          - generic [ref=e826]: content_table_offset
+          - generic [ref=e827]: u64
+          - generic [ref=e828]: Byte offset to content trigram table
+        - generic [ref=e829]:
+          - generic [ref=e830]: content_postings_offset
+          - generic [ref=e831]: u64
+          - generic [ref=e832]: Byte offset to content posting arrays
+        - generic [ref=e833]:
+          - generic [ref=e834]: path_table_offset
+          - generic [ref=e835]: u64
+          - generic [ref=e836]: Byte offset to path trigram table
+        - generic [ref=e837]:
+          - generic [ref=e838]: path_postings_offset
+          - generic [ref=e839]: u64
+          - generic [ref=e840]: Byte offset to path posting arrays
+        - generic [ref=e841]:
+          - generic [ref=e842]: docs_offset
+          - generic [ref=e843]: u64
+          - generic [ref=e844]: Byte offset to doc table
+        - generic [ref=e845]:
+          - generic [ref=e846]: strings_offset
+          - generic [ref=e847]: u64
+          - generic [ref=e848]: Byte offset to string pool
+        - generic [ref=e849]:
+          - generic [ref=e850]: strings_size
+          - generic [ref=e851]: u64
+          - generic [ref=e852]: Total string pool size
+    - generic [ref=e853]:
+      - generic [ref=e854]:
+        - generic [ref=e855]:
+          - generic [ref=e856]: T
+          - heading "Trigram Table Entry (12 bytes each)" [level=3] [ref=e857]
+        - generic [ref=e858]:
+          - generic [ref=e859]:
+            - generic [ref=e860]: trigram
+            - generic [ref=e861]: u32
+            - generic [ref=e862]: The trigram key
+          - generic [ref=e863]:
+            - generic [ref=e864]: offset
+            - generic [ref=e865]: u32
+            - generic [ref=e866]: Index into posting array
+          - generic [ref=e867]:
+            - generic [ref=e868]: count
+            - generic [ref=e869]: u32
+            - generic [ref=e870]: Number of doc_ids
+        - paragraph [ref=e871]: At open(), all entries are loaded into a HashMap<u32, (u32, u32)> for O(1) lookup.
+      - generic [ref=e872]:
+        - generic [ref=e873]:
+          - generic [ref=e874]: D
+          - heading "Doc Table Entry (46 bytes each)" [level=3] [ref=e875]
+        - generic [ref=e876]:
+          - generic [ref=e877]:
+            - generic [ref=e878]: doc_id
+            - generic [ref=e879]: u32
+          - generic [ref=e880]:
+            - generic [ref=e881]: path_offset
+            - generic [ref=e882]: u32 + u16 len
+          - generic [ref=e883]:
+            - generic [ref=e884]: name_offset
+            - generic [ref=e885]: u32 + u16 len
+          - generic [ref=e886]:
+            - generic [ref=e887]: ext_offset
+            - generic [ref=e888]: u32 + u8 len
+          - generic [ref=e889]:
+            - generic [ref=e890]: fingerprint
+            - generic [ref=e891]: u64 + i64 + u64
+        - paragraph [ref=e892]: Strings stored in pool; entries hold (offset, length) pairs.
+    - generic [ref=e893]:
+      - generic [ref=e894]:
+        - generic [ref=e895]: R
+        - 'heading "Read Path: Trigram Lookup → Posting List" [level=3] [ref=e896]'
+      - generic [ref=e897]:
+        - generic [ref=e898]: fastindex.rs — content_postings()
+        - generic [ref=e903]: "pub fn content_postings(&self, trigram: u32) -> Option<Vec<u32>> { // O(1) HashMap lookup let (offset, count) = self.content_table.get(&trigram)?; // Calculate byte position in mmap'd region let byte_offset = self.content_postings_offset + (*offset as usize) * 4; // Zero-copy: cast raw bytes to &[u32] let ptr = self.mmap[byte_offset..].as_ptr() as *const u32; let slice = unsafe { slice::from_raw_parts(ptr, *count as usize) }; Some(slice.to_vec()) } // Total cost: 1 HashMap lookup + 1 pointer cast + 1 Vec copy"
+  - generic [ref=e905]:
+    - generic [ref=e906]:
+      - generic [ref=e907]: 09 — CLI & Bench
+      - heading "Entry Points" [level=2] [ref=e908]
+      - paragraph [ref=e909]: The CLI binary and benchmark harness are thin wrappers that parse arguments, dispatch to the engine, and format output.
+    - generic [ref=e910]:
+      - generic [ref=e911]:
+        - generic [ref=e912]: C
+        - heading "CLI Commands crates/search-cli/src/main.rs" [level=3] [ref=e913]:
+          - text: CLI Commands
+          - generic [ref=e914]: crates/search-cli/src/main.rs
+      - table [ref=e915]:
+        - rowgroup [ref=e916]:
+          - row "Command Handler What It Does" [ref=e917]:
+            - columnheader "Command" [ref=e918]
+            - columnheader "Handler" [ref=e919]
+            - columnheader "What It Does" [ref=e920]
+        - rowgroup [ref=e921]:
+          - 'row "build handle_build() Full index build: walk → accumulate → persist base.bin + fast.idx" [ref=e922]':
+            - cell "build" [ref=e923]
+            - cell "handle_build()" [ref=e924]
+            - 'cell "Full index build: walk → accumulate → persist base.bin + fast.idx" [ref=e925]'
+          - 'row "update handle_update() Incremental update: fingerprint diff → delta or rebuild" [ref=e926]':
+            - cell "update" [ref=e927]
+            - cell "handle_update()" [ref=e928]
+            - 'cell "Incremental update: fingerprint diff → delta or rebuild" [ref=e929]'
+          - 'row "search handle_search() Single query: plan → route → execute → JSON output" [ref=e930]':
+            - cell "search" [ref=e931]
+            - cell "handle_search()" [ref=e932]
+            - 'cell "Single query: plan → route → execute → JSON output" [ref=e933]'
+          - 'row "session handle_session() Multi-query from JSON file: per-query routing + aggregated metrics" [ref=e934]':
+            - cell "session" [ref=e935]
+            - cell "handle_session()" [ref=e936]
+            - 'cell "Multi-query from JSON file: per-query routing + aggregated metrics" [ref=e937]'
+          - 'row "stats handle_stats() Display index metadata: repo stats, build time, doc count" [ref=e938]':
+            - cell "stats" [ref=e939]
+            - cell "handle_stats()" [ref=e940]
+            - 'cell "Display index metadata: repo stats, build time, doc count" [ref=e941]'
+          - 'row "measure handle_measure() Scan repo without building index: for repo classification" [ref=e942]':
+            - cell "measure" [ref=e943]
+            - cell "handle_measure()" [ref=e944]
+            - 'cell "Scan repo without building index: for repo classification" [ref=e945]'
+    - generic [ref=e946]:
+      - generic [ref=e947]:
+        - generic [ref=e948]: B
+        - heading "Benchmark Harness search-bench/main.rs" [level=3] [ref=e949]:
+          - text: Benchmark Harness
+          - generic [ref=e950]: search-bench/main.rs
+      - paragraph [ref=e951]: Reads a manifest YAML listing repositories and query types. For each repo+query, runs cold trials (fresh process) and warm trials (reused index), measuring wall time via process metrics. Compares against ripgrep baseline.
+      - generic [ref=e952]:
+        - generic [ref=e953]:
+          - heading "Benchmark types" [level=3] [ref=e954]
+          - list [ref=e955]:
+            - listitem [ref=e956]: literal_selective — rare string
+            - listitem [ref=e957]: literal_moderate — medium frequency
+            - listitem [ref=e958]: literal_high — common string
+            - listitem [ref=e959]: regex_anchor — regex with literal seeds
+            - listitem [ref=e960]: regex_weak — pure regex, no literals
+            - listitem [ref=e961]: multi_or — alternation pattern
+            - listitem [ref=e962]: path_* — filename/path queries
+            - listitem [ref=e963]: session_20/100 — multi-query workload
+        - generic [ref=e964]:
+          - heading "Output" [level=3] [ref=e965]
+          - list [ref=e966]:
+            - listitem [ref=e967]: report.json — full results
+            - listitem [ref=e968]: report.csv — p50/p90 per query
+            - listitem [ref=e969]: summary.md — human-readable report
+            - listitem [ref=e970]: "Correctness validation: match counts must agree with rg baseline"
+  - contentinfo [ref=e971]:
+    - generic [ref=e972]:
+      - paragraph [ref=e973]:
+        - text: TriSeek Code Architecture —
+        - link "How TriSeek Works →" [ref=e974] [cursor=pointer]:
+          - /url: triseek-explained.html
+      - paragraph [ref=e975]: Built with Rust. 4 crates, ~3,500 lines of code.
