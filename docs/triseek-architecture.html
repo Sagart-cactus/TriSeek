@@ -323,6 +323,11 @@ footer {
     <a href="install.html">install</a>
     <a href="mcp.html">mcp</a>
     <a href="memo.html">memo</a>
+    <a href="context-portability.html">portability</a>
+    <a href="sessions.html">tasks</a>
+    <a href="pack-format.html">pack</a>
+    <a href="briefing.html">briefing</a>
+    <a href="vision.html">vision</a>
     <a href="context-pack.html">context&#8209;pack</a>
     <a href="context-handoff.html">handoff</a>
     <a href="triseek-explained.html">how it works</a>
@@ -332,7 +337,7 @@ footer {
 
 <!-- ═══════ HERO ═══════ -->
 <header class="hero" id="top">
-  <div class="hero-badge">Rust Workspace &middot; 4 Crates &middot; ~3,500 LOC</div>
+  <div class="hero-badge">Rust Workspace &middot; 6 Crates &middot; ~21,765 Rust LOC</div>
   <h1>Code <span class="hl">Architecture</span></h1>
   <p class="hero-sub">A deep dive into every crate, module, struct, and data flow in TriSeek &mdash; how the pieces fit together, what each component does, and how a search query travels through the system.</p>
 </header>
@@ -343,7 +348,7 @@ footer {
     <div class="reveal">
       <div class="section-num">01 &mdash; Workspace</div>
       <h2>Project <span class="hl">Structure</span></h2>
-      <p class="section-desc">TriSeek is a Cargo workspace with 4 crates, each with a clear responsibility boundary. Dependencies flow downward: CLI depends on everything, Index depends on Core, Core depends on nothing.</p>
+      <p class="section-desc">TriSeek is a Cargo workspace with 6 crates, each with a clear responsibility boundary. The CLI, server, frecency store, index engine, core protocol/types, and benchmark harness are split so the daemon can serve context portability without bloating the search core.</p>
     </div>
 
     <div class="arch-diagram reveal">
@@ -353,11 +358,40 @@ footer {
         <div class="arch-boxes">
           <div class="arch-box">
             <div class="name" style="color:var(--accent-pink)">triseek</div>
-            <div class="desc">CLI binary. Parses args, routes commands (build, search, session, update, stats), formats output as JSON.</div>
+            <div class="desc">CLI binary. Routes search, MCP install, snapshot, handoff, resume, pack, brief, daemon, and benchmark-support commands.</div>
           </div>
           <div class="arch-box">
             <div class="name" style="color:var(--accent-pink)">search-bench</div>
             <div class="desc">Benchmark harness. Loads manifest YAML, runs cold/warm trials, measures p50/p90, compares against ripgrep baseline.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-arrow">&darr;</div>
+
+      <!-- Daemon Layer -->
+      <div class="arch-layer" style="border-color: var(--accent-purple);">
+        <span class="arch-layer-label" style="color: var(--accent-purple);">Daemon &amp; Portability</span>
+        <div class="arch-boxes">
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-purple)">search-server</div>
+            <div class="desc">Long-running daemon. RPC, root services, watcher lifecycle, memo state, frecency state, session state, snapshots, git state, and resume hydration.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-purple)">session_state.rs</div>
+            <div class="desc">Persistent work-session index and append-only action logs under <code>sessions/</code>.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-purple)">snapshot.rs</div>
+            <div class="desc">Builds schema-versioned snapshot directories with manifest, working set, action log, pinned snippets, and git state.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-purple)">hydrate.rs</div>
+            <div class="desc">Primes memo, restores frecency, warms search reuse, and emits markdown hydration payloads for resumed harnesses.</div>
+          </div>
+          <div class="arch-box">
+            <div class="name" style="color:var(--accent-purple)">search-frecency</div>
+            <div class="desc">Persistent decayed file-access scores used for reranking and restored during resume.</div>
           </div>
         </div>
       </div>
@@ -453,8 +487,19 @@ footer {
       <span class="fn">walker.rs</span>                   <span class="cmt"># walk_repository_parallel(), binary detection</span>
       <span class="fn">model.rs</span>                    <span class="cmt"># PersistedIndex, RuntimeIndex, DeltaSnapshot</span>
       <span class="fn">storage.rs</span>                  <span class="cmt"># file I/O: base.bin, delta.bin, fast.idx</span>
-    <span class="str">crates/search-cli/src/</span>
-      <span class="fn">main.rs</span>                     <span class="cmt"># CLI entry: build, search, session, update, stats</span>
+    <span class="str">search-frecency/src/</span>
+      <span class="fn">lib.rs</span>                      <span class="cmt"># decayed file-access scores and restore logic</span>
+    <span class="str">search-server/src/</span>
+      <span class="fn">main.rs</span>                     <span class="cmt"># daemon RPC, watcher, root services</span>
+      <span class="fn">session_state.rs</span>            <span class="cmt"># sessions.json + action_log.jsonl</span>
+      <span class="fn">snapshot.rs</span>                 <span class="cmt"># snapshot manifest, working set, pinned snippets</span>
+      <span class="fn">git_state.rs</span>                <span class="cmt"># commit + dirty files</span>
+      <span class="fn">hydrate.rs</span>                  <span class="cmt"># resume payload and daemon state priming</span>
+    <span class="str">search-cli/src/</span>
+      <span class="fn">main.rs</span>                     <span class="cmt"># CLI entry: build, search, snapshot, handoff, resume, pack, brief</span>
+      <span class="fn">pack.rs</span>                     <span class="cmt"># .tcp export/import</span>
+      <span class="fn">brief.rs</span>                    <span class="cmt"># briefing generation and validation</span>
+      <span class="fn">hydration_writer.rs</span>         <span class="cmt"># write payloads to AGENTS.md / CLAUDE.md / stdout</span>
     <span class="str">search-bench/src/</span>
       <span class="fn">main.rs</span>                     <span class="cmt"># benchmark harness with cold/warm trials</span>
   <span class="str">~/.triseek/indexes/&lt;root-key&gt;/</span>   <span class="cmt"># generated index directory</span>

@@ -1,0 +1,83 @@
+<div class="portability-animation" data-variant="full">
+  <svg class="pa-svg" viewBox="0 0 860 480" role="img" aria-labelledby="pa-title pa-desc">
+    <title id="pa-title">Context handoff between Claude Code and Codex</title>
+    <desc id="pa-desc">TriSeek captures a session in Claude Code, packages it as a snapshot, and primes Codex to continue without losing context.</desc>
+    <rect class="pa-panel pa-claude" x="36" y="88" width="178" height="226" rx="14"/>
+    <text class="pa-label pa-cyan" x="125" y="126" text-anchor="middle">Claude Code</text>
+    <text class="pa-small" x="72" y="172">file.rs</text>
+    <text class="pa-small delay1" x="72" y="210">search...</text>
+    <text class="pa-small delay2" x="72" y="248">memo_check</text>
+    <rect class="pa-panel pa-daemon" x="282" y="58" width="296" height="318" rx="16"/>
+    <text class="pa-label" x="430" y="96" text-anchor="middle">TriSeek daemon</text>
+    <text class="pa-small pa-state s1" x="328" y="150">memo state</text>
+    <text class="pa-small pa-state s2" x="328" y="188">search reuse</text>
+    <text class="pa-small pa-state s3" x="328" y="226">frecency</text>
+    <text class="pa-small pa-state s4" x="328" y="264">action log</text>
+    <rect class="pa-snapshot" x="380" y="292" width="100" height="48" rx="10"/>
+    <text class="pa-small" x="430" y="322" text-anchor="middle">snapshot</text>
+    <rect class="pa-brief" x="494" y="292" width="72" height="48" rx="10"/>
+    <text class="pa-tiny" x="530" y="322" text-anchor="middle">briefing.md</text>
+    <rect class="pa-panel pa-codex" x="646" y="88" width="178" height="226" rx="14"/>
+    <text class="pa-label pa-green" x="735" y="126" text-anchor="middle">Codex</text>
+    <text class="pa-small codex-item" x="684" y="176">AGENTS.md</text>
+    <text class="pa-small codex-item delay1" x="684" y="218">cache hit</text>
+    <text class="pa-small codex-item delay2" x="684" y="260">primed</text>
+    <path class="pa-arrow a1" d="M214 198 C246 198 250 198 282 198"/>
+    <path class="pa-arrow a2" d="M578 198 C610 198 614 198 646 198"/>
+    <rect class="pa-pill p1" x="186" y="160" width="86" height="26" rx="13"/>
+    <text class="pa-tiny p1" x="229" y="178" text-anchor="middle">action</text>
+    <rect class="pa-pill p2" x="224" y="204" width="110" height="26" rx="13"/>
+    <text class="pa-tiny p2" x="279" y="222" text-anchor="middle">snapshot</text>
+    <rect class="pa-pill p3" x="546" y="240" width="102" height="26" rx="13"/>
+    <text class="pa-tiny p3" x="597" y="258" text-anchor="middle">resume</text>
+    <text class="pa-caption" x="430" y="420" text-anchor="middle">Same session. No re-exploration.</text>
+  </svg>
+  <div class="pa-annotation" aria-live="polite">
+    <span>1/5 Capturing</span><span>2/5 Snapshot</span><span>3/5 Switch</span><span>4/5 Resume</span><span>5/5 Continued work</span>
+  </div>
+  <div class="pa-controls">
+    <button type="button" class="pa-replay">Replay</button>
+    <button type="button" class="pa-pause">Pause</button>
+  </div>
+  <div class="pa-textfallback">
+    <ol>
+      <li><strong>Capturing.</strong> TriSeek calls accrue to the daemon action log.</li>
+      <li><strong>Snapshot.</strong> <code>session_snapshot</code> records working set, frecency, search reuse, git state, and pinned snippets.</li>
+      <li><strong>Switch.</strong> Move between Claude Code and Codex on the same machine.</li>
+      <li><strong>Resume.</strong> <code>session_resume</code> primes daemon state and emits a hydration payload.</li>
+      <li><strong>Continue.</strong> The next harness starts warm.</li>
+    </ol>
+  </div>
+</div>
+<style>
+:root{--bg-deep:#0a0e17;--bg-panel:#0f1520;--bg-card:#141c2b;--bg-input:#0d1219;--border:#1e2d42;--border-bright:#2a4060;--text-primary:#e2e8f0;--text-secondary:#8899b0;--accent-cyan:#22d3ee;--accent-green:#34d399;--accent-purple:#a78bfa;--accent-orange:#fb923c}body{margin:0;background:transparent;font-family:'Space Grotesk',sans-serif}
+.portability-animation{--pa-dur:12s;width:100%;max-width:860px;margin:2rem auto;color:var(--text-primary)}
+.pa-svg{width:100%;height:auto;display:block}
+.pa-panel{fill:var(--bg-card);stroke:var(--border-bright);stroke-width:2}
+.pa-claude{animation:pa-claude var(--pa-dur) ease-in-out infinite}.pa-codex{opacity:.38;animation:pa-codex var(--pa-dur) ease-in-out infinite}.pa-daemon{fill:var(--bg-panel)}
+.pa-label{font:700 20px 'JetBrains Mono',monospace;fill:var(--text-primary)}.pa-cyan{fill:var(--accent-cyan)}.pa-green{fill:var(--accent-green)}
+.pa-small{font:500 16px 'JetBrains Mono',monospace;fill:var(--text-secondary)}.pa-tiny{font:500 12px 'JetBrains Mono',monospace;fill:var(--text-primary)}.pa-caption{font:600 18px 'Space Grotesk',sans-serif;fill:var(--accent-green);opacity:0;animation:pa-caption var(--pa-dur) ease-in-out infinite}
+.pa-state{opacity:.45;animation:pa-state var(--pa-dur) ease-in-out infinite}.s2{animation-delay:.25s}.s3{animation-delay:.5s}.s4{animation-delay:.75s}
+.pa-snapshot{fill:rgba(167,139,250,.16);stroke:var(--accent-purple);opacity:0;animation:pa-snapshot var(--pa-dur) ease-in-out infinite}
+.pa-brief{fill:rgba(251,146,60,.14);stroke:var(--accent-orange);opacity:0;animation:pa-brief var(--pa-dur) ease-in-out infinite}
+.pa-arrow{fill:none;stroke:var(--border-bright);stroke-width:3;stroke-linecap:round;stroke-dasharray:8 10}.a1{animation:pa-flow1 var(--pa-dur) linear infinite}.a2{animation:pa-flow2 var(--pa-dur) linear infinite}
+.pa-pill{fill:var(--bg-input);stroke:var(--accent-cyan);opacity:0}.p1{animation:pa-pill1 var(--pa-dur) ease-in-out infinite}.p2{stroke:var(--accent-purple);animation:pa-pill2 var(--pa-dur) ease-in-out infinite}.p3{stroke:var(--accent-green);animation:pa-pill3 var(--pa-dur) ease-in-out infinite}
+.codex-item{opacity:0;animation:pa-codex-item var(--pa-dur) ease-in-out infinite}.delay1{animation-delay:.35s}.delay2{animation-delay:.7s}
+.pa-annotation{position:relative;min-height:1.6rem;text-align:center;font:700 .8rem 'JetBrains Mono',monospace;color:var(--accent-cyan)}.pa-annotation span{position:absolute;inset:0;opacity:0;animation:pa-step var(--pa-dur) linear infinite}.pa-annotation span:nth-child(2){animation-delay:2.4s}.pa-annotation span:nth-child(3){animation-delay:4.8s}.pa-annotation span:nth-child(4){animation-delay:7.2s}.pa-annotation span:nth-child(5){animation-delay:9.6s}
+.pa-controls{display:flex;justify-content:center;gap:.75rem;margin-top:.75rem}.pa-controls button{background:var(--bg-input);border:1px solid var(--border-bright);border-radius:8px;color:var(--text-secondary);font:700 .75rem 'JetBrains Mono',monospace;padding:.55rem .85rem}.pa-controls button:focus-visible{outline:2px solid var(--accent-cyan);outline-offset:2px}
+.pa-textfallback{color:var(--text-secondary);font-size:.9rem;margin-top:1rem}.pa-textfallback li{margin:.3rem 0}
+@keyframes pa-claude{0%,45%{opacity:1;filter:drop-shadow(0 0 12px var(--accent-cyan))}55%,95%{opacity:.38;filter:none}100%{opacity:1;filter:drop-shadow(0 0 12px var(--accent-cyan))}}
+@keyframes pa-codex{0%,45%{opacity:.38;filter:none}55%,95%{opacity:1;filter:drop-shadow(0 0 12px var(--accent-green))}100%{opacity:.38;filter:none}}
+@keyframes pa-state{8%,45%{opacity:1;fill:var(--accent-cyan)}58%,95%{opacity:1;fill:var(--accent-green)}}
+@keyframes pa-snapshot{0%,24%{opacity:0;transform:scale(.9);transform-origin:430px 316px}32%,95%{opacity:1;transform:scale(1)}48%,55%{filter:drop-shadow(0 0 14px var(--accent-purple))}}
+@keyframes pa-brief{0%,34%{opacity:0}42%,95%{opacity:1}}
+@keyframes pa-flow1{0%,5%{stroke:var(--border-bright)}8%,42%{stroke:var(--accent-cyan);stroke-dashoffset:-120}52%,100%{stroke:var(--border-bright)}}@keyframes pa-flow2{0%,48%{stroke:var(--border-bright)}58%,92%{stroke:var(--accent-green);stroke-dashoffset:-120}100%{stroke:var(--border-bright)}}
+@keyframes pa-pill1{5%,26%{opacity:1;transform:translateX(70px)}34%,100%{opacity:0}}@keyframes pa-pill2{25%,42%{opacity:1;transform:translateX(110px)}50%,100%{opacity:0}}@keyframes pa-pill3{52%,72%{opacity:1;transform:translateX(48px)}82%,100%{opacity:0}}
+@keyframes pa-codex-item{0%,62%{opacity:0;transform:translateY(8px)}72%,95%{opacity:1;transform:none}}@keyframes pa-caption{0%,80%{opacity:0}88%,98%{opacity:1}}
+@keyframes pa-step{0%,18%{opacity:1}20%,100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.portability-animation *{animation:none!important;transition:none!important}.pa-claude,.pa-codex,.pa-snapshot,.pa-brief,.codex-item,.pa-caption{opacity:1!important}.pa-state{opacity:1;fill:var(--accent-green)}.pa-textfallback{display:block}.pa-annotation span{position:static;display:block;opacity:1}}
+@media (prefers-reduced-motion:no-preference){.pa-textfallback{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}}
+</style>
+<script>
+document.querySelectorAll('.portability-animation').forEach((root)=>{const replay=root.querySelector('.pa-replay');const pause=root.querySelector('.pa-pause');replay&&replay.addEventListener('click',()=>{root.classList.remove('pa-run');void root.offsetWidth;root.classList.add('pa-run')});pause&&pause.addEventListener('click',()=>{const paused=root.style.getPropertyValue('--pa-play')==='paused';root.style.setProperty('--pa-play',paused?'running':'paused');root.querySelectorAll('*').forEach(el=>el.style.animationPlayState=paused?'running':'paused');pause.textContent=paused?'Pause':'Resume'})});
+</script>
