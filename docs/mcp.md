@@ -6,7 +6,7 @@ code-search tool. Search runs directly inside the stdio MCP server. Memo uses
 the local TriSeek daemon for session state so clients can ask whether files are
 still fresh within the current session. The server is:
 
-- **local-only** — no network, no telemetry, no OAuth
+- **local-first by default** — no network in the core daemon; briefing files are generated only when the user explicitly runs `triseek brief` or `triseek handoff`. No telemetry, no OAuth.
 - **stdio transport** — one child process per client session
 - **search-first** — search tools plus Memo freshness helpers, but no file-editing or shell-execution tools
 - **hybrid-routed** — uses the TriSeek trigram index when it helps and falls
@@ -372,17 +372,156 @@ Output (example):
 - `reread_with_diff`
 - `reread`
 
+## Task and snapshot tools (since v0.4.2)
+
+The portability surface tracks a **work session**: a goal, the TriSeek calls made while working on it, and zero or more snapshots. The public MCP tools are named `session_*`; the daemon stores them under `<daemon_dir>/sessions/`.
+
+### `session_open`
+
+Declare a work session and set it as the current MCP session.
+
+Input:
+
+```json
+{
+  "goal": "Debug retry backoff config",
+  "session_id": "optional-stable-id"
+}
+```
+
+Output:
+
+```json
+{
+  "session": {
+    "schema_version": 1,
+    "session_id": "session_1777803396000",
+    "goal": "Debug retry backoff config",
+    "repo_root": "/repo",
+    "status": "open",
+    "created_at": 1777803396,
+    "updated_at": 1777803396
+  }
+}
+```
+
+If `session_id` is omitted, TriSeek generates one. Reopening an existing id updates the goal when a non-empty goal is supplied.
+
+### `session_status`
+
+Return a session record plus the number of action-log entries captured for it.
+
+Input:
+
+```json
+{ "session_id": "session_1777803396000" }
+```
+
+Output:
+
+```json
+{
+  "session": { "session_id": "session_1777803396000", "status": "open" },
+  "action_log_size": 8
+}
+```
+
+`session_id` may be omitted only when the MCP server already has a current session.
+
+### `session_list`
+
+List portable sessions for the current repo.
+
+Input:
+
+```json
+{}
+```
+
+Output:
+
+```json
+{
+  "sessions": [
+    { "session_id": "session_1777803396000", "goal": "Debug retry backoff config", "status": "open" }
+  ]
+}
+```
+
+The response is sorted by most recently updated session first.
+
+### `session_close`
+
+Mark a session as `resolved` or `abandoned`.
+
+Input:
+
+```json
+{
+  "session_id": "session_1777803396000",
+  "status": "resolved"
+}
+```
+
+Output:
+
+```json
+{
+  "session": { "session_id": "session_1777803396000", "status": "resolved" }
+}
+```
+
+Closing clears the current-session hint in the MCP server.
+
+### `session_snapshot`
+
+Create a persistent snapshot directory under the daemon's snapshot store.
+
+Input:
+
+```json
+{
+  "session_id": "session_1777803396000",
+  "source_harness": "claude_code",
+  "source_model": "claude-sonnet-4.5",
+  "pinned_snippet_paths": [
+    { "path": "src/auth/router.rs", "line_start": 40, "line_end": 80 }
+  ]
+}
+```
+
+Output:
+
+```json
+{
+  "snapshot_id": "snap_1777803396_session_1777803396000",
+  "snapshot_dir": "/home/me/.triseek/daemon/snapshots/snap_1777803396_session_1777803396000",
+  "manifest": {
+    "schema_version": 1,
+    "snapshot_id": "snap_1777803396_session_1777803396000",
+    "session_id": "session_1777803396000",
+    "repo_root": "/repo",
+    "repo_commit": "abc123",
+    "repo_dirty_files": [],
+    "source_harness": "claude_code",
+    "source_model": "claude-sonnet-4.5",
+    "generation": 42,
+    "context_epoch": 0
+  }
+}
+```
+
+Snapshots include metadata, working set, action log, git state, and pinned snippets. They do not copy raw repo files.
+
 ### `session_handoff`
 
-Create a portable snapshot for transferring the current session to another
-harness, then mark the current session resolved.
+Convenience wrapper for MCP users: create `session_snapshot`, then mark the current session resolved. It returns the same envelope as `session_snapshot`.
 
 Input:
 
 ```json
 {
   "session_id": "session-123",
-  "target": "codex",
   "source_harness": "claude_code",
   "pinned_snippet_paths": [
     {
@@ -394,8 +533,84 @@ Input:
 }
 ```
 
-`target` is the destination harness for the handoff. Use `codex` when
-initiating from Claude Code and `claude` when initiating from Codex.
+Use the CLI `triseek handoff codex` or `triseek handoff claude` when you want target-aware project-file writes and briefing generation.
+
+### `session_snapshot_list`
+
+List snapshot manifests, optionally filtered by session.
+
+Input:
+
+```json
+{ "session_id": "session_1777803396000" }
+```
+
+Output:
+
+```json
+{
+  "snapshots": [
+    {
+      "schema_version": 1,
+      "snapshot_id": "snap_1777803396_session_1777803396000",
+      "session_id": "session_1777803396000",
+      "source_harness": "claude_code"
+    }
+  ]
+}
+```
+
+### `session_snapshot_get`
+
+Read the full snapshot envelope.
+
+Input:
+
+```json
+{ "snapshot_id": "snap_1777803396_session_1777803396000" }
+```
+
+Output:
+
+```json
+{
+  "snapshot": {
+    "manifest": { "schema_version": 1, "snapshot_id": "snap_1777803396_session_1777803396000" },
+    "working_set": { "schema_version": 1, "files_read": [], "searches_run": [], "frecency_top_n": [] },
+    "action_log": [],
+    "pinned_snippets": []
+  }
+}
+```
+
+Use this for debugging or for manually inspecting what a handoff captured.
+
+### `session_snapshot_diff`
+
+Compare two snapshots.
+
+Input:
+
+```json
+{
+  "snapshot_a": "snap_a",
+  "snapshot_b": "snap_b"
+}
+```
+
+Output:
+
+```json
+{
+  "diff": {
+    "added_files": [],
+    "removed_files": [],
+    "changed_files": ["src/auth/router.rs"],
+    "added_searches": ["search-0009"],
+    "removed_searches": []
+  }
+}
+```
 
 ### `session_resume`
 
@@ -411,8 +626,36 @@ Input:
 }
 ```
 
-`snapshot_id` is required. `budget_tokens` is optional and caps the resume
-payload size.
+Output:
+
+```json
+{
+  "session_id": "session_1777803396000",
+  "payload_markdown": "# TriSeek Hydration Payload\n...",
+  "payload_token_estimate": 740,
+  "hydration_report": {
+    "files_primed": 12,
+    "searches_warmed": 6,
+    "frecency_entries_restored": 20,
+    "stale_files": []
+  },
+  "searches": []
+}
+```
+
+`snapshot_id` is required. `budget_tokens` is optional and caps the resume payload size. The CLI `triseek resume <snapshot_id> --write-to AGENTS.md` writes that payload to the target harness file.
+
+### When to use what
+
+| Scenario | Tool |
+|---|---|
+| Start tracking a work session | `session_open` |
+| Check what is currently tracked | `session_status` or `session_list` |
+| Capture a checkpoint | `session_snapshot` |
+| Finish in this harness and hand off | `session_handoff` in MCP, or `triseek handoff <target>` in CLI |
+| Inspect what was captured | `session_snapshot_get` |
+| Compare two checkpoints | `session_snapshot_diff` |
+| Continue from another harness | `session_resume` |
 
 ## Memo modes
 

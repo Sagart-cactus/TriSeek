@@ -95,7 +95,15 @@ Harness-specific forms:
 | Claude Code | `/triseek handoff codex` | `/triseek resume <snapshot_id>` |
 | Codex | `$triseek handoff claude` | `$triseek resume <snapshot_id>` |
 
-See the [Context Handoff guide](context-handoff.html) for the full workflow.
+The lower-level CLI is also available:
+
+```sh
+triseek snapshot create --session <session_id> --source-harness claude_code .
+triseek brief <snapshot_id> --mode no-inference
+triseek resume <snapshot_id> --write-to AGENTS.md
+```
+
+See the [Context Portability guide](context-portability.html) for the full workflow.
 
 ## Release-Style Validation
 

@@ -250,6 +250,11 @@ a.text-link:hover { color: var(--accent-green); }
     <a href="install.html">install</a>
     <a href="mcp.html">mcp</a>
     <a href="memo.html" class="active">memo</a>
+    <a href="context-portability.html">portability</a>
+    <a href="sessions.html">tasks</a>
+    <a href="pack-format.html">pack</a>
+    <a href="briefing.html">briefing</a>
+    <a href="vision.html">vision</a>
     <a href="context-pack.html">context&#8209;pack</a>
     <a href="context-handoff.html">handoff</a>
     <a href="triseek-explained.html">how it works</a>
@@ -645,9 +650,40 @@ triseek install pi</pre>
     </div>
   </section>
 
-  <!-- 06 — related docs -->
+  <!-- 06 — task memory -->
   <section>
-    <div class="section-num">// 06 — related</div>
+    <div class="section-num">// 06 — task memory</div>
+    <h2>From session memo to <span class="hl">task memory</span></h2>
+    <p class="section-desc">Memo answers "did I read this file already in this MCP session?" Task memory answers "did the prior session in another harness already establish what this file does?"</p>
+    <div class="two-col" style="margin-top: 2rem;">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico pu">&#9678;</div>
+          <h3>Hydration bridges sessions</h3>
+        </div>
+        <p>When <code>session_resume</code> hydrates a snapshot, the daemon primes memo state with file fingerprints from the snapshot working set. Unchanged files can return <code>skip_reread</code> even though the new harness session never opened them directly.</p>
+        <p style="margin-top: 0.75rem;">The same idea applies to search reuse: searches captured in the snapshot are warmed into the search memo cache, so repeated searches can return cache-hit reuse envelopes instead of reprinting old results.</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico cy">&#8594;</div>
+          <h3>State flow</h3>
+        </div>
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">snapshot hydration</span></div>
+          <pre>prior session       snapshot         resumed session
+   memo state  ->   working_set  ->  primed memo state
+   search_memo ->   action_log   ->  warmed search cache
+   frecency    ->   frecency     ->  merged frecency</pre>
+        </div>
+        <p>Both layers avoid redundant work. Memo prevents redundant file reads; task memory prevents redundant exploration.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 — related docs -->
+  <section>
+    <div class="section-num">// 07 — related</div>
     <h2>Related <span class="hl">docs</span></h2>
     <div class="two-col" style="margin-top: 2rem;">
       <div class="card">
@@ -658,6 +694,9 @@ triseek install pi</pre>
         <ul style="list-style:none;margin:0;padding:0;">
           <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
             <a class="text-link" href="mcp.html">MCP Server Reference</a> &mdash; full tool schemas, error codes, output discipline
+          </li>
+          <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
+            <a class="text-link" href="sessions.html">Session Lifecycle</a> &mdash; how task memory extends memo across Claude Code and Codex
           </li>
           <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
             <a class="text-link" href="install.html">Install TriSeek</a> &mdash; platform-specific install instructions

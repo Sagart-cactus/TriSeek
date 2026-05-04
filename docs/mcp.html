@@ -238,6 +238,11 @@ a.text-link:hover { color: var(--accent-green); }
     <a href="install.html">install</a>
     <a href="mcp.html" class="active">mcp</a>
     <a href="memo.html">memo</a>
+    <a href="context-portability.html">portability</a>
+    <a href="sessions.html">tasks</a>
+    <a href="pack-format.html">pack</a>
+    <a href="briefing.html">briefing</a>
+    <a href="vision.html">vision</a>
     <a href="context-pack.html">context&#8209;pack</a>
     <a href="context-handoff.html">handoff</a>
     <a href="triseek-explained.html">how it works</a>
@@ -249,7 +254,7 @@ a.text-link:hover { color: var(--accent-green); }
   <div class="hero">
     <div class="hero-badge">⬡ TriSeek MCP</div>
     <h1>Use TriSeek as a<br><span class="hl">local MCP search server</span></h1>
-    <p class="hero-sub">TriSeek exposes a local stdio MCP server for Claude Code, Codex, and other MCP-capable clients. It is local-only, search-only, routes each query through the right backend, and returns compact reuse envelopes for duplicate searches when context is still fresh.</p>
+    <p class="hero-sub">TriSeek exposes a local stdio MCP server for Claude Code, Codex, and other MCP-capable clients. It is local-first by default, search-only, routes each query through the right backend, and returns compact reuse envelopes for duplicate searches when context is still fresh.</p>
   </div>
 
   <section>
@@ -302,14 +307,14 @@ triseek mcp serve</pre>
           <h3>Transport and Scope</h3>
         </div>
         <div class="scope-list">
-          <span class="tag gn">local-only</span>
+          <span class="tag gn">local-first</span>
           <span class="tag cy">stdio transport</span>
           <span class="tag pu">search-only</span>
           <span class="tag or">repo-scoped</span>
           <span class="tag yw">bounded output</span>
         </div>
         <ul style="margin-top: 1.1rem;">
-          <li><strong>local-only</strong> — no network, no telemetry, no OAuth</li>
+          <li><strong>local-first by default</strong> — no network in the core daemon; briefing files are explicit CLI outputs. No telemetry, no OAuth</li>
           <li><strong>stdio transport</strong> — one child process per client session</li>
           <li><strong>search-only</strong> — no shell or file-editing tools</li>
           <li><strong>repo-scoped</strong> — one root per MCP server process</li>
@@ -445,6 +450,46 @@ triseek mcp serve</pre>
               <td><span class="tag or">context_pack</span></td>
               <td>Intent-aware ranked trailhead for a bugfix or review task — ranked paths, clipped snippets, reason tags, and next-step hints</td>
             </tr>
+            <tr>
+              <td><span class="tag pu">session_open</span></td>
+              <td>Open a portable work session for context capture</td>
+            </tr>
+            <tr>
+              <td><span class="tag pu">session_status</span></td>
+              <td>Inspect a session and its action-log size</td>
+            </tr>
+            <tr>
+              <td><span class="tag pu">session_list</span></td>
+              <td>List portable sessions for the current repo</td>
+            </tr>
+            <tr>
+              <td><span class="tag pu">session_close</span></td>
+              <td>Mark a session resolved or abandoned</td>
+            </tr>
+            <tr>
+              <td><span class="tag pu">session_snapshot</span></td>
+              <td>Persist a snapshot directory with working set, action log, git state, frecency, and pinned snippets</td>
+            </tr>
+            <tr>
+              <td><span class="tag pu">session_handoff</span></td>
+              <td>MCP convenience wrapper: snapshot the current session, then close it as resolved</td>
+            </tr>
+            <tr>
+              <td><span class="tag pu">session_snapshot_list</span></td>
+              <td>List snapshot manifests, optionally filtered by session</td>
+            </tr>
+            <tr>
+              <td><span class="tag pu">session_snapshot_get</span></td>
+              <td>Read the full snapshot envelope</td>
+            </tr>
+            <tr>
+              <td><span class="tag pu">session_snapshot_diff</span></td>
+              <td>Compare files and searches across two snapshots</td>
+            </tr>
+            <tr>
+              <td><span class="tag pu">session_resume</span></td>
+              <td>Prime daemon state and return a markdown hydration payload for the next harness</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -489,7 +534,49 @@ triseek mcp serve</pre>
   </section>
 
   <section>
-    <div class="section-num">// 04 — errors &amp; output</div>
+    <div class="section-num">// 04 — task and snapshot tools</div>
+    <h2>Context <span class="hl">portability</span> tools</h2>
+    <p class="section-desc">Since v0.4.2, the MCP surface can track a work session, snapshot it, and resume it later. The first-class adapter story is Claude Code ↔ Codex; other MCP hosts can use the CLI manually.</p>
+    <div class="two-col" style="margin-top: 2rem;">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico pu">&#9678;</div>
+          <h3>Session lifecycle</h3>
+        </div>
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">session_open</span></div>
+          <pre>{
+  <span class="str">"goal"</span>: <span class="str">"Debug retry backoff config"</span>,
+  <span class="str">"session_id"</span>: <span class="str">"optional-stable-id"</span>
+}</pre>
+        </div>
+        <p>The response is <code>{ "session": { ... } }</code>, including <code>schema_version</code>, <code>session_id</code>, <code>goal</code>, <code>repo_root</code>, <code>status</code>, <code>created_at</code>, and <code>updated_at</code>.</p>
+        <p>Use <code>session_status</code>, <code>session_list</code>, and <code>session_close</code> to inspect or finish the same work session.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico or">&#8594;</div>
+          <h3>Snapshot and resume</h3>
+        </div>
+        <div class="code-block">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">session_snapshot</span></div>
+          <pre>{
+  <span class="str">"session_id"</span>: <span class="str">"session_1777803396000"</span>,
+  <span class="str">"source_harness"</span>: <span class="str">"claude_code"</span>,
+  <span class="str">"pinned_snippet_paths"</span>: [
+    { <span class="str">"path"</span>: <span class="str">"src/auth/router.rs"</span>, <span class="str">"line_start"</span>: 40, <span class="str">"line_end"</span>: 80 }
+  ]
+}</pre>
+        </div>
+        <p><code>session_snapshot</code> returns <code>snapshot_id</code>, <code>snapshot_dir</code>, and a manifest. <code>session_resume</code> accepts that id and returns <code>payload_markdown</code>, <code>payload_token_estimate</code>, <code>hydration_report</code>, and warmed search refs.</p>
+        <p>Use <code>session_handoff</code> when you want the MCP wrapper to snapshot and close the session. Use <code>triseek handoff codex</code> for the target-aware CLI flow.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-num">// 05 — errors &amp; output</div>
     <h2>Error codes &amp; <span class="hl">output discipline</span></h2>
     <div class="two-col" style="margin-top: 2rem;">
       <div class="card">
@@ -580,7 +667,7 @@ triseek mcp serve</pre>
   </section>
 
   <section>
-    <div class="section-num">// 05 — search behavior</div>
+    <div class="section-num">// 06 — search behavior</div>
     <h2>Search <span class="hl">defaults</span></h2>
     <div class="two-col" style="margin-top: 2rem;">
       <div class="card">
@@ -618,7 +705,7 @@ triseek mcp serve</pre>
   </section>
 
   <section>
-    <div class="section-num">// 06 — troubleshooting</div>
+    <div class="section-num">// 07 — troubleshooting</div>
     <h2>When things go <span class="hl">wrong</span></h2>
     <div class="two-col" style="margin-top: 2rem;">
       <div class="card">

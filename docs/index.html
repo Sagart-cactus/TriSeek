@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TriSeek — Fast Local Code Search</title>
+<title>TriSeek — Context Portability for Agent Workflows</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
@@ -154,6 +154,7 @@ body::before {
   box-shadow: 0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(34,211,238,0.05);
   animation: fadeUp 0.5s 0.32s ease both;
 }
+.anim-frame { width: 100%; max-width: 620px; height: 390px; border: 0; margin: 0 auto 2rem; display: block; }
 .terminal-tb {
   display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem;
   background: var(--bg-elevated); border-bottom: 1px solid var(--border);
@@ -288,6 +289,11 @@ h2 .hl { color: var(--accent-cyan); }
     <a href="install.html">install</a>
     <a href="mcp.html">mcp</a>
     <a href="memo.html">memo</a>
+    <a href="context-portability.html">portability</a>
+    <a href="sessions.html">tasks</a>
+    <a href="pack-format.html">pack</a>
+    <a href="briefing.html">briefing</a>
+    <a href="vision.html">vision</a>
     <a href="context-pack.html">context&#8209;pack</a>
     <a href="context-handoff.html">handoff</a>
     <a href="triseek-explained.html">how it works</a>
@@ -300,14 +306,15 @@ h2 .hl { color: var(--accent-cyan); }
   <div class="container">
     <div class="hero-badge">
       <div class="hero-badge-dot"></div>
-      trigram-indexed · local · mcp-native · v0.4.2
+      CONTEXT PORTABILITY · LOCAL-FIRST · BOUNDED BY DESIGN
     </div>
-    <h1>Search code at<br><span class="hl">index speed</span></h1>
-    <p class="hero-sub">Published documentation for TriSeek. Start with install and standalone CLI usage, then jump into MCP integration or the deeper architecture walkthroughs.</p>
+    <h1>Your agent context,<br><span class="hl">portable.</span></h1>
+    <p class="hero-sub">Teams running both Claude Code and Codex shouldn't lose hours when one goes down. TriSeek captures the state of an agent session — files identified, searches run, and working-set signals — and resumes it in the other harness with primed memo and warmed search cache.</p>
     <div class="hero-ctas">
       <a href="install.html" class="btn-primary">⬇ Install TriSeek</a>
-      <a href="mcp.html" class="btn-secondary">⬡ MCP Reference</a>
+      <a href="context-portability.html" class="btn-secondary">↔ Portability</a>
     </div>
+    <iframe class="anim-frame" src="_includes/portability-animation.html" title="Snapshot in Claude Code. Resume in Codex."></iframe>
 
     <div class="terminal-demo">
       <div class="terminal-tb">
@@ -315,13 +322,12 @@ h2 .hl { color: var(--accent-cyan); }
         <span class="terminal-title">zsh — /path/to/repo</span>
       </div>
       <div class="terminal-body">
-        <div><span class="t-prompt">❯</span> <span class="t-cmd">triseek "AuthConfig" </span><span class="t-path">/path/to/repo</span></div>
-        <div class="t-dim">  Searching via trigram index…</div>
-        <div><span class="t-file">src/auth/config.rs</span><span class="t-dim">:</span><span class="t-num">12</span>  <span class="t-match">AuthConfig</span> { timeout: 30, … }</div>
-        <div><span class="t-file">src/middleware/auth.rs</span><span class="t-dim">:</span><span class="t-num">47</span>  fn load(<span class="t-match">AuthConfig</span>) → Result&lt;…&gt;</div>
-        <div><span class="t-file">tests/auth_test.rs</span><span class="t-dim">:</span><span class="t-num">8</span>   let cfg = <span class="t-match">AuthConfig</span>::default();</div>
+        <div><span class="t-prompt">❯</span> <span class="t-cmd">triseek snapshot create --session session_123 --source-harness claude_code </span><span class="t-path">.</span></div>
+        <div class="t-dim">  Capturing working set, action log, frecency, git state…</div>
+        <div><span class="t-file">snapshot_id</span><span class="t-dim">:</span> <span class="t-match">snap_1777803396_session_123</span></div>
+        <div><span class="t-prompt">❯</span> <span class="t-cmd">triseek resume snap_1777803396_session_123 --write-to AGENTS.md</span></div>
         <div class="t-dim">  ─────────────────────────────────────────</div>
-        <div><span class="t-ok">✓</span> <span class="t-dim">3 matches · </span><span class="t-strategy">strategy: triseek_indexed</span><span class="t-dim"> · 12ms</span></div>
+        <div><span class="t-ok">✓</span> <span class="t-dim">memo primed · search reuse warmed · frecency restored</span></div>
       </div>
     </div>
   </div>
@@ -334,8 +340,8 @@ h2 .hl { color: var(--accent-cyan); }
       <div class="stat-label">indexed queries</div>
     </div>
     <div class="stat-item">
-      <div class="stat-val">30/39</div>
-      <div class="stat-label">benchmarks beat rg</div>
+      <div class="stat-val">38/39</div>
+      <div class="stat-label">medium+ wins</div>
     </div>
     <div class="stat-item">
       <div class="stat-val">mmap</div>
@@ -360,6 +366,13 @@ h2 .hl { color: var(--accent-cyan); }
         <div class="doc-card-ico gn">⬡</div>
         <h3>MCP Server Reference</h3>
         <p>How to install, run, and troubleshoot the local TriSeek MCP server for Claude Code and Codex.</p>
+        <div class="doc-card-arrow">read guide →</div>
+      </a>
+
+      <a class="doc-card" href="context-portability.html">
+        <div class="doc-card-ico pu">&#8596;</div>
+        <h3>Context Portability</h3>
+        <p>Snapshot in Claude Code, resume in Codex with memo, search reuse, frecency, git state, and pinned snippets intact.</p>
         <div class="doc-card-arrow">read guide →</div>
       </a>
 
@@ -391,6 +404,27 @@ h2 .hl { color: var(--accent-cyan); }
         <div class="doc-card-arrow">read guide →</div>
       </a>
 
+      <a class="doc-card" href="sessions.html">
+        <div class="doc-card-ico cy">&#9678;</div>
+        <h3>Session Lifecycle</h3>
+        <p>Reference for session tools, snapshot state, resume hydration, and daemon storage paths.</p>
+        <div class="doc-card-arrow">read guide →</div>
+      </a>
+
+      <a class="doc-card" href="pack-format.html">
+        <div class="doc-card-ico pu">&#9635;</div>
+        <h3>Pack Format</h3>
+        <p>The `.tcp` archive layout, schema-versioned artifacts, checksums, and privacy boundaries.</p>
+        <div class="doc-card-arrow">read guide →</div>
+      </a>
+
+      <a class="doc-card" href="briefing.html">
+        <div class="doc-card-ico or">&#9671;</div>
+        <h3>Briefing Modes</h3>
+        <p>How `briefing.md` is generated and validated in v0.4.2.</p>
+        <div class="doc-card-arrow">read guide →</div>
+      </a>
+
       <a class="doc-card" href="context-handoff.html">
         <div class="doc-card-ico" style="background:rgba(244,114,182,0.1);color:#f472b6;">&#8594;</div>
         <h3>Context Handoff</h3>
@@ -403,18 +437,18 @@ h2 .hl { color: var(--accent-cyan); }
   <section>
     <div class="section-num">// why triseek</div>
     <h2>Built for <span class="hl">AI-assisted</span> workflows</h2>
-    <p class="section-desc">TriSeek is designed to give LLM agents fast, bounded, local code search — without shell access or raw file bodies.</p>
+    <p class="section-desc">TriSeek is designed to make agent context portable between Claude Code and Codex, while keeping its fast, bounded, local-first search foundation.</p>
 
     <div class="features-grid">
       <div class="feature-item">
-        <div class="feature-icon">⚡</div>
-        <div class="feature-title">Trigram Index</div>
-        <div class="feature-desc">Pre-built index enables sub-50ms responses for most queries, even on large repos.</div>
+        <div class="feature-icon">&#8596;</div>
+        <div class="feature-title">Claude Code ↔ Codex Portability</div>
+        <div class="feature-desc">Snapshot a session in one, resume in the other with primed memo, warmed search reuse, restored frecency, and pinned snippets.</div>
       </div>
       <div class="feature-item">
-        <div class="feature-icon">🔒</div>
-        <div class="feature-title">Local Only</div>
-        <div class="feature-desc">No network, no telemetry, no OAuth. Runs entirely on your machine via stdio.</div>
+        <div class="feature-icon">⚡</div>
+        <div class="feature-title">Trigram Index</div>
+        <div class="feature-desc">Pre-built index enables fast repeated searches, with ripgrep fallback when the index is cold.</div>
       </div>
       <div class="feature-item">
         <div class="feature-icon">⬡</div>
@@ -442,9 +476,9 @@ h2 .hl { color: var(--accent-cyan); }
         <div class="feature-desc">Intent-aware trailheads for bugfix and review tasks — ranked paths, snippets, reason tags, and hints. CLI and MCP.</div>
       </div>
       <div class="feature-item">
-        <div class="feature-icon">&#8594;</div>
-        <div class="feature-title">Context Handoff</div>
-        <div class="feature-desc">Snapshot a session and resume it in another harness — goal, files, searches, and git state preserved. Explicit Claude ↔ Codex switching.</div>
+        <div class="feature-icon">🔒</div>
+        <div class="feature-title">Local-First by Default</div>
+        <div class="feature-desc">Core daemon has no network, telemetry, or OAuth. Briefing files are generated only by explicit CLI commands.</div>
       </div>
       <div class="feature-item">
         <div class="feature-icon">▤</div>
@@ -464,8 +498,18 @@ h2 .hl { color: var(--accent-cyan); }
     </div>
   </section>
 
+  <section>
+    <div class="section-num">// vendor contingency</div>
+    <h2>Vendor contingency, <span class="hl">by design</span></h2>
+    <div class="features-grid">
+      <div class="feature-item"><div class="feature-title">The reality</div><div class="feature-desc">Most serious AI-coding teams pay for both Claude Code and Codex and use them in parallel.</div></div>
+      <div class="feature-item"><div class="feature-title">The risk</div><div class="feature-desc">Provider outages, model regressions, and pricing changes can strand an in-flight session.</div></div>
+      <div class="feature-item"><div class="feature-title">The fix</div><div class="feature-desc">A portable local context layer between Claude Code and Codex. Other harnesses are on the <a href="vision.html" style="color:var(--accent-cyan)">roadmap</a>.</div></div>
+    </div>
+  </section>
+
   <footer class="site-footer">
-    <span>TriSeek — fast local code search</span>
+    <span>TriSeek — context portability for agent workflows</span>
     <a href="https://github.com/Sagart-cactus/TriSeek">github.com/Sagart-cactus/TriSeek →</a>
   </footer>
 </div>

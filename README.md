@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <em>Code search for AI coding agents — and the humans behind them.</em>
+  <em>Context portability for AI coding agents — built on a proven local code search foundation.</em>
 </p>
 
 <p align="center">
@@ -15,7 +15,14 @@
   <img src="https://img.shields.io/badge/rust-stable-orange.svg" alt="Rust stable" />
 </p>
 
-**TriSeek** is a local code-search daemon with an MCP server for Claude Code, Codex, OpenCode, and Pi. It keeps a trigram index of your repos, falls back to ripgrep when the index is cold, and — most importantly for agents — tracks which files and search results are already in the current session so your agent stops re-reading the same file or reprinting the same search output three times per conversation.
+**TriSeek** is a local context daemon with an MCP server for Claude Code, Codex, OpenCode, and Pi. Snapshot a session in Claude Code, resume it in Codex (or the reverse) with primed memo, warmed search cache, and restored frecency — without losing the four hours of debugging you just put in. Underneath the portability layer is the same proven code-search engine: a trigram index that wins 38 of 39 medium-repo benchmarks, with ripgrep fallback for cold starts. MCP search and memo tools work with all four harnesses; the v0.4.2 portability handoff has first-class Claude Code and Codex adapter flows, while other MCP hosts can use the underlying CLI commands manually.
+
+## What's new in v0.4.2
+
+- **Context portability between Claude Code and Codex.** Open a `session_*` work session, capture a `session_snapshot`, and resume with `session_resume` so the next harness starts with the same working set.
+- **Portable snapshot packs.** `triseek pack export` writes a `.tcp` archive for a snapshot; `triseek pack import` materializes it back under the local daemon's snapshot store.
+- **Briefings.** `triseek brief` writes a bounded `briefing.md` into a snapshot. The shipped modes currently validate and write the no-inference template; `local-model` and `cloud-model` are accepted CLI modes but still use the same template in v0.4.2.
+- **New docs.** Start with [Context Portability](docs/context-portability.html), then the [Session Lifecycle](docs/sessions.html), [Pack Format](docs/pack-format.html), [Briefing](docs/briefing.html), and [v0.4.2 release notes](docs/releases/v0.4.2.md).
 
 On the Linux kernel, a 20-query agent session takes **0.6 s with TriSeek vs 10.3 s with ripgrep** — 16.9× faster, measured. The memo layer on top catches redundant re-reads before they hit disk, with zero false negatives across 12 replayed Claude Code sessions.
 
@@ -31,9 +38,9 @@ That's the whole onboarding. Search works immediately. The index and daemon warm
 
 ## Why TriSeek
 
+- **Switch between Claude Code and Codex without losing context.** New in v0.4.2: `session_open`, `session_snapshot`, `session_resume`, `triseek handoff`, `triseek resume`, packs, and briefings keep an in-flight work session warm across the two supported adapter flows.
 - **Indexed where it matters, raw where it doesn't.** Trigram index for repeated queries; ripgrep fallback for weak regex and small repos. You never wait for an index to build before the first search.
-- **Built for AI agents from day one.** First-class MCP server (8 tools), installs into Claude Code / Codex / OpenCode / Pi with one command, and exposes a session-aware memo layer that prevents agents from re-reading files they just saw.
-- **Context Handoff between harnesses.** Snapshot a session and resume it in another harness — goal, files, searches, and git state preserved. Explicit Claude ↔ Codex switching.
+- **Built for AI agents from day one.** First-class MCP server, installs into Claude Code / Codex / OpenCode / Pi with one command, and exposes a session-aware memo layer that prevents agents from re-reading files they just saw.
 - **State stays out of your repo.** Indexes, daemon, and session data live under `~/.triseek`, not in repo-local dotfiles. One global daemon serves many roots.
 - **Honest about what ran.** Every MCP response tells you which backend answered (`triseek_indexed`, `triseek_direct_scan`, `ripgrep_fallback`) and whether a repeated indexed search reused earlier context (`cache: hit`) or executed again (`miss` / `bypass`).
 
@@ -93,7 +100,11 @@ triseek install claude-code     # or codex, opencode, pi
 # check everything is wired up
 triseek doctor
 
-# hand off an active session after doctor passes
+# create and resume a portability snapshot
+triseek snapshot create --session session_123 --source-harness claude_code .
+triseek resume <snapshot_id> --write-to AGENTS.md
+
+# or use the target-aware handoff helper after doctor passes
 triseek handoff codex
 triseek resume <snapshot_id>
 ```
@@ -206,8 +217,16 @@ Verify any install with `triseek doctor`. Run the server manually (for debugging
 | `memo_session` | Show session state, tracked files, and token savings |
 | `memo_status` | Batch freshness check on a set of files |
 | `memo_check` | Single-file skip-or-reread decision |
-| `session_handoff` | Create a portable snapshot for switching harnesses |
-| `session_resume` | Hydrate a portable snapshot in the target harness |
+| `session_open` | Open a portable work session |
+| `session_status` | Inspect a portable work session |
+| `session_list` | List portable sessions for the current repo |
+| `session_close` | Mark a session resolved or abandoned |
+| `session_snapshot` | Create a persistent snapshot directory |
+| `session_handoff` | Snapshot the current session and close it as resolved |
+| `session_snapshot_list` | List snapshot manifests |
+| `session_snapshot_get` | Read a full snapshot envelope |
+| `session_snapshot_diff` | Compare two snapshots |
+| `session_resume` | Prime daemon state and return a hydration payload |
 
 Full schemas and error codes: [MCP reference](https://sagart-cactus.github.io/TriSeek/mcp.html).
 
