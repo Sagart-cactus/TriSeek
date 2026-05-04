@@ -131,7 +131,7 @@ impl SessionStore {
             .filter(|session| repo_root.is_none_or(|root| session.repo_root == root))
             .cloned()
             .collect::<Vec<_>>();
-        sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        sessions.sort_by_key(|session| std::cmp::Reverse(session.updated_at));
         sessions
     }
 
