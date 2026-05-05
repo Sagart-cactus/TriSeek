@@ -103,7 +103,7 @@ triseek brief <snapshot_id> --mode no-inference
 triseek resume <snapshot_id> --write-to AGENTS.md
 ```
 
-See the [Context Portability guide](context-portability.html) for the full workflow.
+See the [Context Handoff &amp; Portability guide](context-handoff.html) for the full workflow.
 
 ## Release-Style Validation
 
