@@ -22,7 +22,7 @@
 - **Context portability between Claude Code and Codex.** Open a `session_*` work session, capture a `session_snapshot`, and resume with `session_resume` so the next harness starts with the same working set.
 - **Portable snapshot packs.** `triseek pack export` writes a `.tcp` archive for a snapshot; `triseek pack import` materializes it back under the local daemon's snapshot store.
 - **Briefings.** `triseek brief` writes a bounded `briefing.md` into a snapshot. The shipped modes currently validate and write the no-inference template; `local-model` and `cloud-model` are accepted CLI modes but still use the same template in v0.4.2.
-- **New docs.** Start with [Context Portability](docs/context-portability.html), then the [Session Lifecycle](docs/sessions.html), [Pack Format](docs/pack-format.html), [Briefing](docs/briefing.html), and [v0.4.2 release notes](docs/releases/v0.4.2.md).
+- **New docs.** Everything portability-related lives on one page: [Context Handoff &amp; Portability](docs/context-handoff.html) (sessions, pack format, briefing, walkthroughs). See also the [v0.4.2 release notes](docs/releases/v0.4.2.md) and the [Vision &amp; Roadmap](docs/vision.html) for what's planned next.
 
 On the Linux kernel, a 20-query agent session takes **0.6 s with TriSeek vs 10.3 s with ripgrep** — 16.9× faster, measured. The memo layer on top catches redundant re-reads before they hit disk, with zero false negatives across 12 replayed Claude Code sessions.
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TriSeek — Context Handoff</title>
+<title>TriSeek — Context Handoff &amp; Portability</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
@@ -71,7 +71,7 @@ body::before {
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
   text-decoration: none;
 }
-.top-nav .nav-links { display: flex; align-items: center; gap: 1.75rem; margin-left: auto; }
+.top-nav .nav-links { display: flex; align-items: center; gap: 1.75rem; margin-left: auto; flex-wrap: wrap; }
 .top-nav a {
   color: var(--text-dim); text-decoration: none; font-size: 0.8rem;
   transition: color 0.2s; font-family: 'JetBrains Mono', monospace;
@@ -80,7 +80,7 @@ body::before {
 .top-nav a.active { color: var(--accent-pink); }
 
 /* HERO */
-.hero { padding: 8rem 0 4rem; }
+.hero { padding: 8rem 0 3rem; }
 .hero-badge {
   display: inline-flex; align-items: center; gap: 0.5rem;
   padding: 0.35rem 1.1rem;
@@ -95,11 +95,33 @@ body::before {
 }
 .hero h1 .hl { color: var(--accent-pink); }
 .hero-sub {
-  color: var(--text-secondary); font-size: 1.08rem; max-width: 720px; line-height: 1.7;
+  color: var(--text-secondary); font-size: 1.08rem; max-width: 760px; line-height: 1.7;
 }
 
+/* TOC */
+.toc {
+  margin: 2rem 0 0;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+}
+.toc-label {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.68rem;
+  color: var(--text-dim); letter-spacing: 0.2em; text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+.toc ol { margin: 0; padding: 0; list-style: none; counter-reset: toc; columns: 2; column-gap: 2rem; }
+@media (max-width: 720px) { .toc ol { columns: 1; } }
+.toc li { counter-increment: toc; padding: 0.3rem 0; break-inside: avoid; }
+.toc li::before {
+  content: counter(toc, decimal-leading-zero) ".";
+  font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+  color: var(--text-dim); margin-right: 0.6rem;
+}
+.toc a { color: var(--text-secondary); text-decoration: none; font-size: 0.92rem; transition: color 0.2s; }
+.toc a:hover { color: var(--accent-pink); }
+
 /* SECTIONS */
-section { padding: 3.5rem 0; border-top: 1px solid var(--border); }
+section { padding: 3.5rem 0; border-top: 1px solid var(--border); scroll-margin-top: 5rem; }
 section:first-of-type { border-top: none; }
 .section-num {
   font-family: 'JetBrains Mono', monospace; font-size: 0.68rem;
@@ -109,7 +131,7 @@ section:first-of-type { border-top: none; }
 h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.75rem; }
 h2 .hl { color: var(--accent-pink); }
 h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
-.section-desc { color: var(--text-secondary); font-size: 0.95rem; max-width: 700px; margin-bottom: 2rem; }
+.section-desc { color: var(--text-secondary); font-size: 0.95rem; max-width: 760px; margin-bottom: 2rem; }
 
 /* CARDS */
 .card {
@@ -170,7 +192,30 @@ code { color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace; font
 
 /* GRID */
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
-@media (max-width: 820px) { .two-col { grid-template-columns: 1fr; } }
+.three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+@media (max-width: 820px) { .two-col, .three-col { grid-template-columns: 1fr; } }
+
+/* TABLES */
+table.tdoc {
+  width: 100%; border-collapse: collapse; margin-top: 1rem;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  overflow: hidden;
+}
+table.tdoc th, table.tdoc td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 1rem; text-align: left; vertical-align: top;
+  color: var(--text-secondary); font-size: 0.88rem;
+}
+table.tdoc tr:last-child th, table.tdoc tr:last-child td { border-bottom: none; }
+table.tdoc th {
+  color: var(--accent-pink); font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+  letter-spacing: 0.08em; text-transform: uppercase; background: var(--bg-elevated);
+  font-weight: 600;
+}
+table.tdoc td code { color: var(--accent-cyan); font-size: 0.85em; }
+table.tdoc td .ok { color: var(--accent-green); font-weight: 600; }
+table.tdoc td .warn { color: var(--accent-yellow); font-weight: 600; }
+table.tdoc td .planned { color: var(--accent-cyan); font-weight: 600; }
 
 /* FLOW STEPS */
 .flow-steps { display: flex; flex-direction: column; gap: 0; margin: 1.5rem 0; }
@@ -188,7 +233,7 @@ code { color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace; font
   display: flex; align-items: center; justify-content: center;
   margin-top: 0.1rem;
 }
-.flow-step-body { flex: 1; }
+.flow-step-body { flex: 1; min-width: 0; }
 .flow-step-body h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.3rem; }
 .flow-step-body p { color: var(--text-secondary); font-size: 0.88rem; line-height: 1.6; margin: 0; }
 .flow-step-body p + p { margin-top: 0.4rem; }
@@ -222,9 +267,41 @@ code { color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace; font
 .prop-sep { color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
 .prop-val { color: var(--text-secondary); font-size: 0.88rem; }
 
+/* STATE DIAGRAM */
+.state-diagram {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 0.75rem; padding: 1.5rem; background: var(--bg-input);
+  border: 1px solid var(--border); border-radius: 10px; margin: 1rem 0;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
+}
+.state-node {
+  padding: 0.55rem 1rem; border-radius: 8px;
+  border: 1px solid var(--accent-pink-dim); background: rgba(244,114,182,0.08);
+  color: var(--accent-pink); font-weight: 600;
+}
+.state-node.green { border-color: var(--accent-green-dim); background: rgba(52,211,153,0.08); color: var(--accent-green); }
+.state-node.gray { border-color: var(--border-bright); background: var(--bg-card); color: var(--text-dim); }
+.state-arrow { color: var(--text-dim); font-size: 1.2rem; }
+.state-label { font-size: 0.72rem; color: var(--text-dim); padding: 0 0.4rem; }
+
+/* ANIMATION FRAME — alignment fix */
+.anim-wrap {
+  margin: 2rem auto 0;
+  max-width: 920px;
+  display: flex; justify-content: center;
+}
+.anim-frame {
+  width: 100%; max-width: 880px;
+  aspect-ratio: 860 / 720;
+  border: 0; background: transparent; display: block;
+}
+@media (max-width: 820px) {
+  .anim-frame { aspect-ratio: 860 / 760; }
+}
+
 /* LINKS */
 a.text-link { color: var(--accent-cyan); text-decoration: none; transition: color 0.2s; }
-a.text-link:hover { color: var(--accent-green); }
+a.text-link:hover { color: var(--accent-pink); }
 
 /* FOOTER */
 .site-footer {
@@ -246,13 +323,9 @@ a.text-link:hover { color: var(--accent-green); }
     <a href="install.html">install</a>
     <a href="mcp.html">mcp</a>
     <a href="memo.html">memo</a>
-    <a href="context-portability.html">portability</a>
-    <a href="sessions.html">tasks</a>
-    <a href="pack-format.html">pack</a>
-    <a href="briefing.html">briefing</a>
-    <a href="vision.html">vision</a>
     <a href="context-pack.html">context&#8209;pack</a>
     <a href="context-handoff.html" class="active">handoff</a>
+    <a href="vision.html">vision</a>
     <a href="triseek-explained.html">how it works</a>
     <a href="triseek-architecture.html">architecture</a>
   </div>
@@ -260,342 +333,501 @@ a.text-link:hover { color: var(--accent-green); }
 
 <div class="container">
   <div class="hero">
-    <div class="hero-badge">&#8594; new in v0.4.2</div>
-    <h1>Switch agents without<br><span class="hl">losing your place</span></h1>
-    <p class="hero-sub">Context Handoff is now part of TriSeek's broader context portability layer. Snapshot a work session in Claude Code, resume it in Codex, and keep the memo, search reuse, frecency, git state, and pinned snippets that matter.</p>
+    <div class="hero-badge">SINCE v0.4.2 &middot; CLAUDE CODE &harr; CODEX</div>
+    <h1>Switch agents without<br><span class="hl">losing the work.</span></h1>
+    <p class="hero-sub">Claude Code goes down at 2pm. Your four hours of debugging shouldn't. TriSeek snapshots a session in one harness and resumes it in the other with primed memo, warmed search reuse, restored frecency, captured git state, and pinned snippets &mdash; on top of the same local-first code search engine that wins 38 of 39 medium-repo benchmarks.</p>
+
+    <div class="anim-wrap">
+      <iframe class="anim-frame" src="_includes/portability-animation.html?variant=full" title="Snapshot in Claude Code. Resume in Codex." loading="lazy"></iframe>
+    </div>
+
+    <div class="toc">
+      <div class="toc-label">// on this page</div>
+      <ol>
+        <li><a href="#vendor-contingency">Vendor contingency, by design</a></li>
+        <li><a href="#flow">The five-step flow</a></li>
+        <li><a href="#sessions">Session lifecycle</a></li>
+        <li><a href="#pack">Pack format</a></li>
+        <li><a href="#briefing">Briefing</a></li>
+        <li><a href="#privacy">Privacy &amp; trust</a></li>
+        <li><a href="#harnesses">Supported harnesses</a></li>
+        <li><a href="#scope">Ships in v0.4.2 vs. coming</a></li>
+        <li><a href="#walkthroughs">Walkthroughs</a></li>
+        <li><a href="#limits">Limits</a></li>
+      </ol>
+    </div>
   </div>
 
-  <!-- 01 — What it is -->
-  <section>
-    <div class="section-num">// 01 — overview</div>
-    <h2>Portable <span class="hl">session state</span></h2>
-    <p class="section-desc">A handoff snapshot is a self-contained envelope that captures everything the receiving agent needs to continue work where you left off — without re-reading files or re-running searches from scratch.</p>
+  <!-- 01 — Vendor contingency -->
+  <section id="vendor-contingency">
+    <div class="section-num">// 01 &mdash; vendor contingency</div>
+    <h2>Vendor contingency, <span class="hl">by design</span></h2>
+    <p class="section-desc">Most serious AI-coding teams already pay for both Claude Code and Codex and run them in parallel. Context loss when switching is meaningfully expensive &mdash; and no single harness vendor has incentive to solve it.</p>
 
-    <div class="two-col" style="margin-top: 2rem;">
+    <div class="three-col" style="margin-top: 1rem;">
       <div class="card">
-        <div class="card-head">
-          <div class="card-ico pk">&#8594;</div>
-          <h3>What a snapshot contains</h3>
-        </div>
-        <div class="prop-list">
-          <div class="prop-row">
-            <span class="prop-key">goal</span>
-            <span class="prop-sep">&middot;</span>
-            <span class="prop-val">The active task description from the originating session</span>
-          </div>
-          <div class="prop-row">
-            <span class="prop-key">working_set</span>
-            <span class="prop-sep">&middot;</span>
-            <span class="prop-val">Files opened or read during the session, with read timestamps</span>
-          </div>
-          <div class="prop-row">
-            <span class="prop-key">action_log</span>
-            <span class="prop-sep">&middot;</span>
-            <span class="prop-val">Chronological log of searches, file reads, and session events</span>
-          </div>
-          <div class="prop-row">
-            <span class="prop-key">pinned_snippets</span>
-            <span class="prop-sep">&middot;</span>
-            <span class="prop-val">Code excerpts explicitly marked for carry-over</span>
-          </div>
-          <div class="prop-row">
-            <span class="prop-key">git_state</span>
-            <span class="prop-sep">&middot;</span>
-            <span class="prop-val">Commit hash, branch, and list of dirty files at snapshot time</span>
-          </div>
-          <div class="prop-row">
-            <span class="prop-key">briefing</span>
-            <span class="prop-sep">&middot;</span>
-            <span class="prop-val">Markdown summary: goal, hypothesis, established facts, open questions</span>
-          </div>
-        </div>
+        <div class="card-head"><div class="card-ico pk">&#9651;</div><h3>Multi-harness reality</h3></div>
+        <p>Provider outages, model regressions, and pricing changes all show up unannounced. A serious workflow keeps both Claude Code and Codex authenticated and ready &mdash; not as a luxury, but as a cheap insurance policy.</p>
       </div>
-
       <div class="card">
-        <div class="card-head">
-          <div class="card-ico gn">&#9685;</div>
-          <h3>What the receiving agent gets</h3>
-        </div>
-        <p>When the target harness runs <code>resume</code>, TriSeek loads the snapshot and injects the briefing directly into the agent's context. The agent reads:</p>
-        <ul>
-          <li>The goal and current hypothesis</li>
-          <li>Which files have already been read (memo avoids re-reading unchanged files)</li>
-          <li>Which searches have already been run (search reuse avoids duplicate calls)</li>
-          <li>Any pinned code snippets from the originating session</li>
-          <li>The git commit and dirty-file list so branch state is unambiguous</li>
-        </ul>
-        <p style="margin-top: 0.75rem;">The agent can pick up the next planned action immediately.</p>
+        <div class="card-head"><div class="card-ico rd">&#9888;</div><h3>Context loss is expensive</h3></div>
+        <p>Four hours of debugging produces deep context: established facts, ruled-out hypotheses, opened files, and the next planned move. Restarting from a cold session in the other harness throws most of that away.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><div class="card-ico cy">&#8651;</div><h3>Neutral layer</h3></div>
+        <p>Neither vendor has incentive to commoditize its own context &mdash; only a neutral third party will. TriSeek sits between Claude Code and Codex on your machine and owns the artifacts that travel between them.</p>
       </div>
     </div>
   </section>
 
-  <!-- 02 — Claude to Codex -->
-  <section>
-    <div class="section-num">// 02 — claude &#8594; codex</div>
-    <h2>Handing off from <span class="hl">Claude</span></h2>
-    <p class="section-desc">Work in Claude Code, create a snapshot, then paste the resume command into Codex. The handoff block tells you exactly what to paste.</p>
+  <!-- 02 — Five-step flow -->
+  <section id="flow">
+    <div class="section-num">// 02 &mdash; flow</div>
+    <h2>The <span class="hl">five-step flow</span></h2>
+    <p class="section-desc">Open a session, work as you would normally, snapshot, optionally brief, and resume in the other harness. Each step maps to one MCP tool or one CLI command.</p>
 
     <div class="flow-steps">
       <div class="flow-step">
         <div class="flow-step-num">1</div>
         <div class="flow-step-body">
-          <h4>Work in Claude</h4>
-          <p>Open a session, search files, read code, and make progress on a task. TriSeek tracks the files you read and the searches you run automatically through the session.</p>
+          <h4>Open a session</h4>
+          <p><code>session_open</code> declares a goal and a repo root. Subsequent TriSeek calls accrue to this session's action log automatically.</p>
+          <div class="code-block">
+            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">MCP</span></div>
+            <pre>session_open {"goal": "Fix flaky integration test in auth_service"}</pre>
+          </div>
         </div>
       </div>
 
       <div class="flow-step">
         <div class="flow-step-num">2</div>
         <div class="flow-step-body">
-          <h4>Run the handoff command</h4>
-          <p>When you are ready to switch, run the handoff slash command in Claude Code:</p>
-          <div class="code-block">
-            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">Claude Code</span></div>
-            <pre>/triseek handoff codex</pre>
-          </div>
-          <p style="margin-top: 0.5rem;">TriSeek creates a snapshot of the session and prints a handoff block:</p>
-          <div class="handoff-block">
-            <div><span class="t-pk">TriSeek handoff ready</span></div>
-            <div>&nbsp;</div>
-            <div><span class="t-dim">From:</span>     <span class="t-cy">Claude</span></div>
-            <div><span class="t-dim">To:</span>       <span class="t-cy">Codex</span></div>
-            <div><span class="t-dim">Session:</span>  <span class="t-cy">my-session</span></div>
-            <div><span class="t-dim">Snapshot:</span> <span class="t-cy">snap_1746300000_my-session</span></div>
-            <div><span class="t-dim">Brief:</span>    <span class="t-cy">~/.triseek/daemon/snapshots/snap_1746300000_my-session/briefing.md</span></div>
-            <div>&nbsp;</div>
-            <div><span class="t-dim">In Codex, paste:</span></div>
-            <div>  <span class="t-ok">$triseek resume snap_1746300000_my-session</span></div>
-          </div>
+          <h4>Work</h4>
+          <p>Search, read files, request a context pack, run memo checks. Every tool call accrues an entry to the session's <code>action_log.jsonl</code>. Frecency, memo, and search reuse all warm up as you go.</p>
         </div>
       </div>
 
       <div class="flow-step">
         <div class="flow-step-num">3</div>
         <div class="flow-step-body">
-          <h4>Paste the resume command in Codex</h4>
-          <p>Open Codex and paste the <code>$triseek resume</code> command shown in the handoff block. Codex loads the snapshot and continues from where Claude left off.</p>
+          <h4>Snapshot</h4>
+          <p><code>session_snapshot</code> (or the CLI <code>triseek snapshot create</code>) condenses the working set, action log, frecency state, git state, and any pinned snippets into a schema-versioned snapshot directory under <code>~/.triseek/daemon/snapshots/</code>.</p>
           <div class="code-block">
-            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">Codex</span></div>
-            <pre>$triseek resume snap_1746300000_my-session</pre>
+            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
+            <pre>triseek snapshot create --session session_123 --source-harness claude_code .</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-step-num">4</div>
+        <div class="flow-step-body">
+          <h4>Brief (optional)</h4>
+          <p><code>triseek brief</code> writes a markdown <code>briefing.md</code> into the snapshot directory using the no-inference template (see <a class="text-link" href="#briefing">briefing</a>). Useful when the receiving harness needs a human-readable summary, but not required for resume to work.</p>
+          <div class="code-block">
+            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
+            <pre>triseek brief &lt;snapshot_id&gt; --mode no-inference</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-step-num">5</div>
+        <div class="flow-step-body">
+          <h4>Resume</h4>
+          <p><code>session_resume</code> primes the daemon's memo, frecency, and search-reuse state from the snapshot, then returns a markdown hydration payload. <code>triseek resume --write-to AGENTS.md</code> drops that payload into the receiving harness's project file in one step.</p>
+          <div class="code-block">
+            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
+            <pre>triseek resume &lt;snapshot_id&gt; --write-to AGENTS.md</pre>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- 03 — Codex to Claude -->
-  <section>
-    <div class="section-num">// 03 — codex &#8594; claude</div>
-    <h2>Handing off from <span class="hl">Codex</span></h2>
-    <p class="section-desc">The reverse flow works identically. Codex uses <code>$triseek handoff</code> and Claude resumes with <code>/triseek resume</code>.</p>
+  <!-- 03 — Session lifecycle -->
+  <section id="sessions">
+    <div class="section-num">// 03 &mdash; sessions</div>
+    <h2>Session <span class="hl">lifecycle</span></h2>
+    <p class="section-desc">A session is a goal, a series of TriSeek calls, and zero or more snapshots. The daemon owns session state, so two harnesses can refer to the same <code>session_id</code> at the same time.</p>
 
-    <div class="flow-steps">
-      <div class="flow-step">
-        <div class="flow-step-num">1</div>
-        <div class="flow-step-body">
-          <h4>Work in Codex</h4>
-          <p>Run searches, read files, and make progress. TriSeek records the session through its MCP tools as usual.</p>
-        </div>
-      </div>
+    <div class="state-diagram">
+      <span class="state-node">Open</span>
+      <span class="state-arrow">&rarr;</span>
+      <span class="state-label">work + snapshots</span>
+      <span class="state-arrow">&rarr;</span>
+      <span class="state-node green">Closed (resolved)</span>
+      <span class="state-label">or</span>
+      <span class="state-node gray">Closed (abandoned)</span>
+    </div>
 
-      <div class="flow-step">
-        <div class="flow-step-num">2</div>
-        <div class="flow-step-body">
-          <h4>Run the handoff command</h4>
-          <p>When ready to switch to Claude, run:</p>
-          <div class="code-block">
-            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">Codex</span></div>
-            <pre>$triseek handoff claude</pre>
-          </div>
-          <p style="margin-top: 0.5rem;">The printed block shows what to paste in Claude Code:</p>
-          <div class="handoff-block">
-            <div><span class="t-pk">TriSeek handoff ready</span></div>
-            <div>&nbsp;</div>
-            <div><span class="t-dim">From:</span>     <span class="t-cy">Codex</span></div>
-            <div><span class="t-dim">To:</span>       <span class="t-cy">Claude</span></div>
-            <div><span class="t-dim">Session:</span>  <span class="t-cy">my-session</span></div>
-            <div><span class="t-dim">Snapshot:</span> <span class="t-cy">snap_1746300060_my-session</span></div>
-            <div><span class="t-dim">Brief:</span>    <span class="t-cy">~/.triseek/daemon/snapshots/snap_1746300060_my-session/briefing.md</span></div>
-            <div>&nbsp;</div>
-            <div><span class="t-dim">In Claude, paste:</span></div>
-            <div>  <span class="t-ok">/triseek resume snap_1746300060_my-session</span></div>
-          </div>
-        </div>
-      </div>
+    <h3 style="margin-top: 2.5rem;">MCP tools</h3>
+    <p style="font-size: 0.92rem;">All ten session-related tools landed in v0.4.2. Full input/output schemas live in the <a class="text-link" href="mcp.md">MCP reference</a>; this table is the high-level map.</p>
+    <table class="tdoc">
+      <thead><tr><th>Tool</th><th>Inputs</th><th>Returns</th><th>When to call</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>session_open</code></td>
+          <td><code>goal</code>, optional <code>session_id</code></td>
+          <td>Full session record</td>
+          <td>Once at the start of a task.</td>
+        </tr>
+        <tr>
+          <td><code>session_status</code></td>
+          <td>optional <code>session_id</code></td>
+          <td>Session record + <code>action_log_size</code></td>
+          <td>Before snapshotting or closing.</td>
+        </tr>
+        <tr>
+          <td><code>session_list</code></td>
+          <td>optional <code>status</code> filter</td>
+          <td>Sessions for the current repo</td>
+          <td>Reconnect to an existing session from another harness.</td>
+        </tr>
+        <tr>
+          <td><code>session_close</code></td>
+          <td><code>session_id</code>, <code>status</code></td>
+          <td>Updated session record</td>
+          <td>When the work is done or abandoned.</td>
+        </tr>
+        <tr>
+          <td><code>session_snapshot</code></td>
+          <td><code>session_id</code>, optional source harness/model, optional pinned snippets</td>
+          <td><code>snapshot_id</code>, manifest</td>
+          <td>Whenever you want a checkpoint &mdash; before switching, before risky edits, end of day.</td>
+        </tr>
+        <tr>
+          <td><code>session_handoff</code></td>
+          <td><code>session_id</code>, optional pack output path</td>
+          <td>Snapshot envelope; optionally also exports a <code>.tcp</code> pack</td>
+          <td>Convenience: snapshot + close + (optional) export in one call.</td>
+        </tr>
+        <tr>
+          <td><code>session_snapshot_list</code></td>
+          <td>optional <code>session_id</code></td>
+          <td>List of snapshot manifests</td>
+          <td>Browsing checkpoints in the daemon store.</td>
+        </tr>
+        <tr>
+          <td><code>session_snapshot_get</code></td>
+          <td><code>snapshot_id</code></td>
+          <td>Full snapshot envelope</td>
+          <td>Inspect what was captured before resuming.</td>
+        </tr>
+        <tr>
+          <td><code>session_snapshot_diff</code></td>
+          <td><code>snapshot_a</code>, <code>snapshot_b</code></td>
+          <td>Added/removed/changed files and searches</td>
+          <td>Compare two checkpoints of the same session.</td>
+        </tr>
+        <tr>
+          <td><code>session_resume</code></td>
+          <td><code>snapshot_id</code>, optional <code>budget_tokens</code></td>
+          <td>Hydration payload (markdown), token estimate, hydration report</td>
+          <td>At the start of the receiving harness session.</td>
+        </tr>
+      </tbody>
+    </table>
 
-      <div class="flow-step">
-        <div class="flow-step-num">3</div>
-        <div class="flow-step-body">
-          <h4>Paste the resume command in Claude</h4>
-          <p>Open Claude Code and paste the <code>/triseek resume</code> command. Claude loads the snapshot and inherits the session state from Codex.</p>
-          <div class="code-block">
-            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">Claude Code</span></div>
-            <pre>/triseek resume snap_1746300060_my-session</pre>
-          </div>
-        </div>
-      </div>
+    <h3 style="margin-top: 2.5rem;">CLI walkthrough</h3>
+    <div class="code-block">
+      <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
+      <pre><span class="t-prompt">$</span> triseek snapshot create --session session_123 --source-harness claude_code .
+<span class="t-prompt">$</span> triseek snapshot list
+<span class="t-prompt">$</span> triseek snapshot show snap_1746300000_session_123
+<span class="t-prompt">$</span> triseek snapshot diff snap_a snap_b
+<span class="t-prompt">$</span> triseek brief snap_1746300000_session_123 --mode no-inference
+<span class="t-prompt">$</span> triseek pack export snap_1746300000_session_123 --output handoff.tcp
+<span class="t-prompt">$</span> triseek pack import handoff.tcp
+<span class="t-prompt">$</span> triseek resume snap_1746300000_session_123 --write-to AGENTS.md
+<span class="t-prompt">$</span> triseek handoff codex --from claude_code   <span class="cmt"># target-aware: snapshot + brief + resume target</span></pre>
+    </div>
+
+    <h3 style="margin-top: 2.5rem;">What lives where</h3>
+    <p style="font-size: 0.92rem;">All session state lives under the daemon directory. Nothing is written into your repo.</p>
+    <div class="code-block">
+      <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">~/.triseek/daemon/</span></div>
+      <pre>sessions/
+  sessions.json                              <span class="cmt"># index of all sessions for this machine</span>
+  &lt;session_id&gt;/
+    action_log.jsonl                         <span class="cmt"># append-only TriSeek call log</span>
+snapshots/
+  &lt;snapshot_id&gt;/
+    manifest.json                            <span class="cmt"># identity, repo, git, harness, generation</span>
+    working_set.json                         <span class="cmt"># files_read, searches_run, frecency_top_n</span>
+    action_log.jsonl                         <span class="cmt"># copied from the session at snapshot time</span>
+    pinned_snippets.json                     <span class="cmt"># index of pinned snippets</span>
+    pinned_snippets/
+      &lt;sha&gt;.txt                              <span class="cmt"># content-addressed quoted text</span>
+    git_state.json                           <span class="cmt"># commit, dirty files, hunk summary</span>
+    briefing.md                              <span class="cmt"># optional; written by triseek brief</span></pre>
     </div>
 
     <div class="card" style="margin-top: 1.5rem;">
-      <div class="card-head">
-        <div class="card-ico cy">&#8597;</div>
-        <h3>Command summary</h3>
+      <div class="card-head"><div class="card-ico pk">&#10070;</div><h3>Multiple harnesses, one session</h3></div>
+      <p>Both Claude Code and Codex can hold the same <code>session_id</code> open at the same time, because the state lives in the long-running TriSeek daemon and not in either harness. That shared daemon is what lets a resumed session inherit memo, frecency, and warmed search reuse from the prior harness without an explicit transfer step.</p>
+    </div>
+  </section>
+
+  <!-- 04 — Pack format -->
+  <section id="pack">
+    <div class="section-num">// 04 &mdash; pack format</div>
+    <h2>Pack <span class="hl">format</span></h2>
+    <p class="section-desc">A pack is a gzipped tarball that materializes a snapshot directory for transport. Extension <code>.tcp</code>. Schema version <code>1</code>. v1 is unsigned &mdash; signing is a future capability.</p>
+
+    <h3>Layout inside the tarball</h3>
+    <div class="code-block">
+      <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">handoff.tcp</span></div>
+      <pre>&lt;root&gt;/
+  manifest.json
+  working_set.json
+  action_log.jsonl
+  pinned_snippets.json
+  pinned_snippets/
+    &lt;sha&gt;.txt
+  git_state.json
+  briefing.md            <span class="cmt"># optional; only present when triseek brief was run</span>
+  checksums.txt          <span class="cmt"># sha256 of every file above</span></pre>
+    </div>
+
+    <h3 style="margin-top: 2rem;">Artifact schemas</h3>
+    <table class="tdoc">
+      <thead><tr><th>Artifact</th><th>Required fields</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>manifest.json</code></td>
+          <td><code>schema_version</code>, <code>snapshot_id</code>, <code>session_id</code>, <code>created_at</code>, <code>repo_root</code>, <code>repo_commit</code>, <code>repo_dirty_files</code>, <code>source_harness</code>, <code>source_model</code>, <code>generation</code>, <code>context_epoch</code></td>
+          <td>Snapshot identity and provenance &mdash; which session, which repo, which commit, which harness.</td>
+        </tr>
+        <tr>
+          <td><code>working_set.json</code></td>
+          <td><code>schema_version</code>, <code>files_read[]</code>, <code>searches_run[]</code>, <code>frecency_top_n[]</code></td>
+          <td>The state TriSeek primes back into the daemon on resume.</td>
+        </tr>
+        <tr>
+          <td><code>action_log.jsonl</code></td>
+          <td>Per line: <code>schema_version</code>, <code>entry_id</code>, <code>session_id</code>, <code>ts</code>, <code>kind</code>, <code>payload</code></td>
+          <td>Append-only ordered log of every TriSeek call captured during the session.</td>
+        </tr>
+        <tr>
+          <td><code>pinned_snippets.json</code></td>
+          <td><code>schema_version</code>, <code>entries[{path, line_start, line_end, sha}]</code></td>
+          <td>Index of user-pinned quoted spans. Each entry references a file in <code>pinned_snippets/&lt;sha&gt;.txt</code>.</td>
+        </tr>
+        <tr>
+          <td><code>git_state.json</code></td>
+          <td><code>schema_version</code>, <code>commit</code>, <code>branch</code>, <code>dirty_files[]</code>, <code>hunk_summary</code></td>
+          <td>Disambiguates branch / dirty state at snapshot time so the receiver knows what working tree the prior session saw.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top: 2rem;">What's deliberately not in the pack</h3>
+    <ul>
+      <li>No raw repo file contents &mdash; the pack is meaningless without the local repo checkout it points at.</li>
+      <li>No chat transcripts, no API keys, no model parameters.</li>
+      <li>Pinned snippets are the only verbatim content, and only for spans the prior agent intentionally pinned.</li>
+    </ul>
+
+    <h3 style="margin-top: 2rem;">Forward compatibility</h3>
+    <p>Schema version bumps on breaking reader changes. Additive fields do not bump the version. Readers validate the version and refuse unknown schemas.</p>
+
+    <h3 style="margin-top: 2rem;">Why this format</h3>
+    <p>A directory of files stays debuggable. JSONL survives partial writes for the action log. Content-addressed snippets dedupe across snapshots. Excluding raw file bodies keeps packs small and ties them to a local repo &mdash; that constraint is also a privacy boundary.</p>
+  </section>
+
+  <!-- 05 — Briefing -->
+  <section id="briefing">
+    <div class="section-num">// 05 &mdash; briefing</div>
+    <h2>Briefing</h2>
+    <p class="section-desc">A briefing is an optional markdown summary that lives at <code>briefing.md</code> inside a snapshot directory. The snapshot is fully functional without one &mdash; <code>session_resume</code> works either way.</p>
+
+    <div class="card" style="margin-top: 1rem;">
+      <div class="card-head"><div class="card-ico or">&#9728;</div><h3>v0.4.2 ships the no-inference template</h3></div>
+      <p>The <code>no-inference</code> mode builds a deterministic markdown briefing from the action log alone &mdash; no model call, no external network, fastest path, default mode. The CLI also accepts <code>--mode local-model</code> and <code>--mode cloud-model</code> for forward compatibility, but <strong>both currently fall back to the same no-inference template in v0.4.2.</strong> Model-backed summarization is on the roadmap, not in this release.</p>
+      <div class="code-block" style="margin-top: 1rem;">
+        <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
+        <pre><span class="t-prompt">$</span> triseek brief snap_1746300000_session_123 --mode no-inference
+<span class="t-prompt">$</span> triseek brief snap_1746300000_session_123 --mode local-model   <span class="cmt"># accepted; falls back to no-inference</span>
+<span class="t-prompt">$</span> triseek brief snap_1746300000_session_123 --mode cloud-model   <span class="cmt"># accepted; falls back to no-inference</span></pre>
       </div>
-      <p>The prefix differs by harness — <code>/</code> for Claude Code slash commands, <code>$</code> for Codex shell commands. The handoff block always prints the correct command for the target, so you do not need to remember the difference.</p>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.25rem;">
-        <div>
-          <p style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--text-dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.5rem;">Claude Code</p>
-          <div class="code-block" style="margin:0">
-            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">initiate</span></div>
-            <pre>/triseek handoff codex</pre>
-          </div>
-          <div class="code-block" style="margin-top:0.5rem">
-            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">resume</span></div>
-            <pre>/triseek resume &lt;snapshot_id&gt;</pre>
-          </div>
-        </div>
-        <div>
-          <p style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--text-dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.5rem;">Codex</p>
-          <div class="code-block" style="margin:0">
-            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">initiate</span></div>
-            <pre>$triseek handoff claude</pre>
-          </div>
-          <div class="code-block" style="margin-top:0.5rem">
-            <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">resume</span></div>
-            <pre>$triseek resume &lt;snapshot_id&gt;</pre>
-          </div>
-        </div>
+    </div>
+
+    <h3 style="margin-top: 2rem;">The briefing schema</h3>
+    <p style="font-size: 0.92rem;">Every briefing &mdash; templated or model-backed &mdash; uses the same six headers. The validator rejects briefings that miss any of them.</p>
+    <div class="code-block">
+      <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">briefing.md</span></div>
+      <pre>## Goal
+## Current hypothesis
+## Established facts
+## Ruled out
+## Open questions
+## Next planned action</pre>
+    </div>
+    <p style="margin-top: 0.5rem; font-size: 0.92rem;"><code>Ruled out</code> is the highest-leverage section &mdash; without it, a resumed agent re-explores dead ends the prior session already eliminated.</p>
+
+    <h3 style="margin-top: 2rem;">Validation</h3>
+    <p>The daemon validates briefings before writing: required headers must be present, every <code>[action_log:&lt;id&gt;]</code> citation under <code>Established facts</code> must reference a real entry in the snapshot's action log, and the file must stay under a 6,000-byte budget. A failed validation aborts the briefing write rather than leaving a malformed file on disk.</p>
+  </section>
+
+  <!-- 06 — Privacy & trust -->
+  <section id="privacy">
+    <div class="section-num">// 06 &mdash; privacy &amp; trust</div>
+    <h2>Privacy &amp; <span class="hl">trust model</span></h2>
+    <div class="three-col" style="margin-top: 1rem;">
+      <div class="card">
+        <div class="card-head"><div class="card-ico gn">&#10003;</div><h3>The daemon does no inference</h3></div>
+        <p>The TriSeek daemon never calls a model. The only place inference enters the picture is the (still-stubbed) <code>local-model</code> / <code>cloud-model</code> briefing modes, which run client-side from the CLI and use a user-configured endpoint. Default behavior is fully local.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><div class="card-ico cy">&#9711;</div><h3>Snapshots stay local</h3></div>
+        <p>Snapshots and packs live under <code>~/.triseek/daemon/snapshots/</code>. Nothing leaves the machine unless you explicitly export a <code>.tcp</code> file and move it yourself. There is no network sync in v0.4.2.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><div class="card-ico pu">&#9678;</div><h3>No raw file contents</h3></div>
+        <p>The snapshot records paths, line ranges, and content hashes &mdash; not file bodies. Pinned snippets are the only verbatim content, and only for spans the prior agent intentionally pinned. The pack is meaningless without the local repo it points at.</p>
       </div>
     </div>
   </section>
 
-  <!-- 04 — Why it helps -->
-  <section>
-    <div class="section-num">// 04 — why it helps</div>
-    <h2>No more <span class="hl">cold starts</span></h2>
-    <p class="section-desc">Every agent session that starts without context wastes tokens re-reading files and re-running searches already done in the previous session. Context Handoff eliminates that overhead.</p>
-
-    <div class="two-col" style="margin-top: 2rem;">
-      <div class="card">
-        <div class="card-head">
-          <div class="card-ico rd">&#9932;</div>
-          <h3>Without handoff</h3>
-        </div>
-        <ul>
-          <li>New session starts with no awareness of the previous session's work</li>
-          <li>Agent re-reads files already read in the prior session</li>
-          <li>Agent re-runs searches already completed with known results</li>
-          <li>Progress on the goal must be re-explained from scratch</li>
-          <li>Agent may take a different investigative path and reach different conclusions</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <div class="card-head">
-          <div class="card-ico gn">&#10003;</div>
-          <h3>With handoff</h3>
-        </div>
-        <ul>
-          <li><strong>Goal preserved</strong> — the receiving agent knows what was being worked on</li>
-          <li><strong>Files preserved</strong> — memo reuse skips re-reading unchanged files already in the working set</li>
-          <li><strong>Searches preserved</strong> — search reuse avoids duplicate MCP calls for already-known results</li>
-          <li><strong>Facts preserved</strong> — established facts and ruled-out hypotheses carry over in the briefing</li>
-          <li><strong>Git state preserved</strong> — the receiving agent knows which commit and dirty files the snapshot was taken on</li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top: 1.25rem;">
-      <div class="card-head">
-        <div class="card-ico pk">&#9432;</div>
-        <h3>Explicit switching as a feature</h3>
-      </div>
-      <p>Context Handoff makes agent transitions explicit and inspectable. The snapshot is a readable file on disk — you can open <code>briefing.md</code> in any editor to see exactly what will be passed to the receiving agent. There are no hidden state transfers or opaque serialized contexts.</p>
-    </div>
+  <!-- 07 — Supported harnesses -->
+  <section id="harnesses">
+    <div class="section-num">// 07 &mdash; harnesses</div>
+    <h2>Supported <span class="hl">harnesses</span></h2>
+    <p class="section-desc">v0.4.2 ships first-class adapter flows for Claude Code and Codex on the same machine. Other MCP-capable harnesses can use the underlying CLI manually until first-class adapters land.</p>
+    <table class="tdoc">
+      <thead><tr><th>Harness</th><th>Snapshot capture</th><th>Resume / hydration writer</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Claude Code</td>
+          <td><span class="ok">&#10003; Full adapter</span></td>
+          <td>Writes hydration payload to <code>CLAUDE.md</code> (or chosen project file).</td>
+        </tr>
+        <tr>
+          <td>Codex</td>
+          <td><span class="ok">&#10003; Full adapter</span></td>
+          <td>Writes hydration payload to <code>AGENTS.md</code> (or chosen project file).</td>
+        </tr>
+        <tr>
+          <td>OpenCode, Pi, Cursor, Cline, others</td>
+          <td><span class="warn">&#9888; CLI-only</span></td>
+          <td>Run <code>triseek snapshot create</code> and <code>triseek resume --print</code>; paste the markdown into wherever the harness expects context. First-class adapters are <a class="text-link" href="vision.html">on the roadmap</a>.</td>
+        </tr>
+      </tbody>
+    </table>
   </section>
 
-  <!-- 05 — Prerequisite -->
-  <section>
-    <div class="section-num">// 05 — before you start</div>
-    <h2>Check <span class="hl">MCP registration</span></h2>
-    <p class="section-desc">Both harnesses must have the TriSeek MCP server registered before a handoff will work. Run <code>triseek doctor</code> to verify.</p>
+  <!-- 08 — Scope -->
+  <section id="scope">
+    <div class="section-num">// 08 &mdash; scope</div>
+    <h2>Ships in v0.4.2 vs. <span class="hl">coming</span></h2>
+    <p class="section-desc">Honest scope sheet. Anything marked <span class="planned">Coming</span> lives only on the <a class="text-link" href="vision.html">Vision</a> page and is not promised here.</p>
+    <table class="tdoc">
+      <thead><tr><th>Capability</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Snapshot a session and persist it locally</td><td><span class="ok">&#10003; v0.4.2</span></td></tr>
+        <tr><td>Resume a session in the same harness</td><td><span class="ok">&#10003; v0.4.2</span></td></tr>
+        <tr><td>Resume between Claude Code and Codex on the same machine</td><td><span class="ok">&#10003; v0.4.2</span></td></tr>
+        <tr><td>Pack export / import (<code>.tcp</code>)</td><td><span class="ok">&#10003; v0.4.2</span></td></tr>
+        <tr><td>No-inference templated briefing</td><td><span class="ok">&#10003; v0.4.2</span></td></tr>
+        <tr><td>Model-backed briefing (local / cloud)</td><td><span class="planned">Coming</span></td></tr>
+        <tr><td>First-class adapters for OpenCode, Pi, Cursor, Cline</td><td><span class="planned">Coming</span></td></tr>
+        <tr><td>Auto-snapshot via harness hooks (PreCompact)</td><td><span class="planned">Coming</span></td></tr>
+        <tr><td>Cross-machine resume</td><td><span class="planned">Coming</span></td></tr>
+        <tr><td>Team-shared packs</td><td><span class="planned">Coming</span></td></tr>
+        <tr><td>Replay / audit verbs</td><td><span class="planned">Coming</span></td></tr>
+        <tr><td>Eval harness</td><td><span class="planned">Coming</span></td></tr>
+      </tbody>
+    </table>
+  </section>
 
-    <div class="two-col" style="margin-top: 2rem;">
+  <!-- 09 — Walkthroughs -->
+  <section id="walkthroughs">
+    <div class="section-num">// 09 &mdash; walkthroughs</div>
+    <h2>End-to-end <span class="hl">walkthroughs</span></h2>
+
+    <div class="two-col">
       <div class="card">
-        <div class="card-head">
-          <div class="card-ico cy">&#9670;</div>
-          <h3>triseek doctor</h3>
-        </div>
-        <p>The <code>doctor</code> command checks that the TriSeek daemon is running and that the MCP server is reachable. Run it from the repo root before starting a handoff demo or workflow.</p>
+        <div class="card-head"><div class="card-ico cy">&rarr;</div><h3>Claude Code &rarr; Codex</h3></div>
+        <p>The headline switch. Claude is unavailable or you want a second opinion. The session moves with you.</p>
         <div class="code-block" style="margin-top: 1rem;">
-          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">shell</span></div>
-          <pre>triseek doctor</pre>
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">in Claude Code</span></div>
+          <pre><span class="t-cmd">/triseek handoff codex</span>
+<span class="t-dim">&rarr; snapshot snap_1746300000_session_123 created</span>
+<span class="t-dim">&rarr; briefing.md written</span>
+<span class="t-dim">&rarr; in Codex, paste:</span>
+<span class="t-ok">  $triseek resume snap_1746300000_session_123</span></pre>
         </div>
-        <p style="margin-top: 0.75rem;">A healthy output shows the daemon port, index status, and confirms the MCP server socket is responding. Fix any flagged issues before testing handoff.</p>
+        <div class="code-block" style="margin-top: 0.5rem;">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">in Codex</span></div>
+          <pre><span class="t-cmd">$triseek resume snap_1746300000_session_123</span>
+<span class="t-dim">&rarr; memo primed (12 files)</span>
+<span class="t-dim">&rarr; search reuse warmed (8 queries)</span>
+<span class="t-dim">&rarr; frecency restored</span>
+<span class="t-ok">&rarr; AGENTS.md updated with hydration payload</span></pre>
+        </div>
       </div>
 
       <div class="card">
-        <div class="card-head">
-          <div class="card-ico yw">&#9888;</div>
-          <h3>What to check</h3>
+        <div class="card-head"><div class="card-ico gn">&#8635;</div><h3>Claude Code &rarr; Claude Code (next morning)</h3></div>
+        <p>Same harness, different day. Snapshot at end of session, resume against the same daemon tomorrow with everything still warm.</p>
+        <div class="code-block" style="margin-top: 1rem;">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">end of day</span></div>
+          <pre><span class="t-prompt">$</span> triseek snapshot create --session session_123 \
+    --source-harness claude_code .</pre>
         </div>
-        <ul>
-          <li><strong>Daemon running</strong> — <code>triseek doctor</code> should report a live PID and port</li>
-          <li><strong>MCP registered in Claude</strong> — check <code>.mcp.json</code> or run <code>claude mcp list</code> and look for <code>triseek</code></li>
-          <li><strong>MCP registered in Codex</strong> — check <code>~/.codex/config.toml</code> for the TriSeek MCP entry</li>
-          <li><strong>Repo indexed</strong> — run <code>triseek index-status</code> to confirm the trigram index is up to date</li>
-        </ul>
-        <p style="margin-top: 0.75rem;">See the <a class="text-link" href="install.html">install guide</a> and <a class="text-link" href="mcp.html">MCP reference</a> for registration instructions.</p>
+        <div class="code-block" style="margin-top: 0.5rem;">
+          <div class="tb"><div class="dots"><span></span><span></span><span></span></div><span class="label">next morning</span></div>
+          <pre><span class="t-prompt">$</span> triseek resume snap_1746300000_session_123 \
+    --write-to CLAUDE.md
+<span class="t-ok">&rarr; CLAUDE.md updated; ready to continue</span></pre>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- 06 — Related docs -->
+  <!-- 10 — Limits -->
+  <section id="limits">
+    <div class="section-num">// 10 &mdash; limits</div>
+    <h2>What this <span class="hl">doesn't do yet</span></h2>
+    <ul>
+      <li><strong>Same-machine only.</strong> v0.4.2 has no cross-machine sync. Pack export gives you a portable file you can move yourself, but TriSeek doesn't transport it for you.</li>
+      <li><strong>Manual snapshots only.</strong> No auto-snapshot via harness hooks (PreCompact integration is on the roadmap).</li>
+      <li><strong>Single-user.</strong> Packs aren't designed for team sharing yet &mdash; no signing, no identity, no access control.</li>
+      <li><strong>Adapters: Claude Code and Codex only.</strong> Other harnesses use the CLI manually for now.</li>
+      <li><strong>Briefing: no-inference template only.</strong> Model-backed summarization is forward-compatible CLI surface but not yet wired.</li>
+    </ul>
+    <p style="margin-top: 1rem;">Full forward-looking picture: <a class="text-link" href="vision.html">Vision &amp; Roadmap</a>.</p>
+  </section>
+
+  <!-- 11 — Related -->
   <section>
-    <div class="section-num">// 06 — related</div>
+    <div class="section-num">// related</div>
     <h2>Related <span class="hl">docs</span></h2>
-    <div class="two-col" style="margin-top: 2rem;">
+    <div class="two-col" style="margin-top: 1.5rem;">
       <div class="card">
-        <div class="card-head">
-          <div class="card-ico gn">&#8599;</div>
-          <h3>Related Pages</h3>
-        </div>
+        <div class="card-head"><div class="card-ico gn">&#8599;</div><h3>Inside TriSeek</h3></div>
         <ul style="list-style:none;margin:0;padding:0;">
-          <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
-            <a class="text-link" href="memo.html">Memo &amp; Search Reuse</a> &mdash; session file freshness and duplicate search reuse, both used during resume
-          </li>
-          <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
-            <a class="text-link" href="context-pack.html">Context Packs</a> &mdash; intent-aware starting sets for a fresh session without a prior handoff
-          </li>
-          <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
-            <a class="text-link" href="mcp.html">MCP Server Reference</a> &mdash; all tools including <code>session_handoff</code> and <code>session_resume</code>
-          </li>
-          <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
-            <a class="text-link" href="install.html">Install TriSeek</a> &mdash; platform-specific install and MCP registration
-          </li>
-          <li style="padding: 0.5rem 0;">
-            <a class="text-link" href="index.html">&larr; Docs Home</a>
-          </li>
+          <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);"><a class="text-link" href="memo.html">Memo &amp; Search Reuse</a> &mdash; session file freshness and duplicate search reuse, both used during resume</li>
+          <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);"><a class="text-link" href="context-pack.html">Context Packs</a> &mdash; intent-aware starting sets for a fresh session without a prior handoff</li>
+          <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);"><a class="text-link" href="mcp.md">MCP Server Reference</a> &mdash; full input/output schemas for every <code>session_*</code> tool</li>
+          <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);"><a class="text-link" href="install.html">Install TriSeek</a> &mdash; platform-specific install and MCP registration</li>
+          <li style="padding: 0.5rem 0;"><a class="text-link" href="vision.html">Vision &amp; Roadmap</a> &mdash; what's planned, designing, and considering</li>
         </ul>
       </div>
-
       <div class="card">
-        <div class="card-head">
-          <div class="card-ico pk">&#8594;</div>
-          <h3>Context Handoff release</h3>
-        </div>
-        <p>Context Handoff shipped in TriSeek v0.4.2. It requires the TriSeek daemon (introduced in v0.3.0) and the session tools (<code>session_open</code>, <code>session_snapshot</code>, <code>session_handoff</code>, <code>session_resume</code>) available via MCP.</p>
-        <p style="margin-top: 0.75rem;">This page is preserved for existing links. The canonical overview is now <a class="text-link" href="context-portability.html">Context Portability</a>.</p>
-        <p style="margin-top: 0.75rem;"><a class="text-link" href="https://github.com/Sagart-cactus/TriSeek/releases">View releases on GitHub &rarr;</a></p>
+        <div class="card-head"><div class="card-ico pk">&#9678;</div><h3>Release</h3></div>
+        <p>Context portability shipped in TriSeek v0.4.2. Full release notes including new MCP tools, CLI commands, storage paths, and the acceptance demo: <a class="text-link" href="releases/v0.4.2.md">v0.4.2 release notes</a>.</p>
+        <p style="margin-top: 0.75rem;"><a class="text-link" href="https://github.com/Sagart-cactus/TriSeek/releases">All TriSeek releases on GitHub &rarr;</a></p>
       </div>
     </div>
   </section>
 
   <footer class="site-footer">
-    <span>Context Handoff — portable sessions across Claude Code and Codex.</span>
+    <span>Context Handoff &mdash; portable sessions across Claude Code and Codex.</span>
     <div style="display:flex;gap:1.25rem;">
       <a href="context-pack.html">&larr; context-pack</a>
-      <a href="triseek-explained.html">how it works &rarr;</a>
+      <a href="vision.html">vision &rarr;</a>
     </div>
   </footer>
 </div>

@@ -154,7 +154,8 @@ body::before {
   box-shadow: 0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(34,211,238,0.05);
   animation: fadeUp 0.5s 0.32s ease both;
 }
-.anim-frame { width: 100%; max-width: 620px; height: 390px; border: 0; margin: 0 auto 2rem; display: block; }
+.anim-wrap { width: 100%; max-width: 480px; margin: 0 auto 2rem; display: flex; justify-content: center; }
+.anim-frame { width: 100%; aspect-ratio: 480 / 360; border: 0; background: transparent; display: block; }
 .terminal-tb {
   display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem;
   background: var(--bg-elevated); border-bottom: 1px solid var(--border);
@@ -289,13 +290,9 @@ h2 .hl { color: var(--accent-cyan); }
     <a href="install.html">install</a>
     <a href="mcp.html">mcp</a>
     <a href="memo.html">memo</a>
-    <a href="context-portability.html">portability</a>
-    <a href="sessions.html">tasks</a>
-    <a href="pack-format.html">pack</a>
-    <a href="briefing.html">briefing</a>
-    <a href="vision.html">vision</a>
     <a href="context-pack.html">context&#8209;pack</a>
     <a href="context-handoff.html">handoff</a>
+    <a href="vision.html">vision</a>
     <a href="triseek-explained.html">how it works</a>
     <a href="triseek-architecture.html">architecture</a>
   </div>
@@ -309,12 +306,14 @@ h2 .hl { color: var(--accent-cyan); }
       CONTEXT PORTABILITY · LOCAL-FIRST · BOUNDED BY DESIGN
     </div>
     <h1>Your agent context,<br><span class="hl">portable.</span></h1>
-    <p class="hero-sub">Teams running both Claude Code and Codex shouldn't lose hours when one goes down. TriSeek captures the state of an agent session — files identified, searches run, and working-set signals — and resumes it in the other harness with primed memo and warmed search cache.</p>
+    <p class="hero-sub">Claude Code goes down at 2pm. Your four hours of debugging shouldn't. TriSeek snapshots a session in one harness and resumes it in the other with primed memo, warmed search reuse, and restored frecency &mdash; built on the same local-first code search engine that already wins 38 of 39 medium-repo benchmarks.</p>
     <div class="hero-ctas">
       <a href="install.html" class="btn-primary">⬇ Install TriSeek</a>
-      <a href="context-portability.html" class="btn-secondary">↔ Portability</a>
+      <a href="context-handoff.html" class="btn-secondary">↔ Context Handoff</a>
     </div>
-    <iframe class="anim-frame" src="_includes/portability-animation.html" title="Snapshot in Claude Code. Resume in Codex."></iframe>
+    <div class="anim-wrap">
+      <iframe class="anim-frame" src="_includes/portability-animation.html?variant=compact" title="Snapshot in Claude Code. Resume in Codex." loading="lazy"></iframe>
+    </div>
 
     <div class="terminal-demo">
       <div class="terminal-tb">
@@ -369,10 +368,10 @@ h2 .hl { color: var(--accent-cyan); }
         <div class="doc-card-arrow">read guide →</div>
       </a>
 
-      <a class="doc-card" href="context-portability.html">
-        <div class="doc-card-ico pu">&#8596;</div>
-        <h3>Context Portability</h3>
-        <p>Snapshot in Claude Code, resume in Codex with memo, search reuse, frecency, git state, and pinned snippets intact.</p>
+      <a class="doc-card" href="context-handoff.html">
+        <div class="doc-card-ico" style="background:rgba(244,114,182,0.1);color:#f472b6;">&#8596;</div>
+        <h3>Context Handoff &amp; Portability</h3>
+        <p>Snapshot a session in one harness and resume it in another with primed memo, warmed search reuse, restored frecency, and captured git state. Sessions, pack format, and briefing all live here. <strong style="color:var(--accent-pink);">New in v0.4.2.</strong></p>
         <div class="doc-card-arrow">read guide →</div>
       </a>
 
@@ -380,6 +379,13 @@ h2 .hl { color: var(--accent-cyan); }
         <div class="doc-card-ico pu">◇</div>
         <h3>Memo &amp; Search Reuse</h3>
         <p>Session-aware file freshness tracking and duplicate search-result reuse across Claude Code, Codex, OpenCode, and Pi.</p>
+        <div class="doc-card-arrow">read guide →</div>
+      </a>
+
+      <a class="doc-card" href="context-pack.html">
+        <div class="doc-card-ico or">&#9678;</div>
+        <h3>Context Packs</h3>
+        <p>Intent-aware starting sets for bugfix and review tasks — ranked paths, clipped snippets, reason tags, and next-step hints. No LLM, no embeddings.</p>
         <div class="doc-card-arrow">read guide →</div>
       </a>
 
@@ -397,38 +403,10 @@ h2 .hl { color: var(--accent-cyan); }
         <div class="doc-card-arrow">read guide →</div>
       </a>
 
-      <a class="doc-card" href="context-pack.html">
-        <div class="doc-card-ico or">&#9678;</div>
-        <h3>Context Packs</h3>
-        <p>Intent-aware starting sets for bugfix and review tasks — ranked paths, clipped snippets, reason tags, and next-step hints. No LLM, no embeddings.</p>
-        <div class="doc-card-arrow">read guide →</div>
-      </a>
-
-      <a class="doc-card" href="sessions.html">
-        <div class="doc-card-ico cy">&#9678;</div>
-        <h3>Session Lifecycle</h3>
-        <p>Reference for session tools, snapshot state, resume hydration, and daemon storage paths.</p>
-        <div class="doc-card-arrow">read guide →</div>
-      </a>
-
-      <a class="doc-card" href="pack-format.html">
-        <div class="doc-card-ico pu">&#9635;</div>
-        <h3>Pack Format</h3>
-        <p>The `.tcp` archive layout, schema-versioned artifacts, checksums, and privacy boundaries.</p>
-        <div class="doc-card-arrow">read guide →</div>
-      </a>
-
-      <a class="doc-card" href="briefing.html">
-        <div class="doc-card-ico or">&#9671;</div>
-        <h3>Briefing Modes</h3>
-        <p>How `briefing.md` is generated and validated in v0.4.2.</p>
-        <div class="doc-card-arrow">read guide →</div>
-      </a>
-
-      <a class="doc-card" href="context-handoff.html">
-        <div class="doc-card-ico" style="background:rgba(244,114,182,0.1);color:#f472b6;">&#8594;</div>
-        <h3>Context Handoff</h3>
-        <p>Snapshot a session in one harness and resume it in another — goal, files, searches, and git state carried over. Switch between Claude and Codex without a cold start.</p>
+      <a class="doc-card" href="vision.html">
+        <div class="doc-card-ico" style="background:rgba(52,211,153,0.1);color:#34d399;">&#9728;</div>
+        <h3>Vision &amp; Roadmap</h3>
+        <p>What's planned, designing, and considering. The thesis behind the local context substrate, plus what we're consciously not building.</p>
         <div class="doc-card-arrow">read guide →</div>
       </a>
     </div>
@@ -504,7 +482,7 @@ h2 .hl { color: var(--accent-cyan); }
     <div class="features-grid">
       <div class="feature-item"><div class="feature-title">The reality</div><div class="feature-desc">Most serious AI-coding teams pay for both Claude Code and Codex and use them in parallel.</div></div>
       <div class="feature-item"><div class="feature-title">The risk</div><div class="feature-desc">Provider outages, model regressions, and pricing changes can strand an in-flight session.</div></div>
-      <div class="feature-item"><div class="feature-title">The fix</div><div class="feature-desc">A portable local context layer between Claude Code and Codex. Other harnesses are on the <a href="vision.html" style="color:var(--accent-cyan)">roadmap</a>.</div></div>
+      <div class="feature-item"><div class="feature-title">The fix</div><div class="feature-desc">Neither harness vendor has incentive to commoditize its own context &mdash; only a neutral third party will. TriSeek is that layer between Claude Code and Codex on your machine. Other harnesses are on the <a href="vision.html" style="color:var(--accent-cyan)">roadmap</a>.</div></div>
     </div>
   </section>
 
