@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TriSeek — Code Architecture</title>
+<title>TriSeek — Local Context Architecture</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
@@ -310,13 +310,12 @@ footer {
   <a class="logo" href="index.html">▲ TriSeek</a>
   <div class="section-links">
     <a href="#workspace">workspace</a>
+    <a href="#substrate">substrate</a>
     <a href="#crates">crates</a>
-    <a href="#data-types">types</a>
-    <a href="#index-build">build</a>
     <a href="#search-flow">search</a>
     <a href="#routing">routing</a>
-    <a href="#engine">engine</a>
     <a href="#fastindex">fastindex</a>
+    <a href="#cli">cli</a>
   </div>
   <div class="nav-links">
     <a href="index.html">home</a>
@@ -326,7 +325,7 @@ footer {
     <a href="context-pack.html">context&#8209;pack</a>
     <a href="context-handoff.html">handoff</a>
     <a href="vision.html">vision</a>
-    <a href="triseek-explained.html">how it works</a>
+    <a href="triseek-explained.html">search</a>
     <a href="triseek-architecture.html" class="active">architecture</a>
   </div>
 </nav>
@@ -334,8 +333,8 @@ footer {
 <!-- ═══════ HERO ═══════ -->
 <header class="hero" id="top">
   <div class="hero-badge">Rust Workspace &middot; 6 Crates &middot; ~21,765 Rust LOC</div>
-  <h1>Code <span class="hl">Architecture</span></h1>
-  <p class="hero-sub">A deep dive into every crate, module, struct, and data flow in TriSeek &mdash; how the pieces fit together, what each component does, and how a search query travels through the system.</p>
+  <h1>Local Context <span class="hl">Architecture</span></h1>
+  <p class="hero-sub">A code-oriented map of TriSeek's local context substrate: CLI, MCP server, daemon, search engine, memo/search reuse, context packs, snapshots, handoff, and the fast trigram index underneath.</p>
 </header>
 
 <!-- ═══════ WORKSPACE ═══════ -->
@@ -496,13 +495,24 @@ footer {
       <span class="fn">pack.rs</span>                     <span class="cmt"># .tcp export/import</span>
       <span class="fn">brief.rs</span>                    <span class="cmt"># briefing generation and validation</span>
       <span class="fn">hydration_writer.rs</span>         <span class="cmt"># write payloads to AGENTS.md / CLAUDE.md / stdout</span>
+      <span class="fn">context_pack.rs</span>            <span class="cmt"># ranked bugfix/review context envelopes</span>
+      <span class="fn">handoff.rs</span>                 <span class="cmt"># target-aware handoff helpers</span>
+      <span class="str">mcp/</span>
+        <span class="fn">server.rs</span>                  <span class="cmt"># stdio JSON-RPC MCP loop</span>
+        <span class="fn">schema.rs</span>                  <span class="cmt"># tool schemas and descriptions</span>
+        <span class="fn">search_memo.rs</span>             <span class="cmt"># bounded search + memo tool handlers</span>
+        <span class="fn">query_cache.rs</span>             <span class="cmt"># duplicate search reuse envelopes</span>
+      <span class="str">install/</span>                    <span class="cmt"># claude-code, codex, opencode, pi installers + doctor</span>
     <span class="str">search-bench/src/</span>
       <span class="fn">main.rs</span>                     <span class="cmt"># benchmark harness with cold/warm trials</span>
   <span class="str">~/.triseek/indexes/&lt;root-key&gt;/</span>   <span class="cmt"># generated index directory</span>
     <span class="fn">base.bin</span>                      <span class="cmt"># bincode-serialized full index</span>
     <span class="fn">fast.idx</span>                      <span class="cmt"># mmap binary format (primary)</span>
     <span class="fn">delta.bin</span>                     <span class="cmt"># optional incremental changes</span>
-    <span class="fn">metadata.json</span>                 <span class="cmt"># index metadata + repo stats</span></pre>
+    <span class="fn">metadata.json</span>                 <span class="cmt"># index metadata + repo stats</span>
+  <span class="str">~/.triseek/daemon/</span>                 <span class="cmt"># daemon-owned context state</span>
+    <span class="str">sessions/</span>                     <span class="cmt"># sessions.json + action_log.jsonl</span>
+    <span class="str">snapshots/</span>                    <span class="cmt"># snapshot manifests, working sets, git state</span></pre>
       </div>
     </div>
 
@@ -528,11 +538,88 @@ footer {
   </div>
 </section>
 
+<!-- ═══════ SUBSTRATE ═══════ -->
+<section id="substrate">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-num">02 &mdash; Context Substrate</div>
+      <h2>Runtime <span class="hl">Layers</span></h2>
+      <p class="section-desc">TriSeek has three runtime faces over the same local state: a CLI for humans and scripts, an MCP server for agents, and a daemon that owns indexed search, freshness, session state, snapshots, and hydration.</p>
+    </div>
+
+    <div class="flow-h reveal" style="flex-wrap:wrap;">
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-pink);">
+          <div class="label" style="color:var(--accent-pink)">CLI</div>
+          <div class="sub">search-cli/main.rs</div>
+          <div class="sub">install, search, pack, handoff</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-green-dim)">
+          <div class="label" style="color:var(--accent-green)">MCP Server</div>
+          <div class="sub">search-cli/mcp/</div>
+          <div class="sub">bounded tool envelopes</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-purple-dim)">
+          <div class="label" style="color:var(--accent-purple)">Daemon RPC</div>
+          <div class="sub">search-server/main.rs</div>
+          <div class="sub">roots, watchers, memo, sessions</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-cyan-dim)">
+          <div class="label" style="color:var(--accent-cyan)">Index Engine</div>
+          <div class="sub">search-index/</div>
+          <div class="sub">fast.idx + verification</div>
+        </div>
+      </div>
+      <div class="flow-h-arrow">&rarr;</div>
+      <div class="flow-h-step">
+        <div class="flow-h-box" style="border-color:var(--accent-orange-dim)">
+          <div class="label" style="color:var(--accent-orange)">Local State</div>
+          <div class="sub">~/.triseek/</div>
+          <div class="sub">indexes, sessions, snapshots</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="three-col reveal">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico cy">S</div>
+          <h3>Search foundation</h3>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.88rem">Path/content search, adaptive routing, direct scan/ripgrep fallback, mmap fast index, and parallel candidate verification.</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico pu">M</div>
+          <h3>Session memory</h3>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.88rem">Memo freshness, duplicate-search reuse, frecency scoring, action logs, working sets, and pinned snippets stay scoped to a repo root.</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-ico or">P</div>
+          <h3>Portability</h3>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.88rem">Snapshots, <code>.tcp</code> packs, no-inference briefings, and hydration writers carry context between supported harnesses.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ═══════ CRATES ═══════ -->
 <section id="crates">
   <div class="container">
     <div class="reveal">
-      <div class="section-num">02 &mdash; Crate Deep Dive</div>
+      <div class="section-num">03 &mdash; Crate Deep Dive</div>
       <h2>search-core: <span class="hl">The Brain</span></h2>
       <p class="section-desc">The core crate has zero I/O. It defines query types, result types, the trigram encoding scheme, repo classification, and &mdash; most importantly &mdash; the query planner that decides <em>how</em> to execute each search.</p>
     </div>
@@ -679,7 +766,7 @@ footer {
 <section id="data-types">
   <div class="container">
     <div class="reveal">
-      <div class="section-num">03 &mdash; Index Data Model</div>
+      <div class="section-num">04 &mdash; Index Data Model</div>
       <h2>How Data is <span class="hl">Stored</span></h2>
       <p class="section-desc">The index exists in three layers: PersistedIndex (full snapshot), optional DeltaSnapshot (incremental changes), and RuntimeIndex (merged in-memory view). The FastIndex provides the same data via mmap.</p>
     </div>
@@ -771,7 +858,7 @@ footer {
 <section id="index-build">
   <div class="container">
     <div class="reveal">
-      <div class="section-num">04 &mdash; Index Build Pipeline</div>
+      <div class="section-num">05 &mdash; Index Build Pipeline</div>
       <h2>Building the <span class="hl">Index</span></h2>
       <p class="section-desc">The build pipeline walks the repository in parallel, extracts trigrams from each file, accumulates posting lists, and writes both bincode (legacy) and mmap (fast) index formats.</p>
     </div>
@@ -904,7 +991,7 @@ footer {
 <section id="search-flow">
   <div class="container">
     <div class="reveal">
-      <div class="section-num">05 &mdash; Search Execution</div>
+      <div class="section-num">06 &mdash; Search Execution</div>
       <h2>End-to-End <span class="hl">Search Flow</span></h2>
       <p class="section-desc">What happens from the moment you type a query to when results appear. Every search travels through the same pipeline: parse &rarr; plan &rarr; route &rarr; filter &rarr; candidates &rarr; verify &rarr; results.</p>
     </div>
@@ -1047,7 +1134,7 @@ footer {
 <section id="routing">
   <div class="container">
     <div class="reveal">
-      <div class="section-num">06 &mdash; Adaptive Routing</div>
+      <div class="section-num">07 &mdash; Adaptive Routing</div>
       <h2>The <span class="hl">Decision</span> Tree</h2>
       <p class="section-desc">route_query() in planner.rs decides which execution engine handles each query. The decision considers repo size, query shape, selectivity, whether an index exists, and session context.</p>
     </div>
@@ -1116,7 +1203,7 @@ footer {
 <section id="engine">
   <div class="container">
     <div class="reveal">
-      <div class="section-num">07 &mdash; Search Engine Internals</div>
+      <div class="section-num">08 &mdash; Search Engine Internals</div>
       <h2>Inside <span class="hl">engine.rs</span></h2>
       <p class="section-desc">The ~1000-line engine module is the heart of TriSeek. It orchestrates path filtering, candidate selection, parallel verification, and line-level match extraction.</p>
     </div>
@@ -1251,7 +1338,7 @@ footer {
 <section id="fastindex">
   <div class="container">
     <div class="reveal">
-      <div class="section-num">08 &mdash; Fast Index Format</div>
+      <div class="section-num">09 &mdash; Fast Index Format</div>
       <h2>Inside <span class="hl">fast.idx</span></h2>
       <p class="section-desc">A custom flat binary format designed for mmap. No parsing step &mdash; posting lists are read as raw &amp;[u32] slices directly from mapped memory. Every section is at a fixed or header-declared offset.</p>
     </div>
@@ -1353,9 +1440,9 @@ footer {
 <section id="cli">
   <div class="container">
     <div class="reveal">
-      <div class="section-num">09 &mdash; CLI &amp; Bench</div>
+      <div class="section-num">10 &mdash; CLI, MCP &amp; Bench</div>
       <h2>Entry <span class="hl">Points</span></h2>
-      <p class="section-desc">The CLI binary and benchmark harness are thin wrappers that parse arguments, dispatch to the engine, and format output.</p>
+      <p class="section-desc">The CLI binary owns human-facing commands, installer flows, pack/brief/handoff helpers, and the stdio MCP server. The benchmark harness remains separate so release measurements do not leak into product runtime code.</p>
     </div>
 
     <div class="card reveal">
@@ -1368,7 +1455,14 @@ footer {
         <tbody>
           <tr><td style="color:var(--accent-cyan)">build</td><td>handle_build()</td><td>Full index build: walk &rarr; accumulate &rarr; persist base.bin + fast.idx</td></tr>
           <tr><td style="color:var(--accent-cyan)">update</td><td>handle_update()</td><td>Incremental update: fingerprint diff &rarr; delta or rebuild</td></tr>
-          <tr><td style="color:var(--accent-cyan)">search</td><td>handle_search()</td><td>Single query: plan &rarr; route &rarr; execute &rarr; JSON output</td></tr>
+          <tr><td style="color:var(--accent-cyan)">search</td><td>handle_search()</td><td>Single query: plan &rarr; route &rarr; execute &rarr; table or JSON output</td></tr>
+          <tr><td style="color:var(--accent-cyan)">context-pack</td><td>handle_context_pack()</td><td>Build bounded bugfix/review trailheads with ranked files, clipped snippets, reason tags, and next-step hints</td></tr>
+          <tr><td style="color:var(--accent-cyan)">mcp serve</td><td>mcp::serve()</td><td>Run the local stdio MCP server for search, memo, context-pack, and session tools</td></tr>
+          <tr><td style="color:var(--accent-cyan)">install / doctor</td><td>install::* / doctor</td><td>Configure Claude Code, Codex, OpenCode, and Pi; validate binaries, daemon, MCP config, and hooks</td></tr>
+          <tr><td style="color:var(--accent-cyan)">daemon</td><td>handle_daemon()</td><td>Start, stop, and inspect the background daemon that owns root services, watchers, memo, and session state</td></tr>
+          <tr><td style="color:var(--accent-cyan)">snapshot</td><td>handle_snapshot()</td><td>Create, list, get, and diff portable work-session snapshots</td></tr>
+          <tr><td style="color:var(--accent-cyan)">handoff / resume</td><td>handoff.rs / hydrate.rs</td><td>Capture a session for another harness, then write or print the hydration payload</td></tr>
+          <tr><td style="color:var(--accent-cyan)">pack / brief</td><td>pack.rs / brief.rs</td><td>Export/import <code>.tcp</code> snapshots and generate bounded no-inference briefings</td></tr>
           <tr><td style="color:var(--accent-cyan)">session</td><td>handle_session()</td><td>Multi-query from JSON file: per-query routing + aggregated metrics</td></tr>
           <tr><td style="color:var(--accent-cyan)">stats</td><td>handle_stats()</td><td>Display index metadata: repo stats, build time, doc count</td></tr>
           <tr><td style="color:var(--accent-cyan)">measure</td><td>handle_measure()</td><td>Scan repo without building index: for repo classification</td></tr>
@@ -1412,8 +1506,8 @@ footer {
 
 <footer>
   <div class="container">
-    <p>TriSeek Code Architecture &mdash; <a href="triseek-explained.html" style="color:var(--accent-cyan); text-decoration:none;">How TriSeek Works &rarr;</a></p>
-    <p style="margin-top:0.3rem; color:var(--text-dim)">Built with Rust. 4 crates, ~3,500 lines of code.</p>
+    <p>TriSeek Code Architecture &mdash; <a href="triseek-explained.html" style="color:var(--accent-cyan); text-decoration:none;">Search &rarr;</a></p>
+    <p style="margin-top:0.3rem; color:var(--text-dim)">Built with Rust. 6 crates, ~21,765 lines of Rust across CLI, MCP, daemon, search, frecency, and benchmark crates.</p>
   </div>
 </footer>
 
