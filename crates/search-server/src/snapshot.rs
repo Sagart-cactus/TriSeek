@@ -24,7 +24,7 @@ pub fn create_snapshot(
 ) -> Result<SnapshotManifest> {
     let session = session_store.session(&params.session_id)?;
     session_store.flush_to_disk()?;
-    let entries = session_store.entries_for_session(&params.session_id);
+    let entries = session_store.entries_for_session(&params.session_id)?;
     let git = git_state::capture(repo_root)?;
     let snapshot_id = format!(
         "snap_{}_{}",

@@ -31,7 +31,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::time::{Duration, Instant};
 
 #[derive(Parser)]
@@ -464,6 +464,15 @@ fn main() -> Result<()> {
     let started = Instant::now();
     let mut last_request = Instant::now();
     let mut last_flush = Instant::now();
+    let (connection_tx, connection_rx) = mpsc::channel::<TcpStream>();
+    let worker_state = Arc::clone(&state);
+    let connection_worker = std::thread::spawn(move || {
+        while let Ok(stream) = connection_rx.recv() {
+            if let Err(error) = handle_connection(stream, Arc::clone(&worker_state), started) {
+                eprintln!("triseek-server: connection error: {error}");
+            }
+        }
+    });
 
     loop {
         if SHUTDOWN.load(Ordering::SeqCst) {
@@ -496,16 +505,14 @@ fn main() -> Result<()> {
 
         last_request = Instant::now();
 
-        let state = Arc::clone(&state);
-        let started_clone = started;
-        std::thread::spawn(move || {
-            if let Err(error) = handle_connection(stream, state, started_clone) {
-                eprintln!("triseek-server: connection error: {error}");
-            }
-        });
+        if connection_tx.send(stream).is_err() {
+            break;
+        }
     }
 
     eprintln!("triseek-server: shutting down");
+    drop(connection_tx);
+    let _ = connection_worker.join();
     state.shutdown();
     let _ = std::fs::remove_file(&port_file);
     let _ = std::fs::remove_file(&pid_file);
@@ -862,16 +869,16 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                     }
                 };
             match state.session_store.session(&params.session_id) {
-                Ok(session) => RpcResponse::ok(
-                    id,
-                    PortabilitySessionStatusResponse {
-                        action_log_size: state
-                            .session_store
-                            .entries_for_session(&params.session_id)
-                            .len(),
-                        session,
-                    },
-                ),
+                Ok(session) => match state.session_store.entries_for_session(&params.session_id) {
+                    Ok(entries) => RpcResponse::ok(
+                        id,
+                        PortabilitySessionStatusResponse {
+                            action_log_size: entries.len(),
+                            session,
+                        },
+                    ),
+                    Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+                },
                 Err(error) => RpcResponse::error(id, -32000, error.to_string()),
             }
         }
@@ -1081,6 +1088,30 @@ mod tests {
         }
     }
 
+    fn dispatch_ok(
+        state: &ServerState,
+        id: u64,
+        method: &str,
+        params: serde_json::Value,
+    ) -> RpcResponse {
+        let response = dispatch(
+            RpcRequest {
+                jsonrpc: "2.0".into(),
+                id,
+                method: method.into(),
+                params,
+            },
+            state,
+            Instant::now(),
+        );
+        assert!(
+            response.error.is_none(),
+            "{method} failed: {:?}",
+            response.error
+        );
+        response
+    }
+
     #[test]
     fn search_reuse_stays_fresh_for_unrelated_scope_changes() {
         let (_tmp, service) = make_service(11, 1);
@@ -1202,6 +1233,70 @@ mod tests {
         );
         assert!(response.error.is_none());
         assert_eq!(service.context_epoch.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn session_status_counts_persisted_actions_without_in_memory_log_cache() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let repo_root = tmp.path().join("repo");
+        std::fs::create_dir_all(&repo_root).expect("create repo root");
+        let repo_root = repo_root.canonicalize().expect("canonicalize repo root");
+        let state = ServerState::new(tmp.path().join("daemon")).expect("server state");
+        let session_id = "rpc-leak-check";
+
+        dispatch_ok(
+            &state,
+            1,
+            "session_open",
+            serde_json::json!(SessionOpenParams {
+                target_root: repo_root.display().to_string(),
+                session_id: Some(session_id.to_string()),
+                goal: "exercise action-log persistence".to_string(),
+            }),
+        );
+
+        for idx in 0..512 {
+            dispatch_ok(
+                &state,
+                idx + 2,
+                "session_record_action",
+                serde_json::json!(SessionRecordActionParams {
+                    target_root: repo_root.display().to_string(),
+                    session_id: session_id.to_string(),
+                    kind: ActionKind::Search,
+                    payload: serde_json::json!({
+                        "query": format!("needle-{idx}"),
+                        "preview": "x".repeat(1024),
+                    }),
+                }),
+            );
+        }
+
+        let status = dispatch_ok(
+            &state,
+            1_000,
+            "session_status",
+            serde_json::json!(PortabilitySessionStatusParams {
+                target_root: repo_root.display().to_string(),
+                session_id: session_id.to_string(),
+            }),
+        );
+        assert_eq!(
+            status
+                .result
+                .as_ref()
+                .and_then(|value| value.get("action_log_size"))
+                .and_then(serde_json::Value::as_u64),
+            Some(512)
+        );
+        assert_eq!(
+            state
+                .session_store
+                .entries_for_session(session_id)
+                .unwrap()
+                .len(),
+            512
+        );
     }
 }
 
