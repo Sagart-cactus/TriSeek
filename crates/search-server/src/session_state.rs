@@ -22,7 +22,6 @@ struct SessionIndex {
 pub struct SessionStore {
     root: PathBuf,
     sessions: Mutex<HashMap<String, SessionStateRecord>>,
-    action_log: Mutex<Vec<ActionLogEntry>>,
     next_entry_id: AtomicU64,
 }
 
@@ -32,7 +31,6 @@ impl SessionStore {
         fs::create_dir_all(&root).with_context(|| format!("create {}", root.display()))?;
         let index_path = root.join("sessions.json");
         let mut sessions = HashMap::new();
-        let mut action_log = Vec::new();
         let mut next_entry_id = 1;
 
         if index_path.exists() {
@@ -50,7 +48,6 @@ impl SessionStore {
             next_entry_id = index.next_entry_id.max(1);
             for session in index.sessions {
                 let session_id = session.session_id.clone();
-                action_log.extend(read_action_log(&root, &session_id)?);
                 sessions.insert(session_id, session);
             }
         }
@@ -58,7 +55,6 @@ impl SessionStore {
         Ok(Self {
             root,
             sessions: Mutex::new(sessions),
-            action_log: Mutex::new(action_log),
             next_entry_id: AtomicU64::new(next_entry_id),
         })
     }
@@ -156,19 +152,17 @@ impl SessionStore {
             kind,
             payload,
         };
-        self.action_log.lock().unwrap().push(entry.clone());
         self.append_action(&entry)?;
         Ok(entry)
     }
 
-    pub fn entries_for_session(&self, session_id: &str) -> Vec<ActionLogEntry> {
-        self.action_log
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|entry| entry.session_id == session_id)
-            .cloned()
-            .collect()
+    pub fn entries_for_session(&self, session_id: &str) -> Result<Vec<ActionLogEntry>> {
+        read_action_log(&self.root, session_id)
+    }
+
+    #[cfg(test)]
+    fn retained_action_count(&self) -> usize {
+        0
     }
 
     pub fn flush_to_disk(&self) -> Result<()> {
@@ -244,4 +238,52 @@ fn now_millis() -> u128 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use search_core::ActionKind;
+    use serde_json::json;
+
+    #[test]
+    fn action_log_is_persisted_without_being_retained_in_memory() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = SessionStore::load_from_disk(temp.path()).expect("load store");
+        let session_id = "leak-check".to_string();
+
+        store
+            .open_session(
+                Some(session_id.clone()),
+                "check action log retention".to_string(),
+                temp.path().display().to_string(),
+            )
+            .expect("open session");
+
+        for idx in 0..512 {
+            store
+                .record_action(
+                    &session_id,
+                    ActionKind::Search,
+                    json!({
+                        "query": format!("needle-{idx}"),
+                        "preview": "x".repeat(1024),
+                    }),
+                )
+                .expect("record action");
+        }
+
+        assert_eq!(
+            store
+                .entries_for_session(&session_id)
+                .expect("read action log")
+                .len(),
+            512
+        );
+        assert_eq!(
+            store.retained_action_count(),
+            0,
+            "action logs are append-only on disk and must not accumulate in daemon memory"
+        );
+    }
 }
