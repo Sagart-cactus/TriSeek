@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TriSeek — Local Context Substrate for AI Coding Agents</title>
+<link rel="stylesheet" href="assets/site.css">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
@@ -56,27 +57,7 @@ body::before {
 
 .container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; position: relative; z-index: 1; }
 
-/* NAV */
-.top-nav {
-  position: fixed; top: 0; left: 0; right: 0;
-  background: rgba(10,14,23,0.85); backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
-  z-index: 100; padding: 0.6rem 2rem;
-  display: flex; align-items: center; gap: 2rem;
-}
-.top-nav .logo {
-  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.9rem;
-  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-  text-decoration: none;
-}
-.top-nav .nav-links { display: flex; align-items: center; gap: 1.75rem; margin-left: auto; }
-.top-nav a {
-  color: var(--text-dim); text-decoration: none; font-size: 0.8rem;
-  transition: color 0.2s; font-family: 'JetBrains Mono', monospace;
-}
-.top-nav a:hover { color: var(--accent-cyan); }
-.top-nav a.active { color: var(--accent-cyan); }
+/* nav styles live in assets/site.css */
 
 /* HERO */
 .hero {
@@ -354,8 +335,12 @@ h2 .hl { color: var(--accent-cyan); }
 <body>
 <div class="grid-bg"></div>
 
+<input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
 <nav class="top-nav">
   <a class="logo" href="index.html">▲ TriSeek</a>
+  <label for="nav-toggle" class="nav-burger" aria-label="Toggle navigation">
+    <span></span><span></span><span></span>
+  </label>
   <div class="nav-links">
     <a href="index.html" class="active">home</a>
     <a href="install.html">install</a>

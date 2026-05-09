@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TriSeek — Local Context Architecture</title>
+<link rel="stylesheet" href="assets/site.css">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
@@ -55,32 +56,13 @@ body::before {
 
 .container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; position: relative; z-index: 1; }
 
-/* NAV */
-.top-nav {
-  position: fixed; top: 0; left: 0; right: 0;
-  background: rgba(10,14,23,0.85); backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
-  z-index: 100; padding: 0.6rem 2rem;
-  display: flex; align-items: center; gap: 2rem;
-}
-.top-nav .logo {
-  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.9rem;
-  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-  text-decoration: none; flex-shrink: 0;
-}
+/* base nav styles live in assets/site.css; this page has an extra .section-links group */
 .top-nav .section-links { display: flex; align-items: center; gap: 1.5rem; }
 .top-nav .nav-links {
-  display: flex; align-items: center; gap: 1.5rem;
-  margin-left: auto; padding-left: 1.5rem;
+  margin-left: auto;
+  padding-left: 1.5rem;
   border-left: 1px solid var(--border);
 }
-.top-nav a {
-  color: var(--text-dim); text-decoration: none; font-size: 0.8rem;
-  transition: color 0.2s; font-family: 'JetBrains Mono', monospace;
-}
-.top-nav a:hover { color: var(--accent-cyan); }
-.top-nav a.active { color: var(--accent-cyan); }
 
 /* HERO */
 .hero {
@@ -261,6 +243,12 @@ h3 { font-size: 1.15rem; font-weight: 600; margin-bottom: 0.5rem; }
 .struct-field .fname { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--accent-cyan); min-width: 180px; }
 .struct-field .ftype { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--accent-purple); min-width: 200px; }
 .struct-field .fdesc { font-size: 0.75rem; color: var(--text-dim); }
+@media (max-width: 700px) {
+  .struct-field { flex-wrap: wrap; gap: 0.25rem 0.75rem; }
+  .struct-field .fname,
+  .struct-field .ftype { min-width: 0 !important; flex: 0 0 auto; }
+  .struct-field .fdesc { flex-basis: 100%; }
+}
 
 /* ENUM VIZ */
 .enum-row {
@@ -306,8 +294,12 @@ footer {
 <body>
 <div class="grid-bg"></div>
 
+<input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
 <nav class="top-nav">
   <a class="logo" href="index.html">▲ TriSeek</a>
+  <label for="nav-toggle" class="nav-burger" aria-label="Toggle navigation">
+    <span></span><span></span><span></span>
+  </label>
   <div class="section-links">
     <a href="#workspace">workspace</a>
     <a href="#substrate">substrate</a>

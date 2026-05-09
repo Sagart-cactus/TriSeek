@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TriSeek — Context Handoff &amp; Portability</title>
+<link rel="stylesheet" href="assets/site.css">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
@@ -57,26 +58,7 @@ body::before {
 
 .container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; position: relative; z-index: 1; }
 
-/* NAV */
-.top-nav {
-  position: fixed; top: 0; left: 0; right: 0;
-  background: rgba(10,14,23,0.85); backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
-  z-index: 100; padding: 0.6rem 2rem;
-  display: flex; align-items: center; gap: 2rem;
-}
-.top-nav .logo {
-  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.9rem;
-  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-  text-decoration: none;
-}
-.top-nav .nav-links { display: flex; align-items: center; gap: 1.75rem; margin-left: auto; flex-wrap: wrap; }
-.top-nav a {
-  color: var(--text-dim); text-decoration: none; font-size: 0.8rem;
-  transition: color 0.2s; font-family: 'JetBrains Mono', monospace;
-}
-.top-nav a:hover { color: var(--accent-cyan); }
+/* nav styles live in assets/site.css; per-page accent */
 .top-nav a.active { color: var(--accent-pink); }
 
 /* HERO */
@@ -316,8 +298,12 @@ a.text-link:hover { color: var(--accent-pink); }
 <body>
 <div class="grid-bg"></div>
 
+<input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
 <nav class="top-nav">
   <a class="logo" href="index.html">&#9650; TriSeek</a>
+  <label for="nav-toggle" class="nav-burger" aria-label="Toggle navigation">
+    <span></span><span></span><span></span>
+  </label>
   <div class="nav-links">
     <a href="index.html">home</a>
     <a href="install.html">install</a>
@@ -463,7 +449,7 @@ a.text-link:hover { color: var(--accent-pink); }
 
     <h3 style="margin-top: 2.5rem;">MCP tools</h3>
     <p style="font-size: 0.92rem;">All ten session-related tools landed in v0.4.2. Full input/output schemas live in the <a class="text-link" href="mcp.md">MCP reference</a>; this table is the high-level map.</p>
-    <table class="tdoc">
+    <div class="responsive-table-wrap"><table class="tdoc">
       <thead><tr><th>Tool</th><th>Inputs</th><th>Returns</th><th>When to call</th></tr></thead>
       <tbody>
         <tr>
@@ -527,7 +513,7 @@ a.text-link:hover { color: var(--accent-pink); }
           <td>At the start of the receiving harness session.</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
 
     <h3 style="margin-top: 2.5rem;">CLI walkthrough</h3>
     <div class="code-block">
@@ -591,7 +577,7 @@ snapshots/
     </div>
 
     <h3 style="margin-top: 2rem;">Artifact schemas</h3>
-    <table class="tdoc">
+    <div class="responsive-table-wrap"><table class="tdoc">
       <thead><tr><th>Artifact</th><th>Required fields</th><th>Description</th></tr></thead>
       <tbody>
         <tr>
@@ -620,7 +606,7 @@ snapshots/
           <td>Disambiguates branch / dirty state at snapshot time so the receiver knows what working tree the prior session saw.</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
 
     <h3 style="margin-top: 2rem;">What's deliberately not in the pack</h3>
     <ul>
@@ -695,7 +681,7 @@ snapshots/
     <div class="section-num">// 07 &mdash; harnesses</div>
     <h2>Supported <span class="hl">harnesses</span></h2>
     <p class="section-desc">v0.4.2 ships first-class adapter flows for Claude Code and Codex on the same machine. Other MCP-capable harnesses can use the underlying CLI manually until first-class adapters land.</p>
-    <table class="tdoc">
+    <div class="responsive-table-wrap"><table class="tdoc">
       <thead><tr><th>Harness</th><th>Snapshot capture</th><th>Resume / hydration writer</th></tr></thead>
       <tbody>
         <tr>
@@ -714,7 +700,7 @@ snapshots/
           <td>Run <code>triseek snapshot create</code> and <code>triseek resume --print</code>; paste the markdown into wherever the harness expects context. First-class adapters are <a class="text-link" href="vision.html">on the roadmap</a>.</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
   </section>
 
   <!-- 08 — Scope -->
@@ -722,7 +708,7 @@ snapshots/
     <div class="section-num">// 08 &mdash; scope</div>
     <h2>Ships in v0.4.2 vs. <span class="hl">coming</span></h2>
     <p class="section-desc">Honest scope sheet. Anything marked <span class="planned">Coming</span> lives only on the <a class="text-link" href="vision.html">Vision</a> page and is not promised here.</p>
-    <table class="tdoc">
+    <div class="responsive-table-wrap"><table class="tdoc">
       <thead><tr><th>Capability</th><th>Status</th></tr></thead>
       <tbody>
         <tr><td>Snapshot a session and persist it locally</td><td><span class="ok">&#10003; v0.4.2</span></td></tr>
@@ -738,7 +724,7 @@ snapshots/
         <tr><td>Replay / audit verbs</td><td><span class="planned">Coming</span></td></tr>
         <tr><td>Eval harness</td><td><span class="planned">Coming</span></td></tr>
       </tbody>
-    </table>
+    </table></div>
   </section>
 
   <!-- 09 — Walkthroughs -->
