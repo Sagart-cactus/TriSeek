@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TriSeek — Memo &amp; Search Reuse</title>
+<link rel="stylesheet" href="assets/site.css">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
@@ -56,27 +57,7 @@ body::before {
 
 .container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; position: relative; z-index: 1; }
 
-/* NAV */
-.top-nav {
-  position: fixed; top: 0; left: 0; right: 0;
-  background: rgba(10,14,23,0.85); backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
-  z-index: 100; padding: 0.6rem 2rem;
-  display: flex; align-items: center; gap: 2rem;
-}
-.top-nav .logo {
-  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.9rem;
-  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-  text-decoration: none;
-}
-.top-nav .nav-links { display: flex; align-items: center; gap: 1.75rem; margin-left: auto; }
-.top-nav a {
-  color: var(--text-dim); text-decoration: none; font-size: 0.8rem;
-  transition: color 0.2s; font-family: 'JetBrains Mono', monospace;
-}
-.top-nav a:hover { color: var(--accent-cyan); }
-.top-nav a.active { color: var(--accent-cyan); }
+/* nav styles live in assets/site.css */
 
 /* HERO */
 .hero { padding: 8rem 0 4rem; }
@@ -243,8 +224,12 @@ a.text-link:hover { color: var(--accent-green); }
 <body>
 <div class="grid-bg"></div>
 
+<input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
 <nav class="top-nav">
   <a class="logo" href="index.html">&#9650; TriSeek</a>
+  <label for="nav-toggle" class="nav-burger" aria-label="Toggle navigation">
+    <span></span><span></span><span></span>
+  </label>
   <div class="nav-links">
     <a href="index.html">home</a>
     <a href="install.html">install</a>
@@ -319,7 +304,7 @@ a.text-link:hover { color: var(--accent-green); }
           <h3>Passive Mode</h3>
         </div>
         <p>Hooks fire automatically after every Read and Edit tool call. The agent does not need to call anything explicitly.</p>
-        <table class="data-table">
+        <div class="responsive-table-wrap"><table class="data-table">
           <thead>
             <tr>
               <th>Harness</th>
@@ -344,7 +329,7 @@ a.text-link:hover { color: var(--accent-green); }
               <td><code>PreToolUse</code>, <code>PostToolUse</code>, and <code>SessionStart</code> hooks for Bash reads and MCP file-read tools (e.g. <code>mcp__filesystem__read_file</code>)</td>
             </tr>
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       <div class="card">
@@ -386,7 +371,7 @@ a.text-link:hover { color: var(--accent-green); }
   <span class="str">"last_read_ago_seconds"</span>: 9
 }</pre>
         </div>
-        <table class="data-table" style="margin-top: 0.5rem;">
+        <div class="responsive-table-wrap"><table class="data-table" style="margin-top: 0.5rem;">
           <thead>
             <tr>
               <th>Recommendation</th>
@@ -407,7 +392,7 @@ a.text-link:hover { color: var(--accent-green); }
               <td>File changed significantly or was never read. Read normally.</td>
             </tr>
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       <div class="card">
@@ -501,7 +486,7 @@ a.text-link:hover { color: var(--accent-green); }
           <h3>Cache field in responses</h3>
         </div>
         <p>Every search envelope includes a <code>cache</code> field:</p>
-        <table class="data-table" style="margin-top: 0.75rem;">
+        <div class="responsive-table-wrap"><table class="data-table" style="margin-top: 0.75rem;">
           <thead>
             <tr>
               <th>Value</th>
@@ -522,7 +507,7 @@ a.text-link:hover { color: var(--accent-green); }
               <td>Fallback path used. Result is not eligible for reuse metadata.</td>
             </tr>
           </tbody>
-        </table>
+        </table></div>
         <p style="margin-top: 0.75rem;">Applies to <code>find_files</code>, <code>search_content</code>, and <code>search_path_and_content</code>.</p>
       </div>
     </div>
@@ -616,7 +601,7 @@ triseek install pi</pre>
           <div class="card-ico pu">&#9888;</div>
           <h3>What gets installed</h3>
         </div>
-        <table class="data-table">
+        <div class="responsive-table-wrap"><table class="data-table">
           <thead>
             <tr>
               <th>Harness</th>
@@ -641,7 +626,7 @@ triseek install pi</pre>
               <td>MCP config + TS extension at <code>~/.pi/agent/extensions/triseek-memo/</code></td>
             </tr>
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   </section>

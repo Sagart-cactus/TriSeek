@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TriSeek — Search</title>
+<link rel="stylesheet" href="assets/site.css">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap');
 
@@ -815,26 +816,8 @@ h3 {
 }
 
 /* ═══════ TOP NAV ═══════ */
-.top-nav {
-  position: fixed; top: 0; left: 0; right: 0;
-  background: rgba(10,14,23,0.85); backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
-  z-index: 200; padding: 0.6rem 2rem;
-  display: flex; align-items: center; gap: 2rem;
-}
-.top-nav .logo {
-  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.9rem;
-  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-  text-decoration: none; flex-shrink: 0;
-}
-.top-nav .nav-links { display: flex; align-items: center; gap: 1.75rem; margin-left: auto; }
-.top-nav .nav-links a {
-  color: var(--text-dim); text-decoration: none; font-size: 0.8rem;
-  transition: color 0.2s; font-family: 'JetBrains Mono', monospace;
-}
-.top-nav .nav-links a:hover { color: var(--accent-cyan); }
-.top-nav .nav-links a.active { color: var(--accent-cyan); }
+/* base styles in assets/site.css; this page raises z-index so the nav sits above the side-nav */
+.top-nav { z-index: 200; }
 
 /* ═══════ SIDE NAV ═══════ */
 .side-nav {
@@ -1126,8 +1109,12 @@ footer {
 <body>
 <div class="grid-bg"></div>
 
+<input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
 <nav class="top-nav">
   <a class="logo" href="index.html">▲ TriSeek</a>
+  <label for="nav-toggle" class="nav-burger" aria-label="Toggle navigation">
+    <span></span><span></span><span></span>
+  </label>
   <div class="nav-links">
     <a href="index.html">home</a>
     <a href="install.html">install</a>
@@ -1788,7 +1775,7 @@ candidates.<span class="fn">par_iter</span>().<span class="fn">for_each</span>(|
     <!-- Session benchmarks -->
     <div class="card reveal">
       <h3>Session Benchmarks <span style="color:var(--text-dim); font-weight:400; font-size:0.9rem">&mdash; 20 sequential queries (agent workload)</span></h3>
-      <table class="data-table">
+      <div class="responsive-table-wrap"><table class="data-table">
         <thead>
           <tr>
             <th>Repository</th>
@@ -1829,7 +1816,7 @@ candidates.<span class="fn">par_iter</span>().<span class="fn">for_each</span>(|
             <td><span class="speedup-badge">2.3x</span></td>
           </tr>
         </tbody>
-      </table>
+      </table></div>
     </div>
 
     <!-- Summary -->

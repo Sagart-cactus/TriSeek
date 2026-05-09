@@ -1,0 +1,163 @@
+/* TriSeek docs — shared site styles
+   Linked from every HTML page BEFORE its inline <style> block, so
+   page-specific rules can still override.
+
+   Holds:
+     - Standardized responsive breakpoints
+     - Top nav (logo, links, CSS-only burger drawer for ≤860px)
+     - Container padding tweaks for small viewports
+     - Generic responsive helpers (.responsive-table-wrap, iframe/anim-frame max-width)
+     - Mobile code-block sizing
+*/
+
+:root {
+  --bp-mobile: 640px;
+  --bp-nav: 860px;
+  --bp-tablet: 1024px;
+}
+
+/* ----- top nav ----- */
+
+/* hidden checkbox driving the CSS-only burger drawer */
+.nav-toggle { position: absolute; opacity: 0; pointer-events: none; }
+
+.top-nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: rgba(10,14,23,0.85);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border, #1e2d42);
+  z-index: 100;
+  padding: 0.6rem 2rem;
+  display: flex; align-items: center; gap: 2rem;
+}
+
+.top-nav .logo {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 0.9rem;
+  background: linear-gradient(135deg, var(--accent-cyan, #22d3ee), var(--accent-green, #34d399));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.top-nav .nav-links {
+  display: flex; align-items: center;
+  gap: 1.75rem;
+  margin-left: auto;
+}
+
+.top-nav a {
+  color: var(--text-dim, #4a5c74);
+  text-decoration: none;
+  font-size: 0.8rem;
+  transition: color 0.2s;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.top-nav a:hover,
+.top-nav a.active { color: var(--accent-cyan, #22d3ee); }
+
+/* burger button — hidden on desktop, shown ≤860px */
+.nav-burger {
+  display: none;
+  margin-left: auto;
+  width: 2.5rem; height: 2.5rem;
+  cursor: pointer;
+  align-items: center; justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid var(--border-bright, #2a4060);
+  border-radius: 6px;
+  background: rgba(20, 28, 43, 0.9);
+  flex-shrink: 0;
+}
+.nav-burger:hover { border-color: var(--accent-cyan, #22d3ee); }
+.nav-burger span {
+  display: block;
+  width: 20px; height: 2px;
+  background: var(--text-primary, #e2e8f0);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  border-radius: 1px;
+}
+
+/* ----- mobile / narrow tablet: burger drawer ----- */
+@media (max-width: 860px) {
+  .top-nav { padding: 0.6rem 1rem; gap: 1rem; }
+  .nav-burger { display: flex; }
+
+  /* Nav-links becomes a vertical drawer below the nav bar */
+  .top-nav .nav-links {
+    position: absolute;
+    top: 100%; left: 0; right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    background: rgba(10,14,23,0.97);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border, #1e2d42);
+    padding: 0.5rem 0;
+    max-height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    transition: max-height 0.25s ease, visibility 0s linear 0.25s;
+  }
+  .top-nav .nav-links a {
+    padding: 0.85rem 1.25rem;
+    font-size: 0.95rem;
+    border-bottom: 1px solid var(--border, #1e2d42);
+  }
+  .top-nav .nav-links a:last-child { border-bottom: none; }
+
+  /* triseek-architecture.html has a second link group (.section-links —
+     in-page anchors). Hide it from the mobile bar so it doesn't crowd the
+     burger; the cross-page nav-links drawer is enough on mobile. */
+  .top-nav .section-links { display: none !important; }
+
+  /* When the toggle is checked, reveal the drawer.
+     The toggle sits as a sibling of <nav>. */
+  .nav-toggle:checked ~ .top-nav .nav-links {
+    max-height: 80vh;
+    overflow-y: auto;
+    visibility: visible;
+    transition: max-height 0.25s ease, visibility 0s linear 0s;
+  }
+  /* Animate burger into an X when open */
+  .nav-toggle:checked ~ .top-nav .nav-burger span:nth-child(1) {
+    transform: translateY(6px) rotate(45deg);
+  }
+  .nav-toggle:checked ~ .top-nav .nav-burger span:nth-child(2) { opacity: 0; }
+  .nav-toggle:checked ~ .top-nav .nav-burger span:nth-child(3) {
+    transform: translateY(-6px) rotate(-45deg);
+  }
+}
+
+/* ----- container side padding scales down on phones ----- */
+@media (max-width: 640px) {
+  .container { padding-left: 1rem; padding-right: 1rem; }
+}
+@media (max-width: 380px) {
+  .container { padding-left: 0.75rem; padding-right: 0.75rem; }
+}
+
+/* ----- generic responsive helpers ----- */
+
+/* Wrap tables in <div class="responsive-table-wrap"> to avoid page-level horizontal scroll. */
+.responsive-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Animation/iframe embeds clamp to their container. */
+.anim-frame, .anim-wrap, iframe { max-width: 100%; }
+
+/* ----- mobile typography for code/pre ----- */
+@media (max-width: 640px) {
+  pre, code, .code-block, .terminal-body { font-size: 0.78rem; }
+  .code-block pre { padding: 1rem; }
+}
