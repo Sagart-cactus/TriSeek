@@ -42,7 +42,6 @@ HOME="${TMP_HOME}" USERPROFILE="${TMP_HOME}" PATH="${SAFE_PATH}" "${BIN}" instal
 test -f "${TMP_HOME}/.codex/config.toml"
 test -f "${TMP_HOME}/.codex/hooks.json"
 grep -q '\[mcp_servers.triseek\]' "${TMP_HOME}/.codex/config.toml"
-grep -q 'codex_hooks = true' "${TMP_HOME}/.codex/config.toml"
 grep -q '"PostToolUse"' "${TMP_HOME}/.codex/hooks.json"
 grep -q 'memo-observe' "${TMP_HOME}/.codex/hooks.json"
 

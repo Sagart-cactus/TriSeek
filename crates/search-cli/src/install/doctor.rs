@@ -118,8 +118,8 @@ pub fn run() -> Result<()> {
                 Err(err) => println!("[warn] Codex MCP: parse failed: {err}"),
             }
             match shared::codex_hooks_enabled(&text) {
-                Ok(true) => println!("[ok] Codex hooks enabled: codex_hooks = true"),
-                Ok(false) => println!("[warn] Codex hooks enabled: codex_hooks missing/false"),
+                Ok(true) => println!("[ok] Codex hooks enabled"),
+                Ok(false) => println!("[warn] Codex hooks disabled: codex_hooks = false"),
                 Err(err) => println!("[warn] Codex hooks enabled: parse failed: {err}"),
             }
         } else {

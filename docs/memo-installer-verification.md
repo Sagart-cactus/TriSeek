@@ -18,7 +18,7 @@ PORT=$(cat ~/.triseek/daemon/daemon.port)
 
 ---
 
-## Codex — hooks plus active fallback (`memo_check`)
+## Codex - hooks plus active fallback (`memo_check`)
 
 ### A. Install
 
@@ -30,7 +30,7 @@ Expected output includes:
 - `registered with Codex via codex mcp add` (if Codex CLI found), or
 - `wrote [mcp_servers.triseek] to ~/.codex/config.toml` (fallback)
 - `memo hooks installed into ~/.codex/hooks.json`
-- `enabled Codex feature flag codex_hooks = true`
+- `Codex hooks feature flag is enabled by default`, or `enabled Codex feature flag codex_hooks = true` when an existing config disabled it
 - Note about Bash/MCP file-read Codex hook coverage and `memo_check` usage for non-hooked reads
 
 Inspect the generated hook file:
