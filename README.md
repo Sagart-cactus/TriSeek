@@ -17,12 +17,12 @@
 
 **TriSeek** is a local context daemon with an MCP server for Claude Code, Codex, OpenCode, and Pi. Snapshot a session in Claude Code, resume it in Codex (or the reverse) with primed memo, warmed search cache, and restored frecency — without losing the four hours of debugging you just put in. Underneath the portability layer is the same proven code-search engine: a trigram index that wins 38 of 39 medium-repo benchmarks, with ripgrep fallback for cold starts. MCP search and memo tools work with all four harnesses; the v0.4.2 portability handoff has first-class Claude Code and Codex adapter flows, while other MCP hosts can use the underlying CLI commands manually.
 
-## What's new in v0.4.3
+## What's new in v0.4.4
 
-- **Daemon memory fix.** The daemon no longer spawns a fresh OS thread per RPC connection, which prevents RSS growth during repeated MCP calls with large JSON payloads.
-- **Action-log retention fix.** Session action logs stay append-only on disk and are read on demand for status/snapshot operations instead of being duplicated in daemon memory.
-- **Responsive docs.** The static docs now share responsive navigation/table styles for better narrow-screen reading.
-- **Portability remains first-class.** Context handoff, packs, briefings, and `session_*` tools introduced in v0.4.2 continue to be the supported Claude Code ↔ Codex workflow. See the [v0.4.3 release notes](docs/releases/v0.4.3.md) and [Context Handoff &amp; Portability](docs/context-handoff.html).
+- **Codex hook installer update.** `triseek install codex` now follows current Codex behavior where hooks are enabled by default, so fresh installs no longer write an unnecessary `codex_hooks = true` feature flag.
+- **Explicit disables still get fixed.** If an existing Codex config has `codex_hooks = false`, the installer flips it back on so Memo hooks can run.
+- **Doctor and smoke checks match Codex.** `triseek doctor`, release smoke tests, and docs now treat an omitted `codex_hooks` setting as enabled.
+- **Portability remains first-class.** Context handoff, packs, briefings, and `session_*` tools introduced in v0.4.2 continue to be the supported Claude Code ↔ Codex workflow. See the [v0.4.4 release notes](docs/releases/v0.4.4.md) and [Context Handoff &amp; Portability](docs/context-handoff.html).
 
 On the Linux kernel, a 20-query agent session takes **0.6 s with TriSeek vs 10.3 s with ripgrep** — 16.9× faster, measured. The memo layer on top catches redundant re-reads before they hit disk, with zero false negatives across 12 replayed Claude Code sessions.
 
@@ -59,7 +59,7 @@ Installs `triseek` and `triseek-server` into `~/.local/bin`. Prefers prebuilt Gi
 Pin a version or install elsewhere:
 
 ```sh
-curl -fsSL .../install.sh | sh -s -- --version v0.4.3
+curl -fsSL .../install.sh | sh -s -- --version v0.4.4
 curl -fsSL .../install.sh | sh -s -- --install-dir /usr/local/bin
 ```
 

@@ -167,7 +167,7 @@ pub fn codex_hooks_enabled(existing: &str) -> Result<bool> {
         .and_then(|item| item.as_table())
         .and_then(|table| table.get("codex_hooks"))
         .and_then(|item| item.as_bool())
-        .unwrap_or(false))
+        .unwrap_or(true))
 }
 
 pub fn upsert_claude_hooks(existing: Option<&str>, binary: &str) -> Result<String> {
@@ -880,6 +880,13 @@ args = ["mcp", "serve"]
         let out = ensure_codex_hooks_enabled(Some("[features]\nfoo=true\n")).unwrap();
         assert!(codex_hooks_enabled(&out).unwrap());
         assert!(out.contains("foo"));
+    }
+
+    #[test]
+    fn codex_hooks_enabled_defaults_to_true_when_omitted() {
+        assert!(codex_hooks_enabled("").unwrap());
+        assert!(codex_hooks_enabled("[features]\nfoo=true\n").unwrap());
+        assert!(!codex_hooks_enabled("[features]\ncodex_hooks = false\n").unwrap());
     }
 
     #[test]

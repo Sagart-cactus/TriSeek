@@ -408,7 +408,6 @@ run_install_checks() {
   assert_file "${install_home}/user/.codex/config.toml"
   assert_file "${install_home}/user/.codex/hooks.json"
   assert_grep '\[mcp_servers\.triseek\]' "${install_home}/user/.codex/config.toml"
-  assert_grep 'codex_hooks = true' "${install_home}/user/.codex/config.toml"
   assert_grep '"PreToolUse"' "${install_home}/user/.codex/hooks.json"
   assert_grep 'mcp__.*read_file' "${install_home}/user/.codex/hooks.json"
   verify_codex_mcp_config_context_pack "${install_home}/user/.codex/config.toml"
