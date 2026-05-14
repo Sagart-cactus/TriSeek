@@ -339,6 +339,23 @@ chmod 755 "$install_path"
 cp "$server_binary_path" "$server_install_path"
 chmod 755 "$server_install_path"
 
+# On macOS Apple Silicon, both com.apple.quarantine and com.apple.provenance
+# can cause Gatekeeper to SIGKILL the binary on launch. Strip both, and
+# re-apply an ad-hoc signature with `codesign` to replace the thinner
+# linker-signed signature that newer kernels reject.
+if [ "$os" = "macos" ]; then
+  if have_cmd xattr; then
+    xattr -d com.apple.quarantine "$install_path" 2>/dev/null || true
+    xattr -d com.apple.quarantine "$server_install_path" 2>/dev/null || true
+    xattr -d com.apple.provenance "$install_path" 2>/dev/null || true
+    xattr -d com.apple.provenance "$server_install_path" 2>/dev/null || true
+  fi
+  if have_cmd codesign; then
+    codesign --force --sign - "$install_path" >/dev/null 2>&1 || true
+    codesign --force --sign - "$server_install_path" >/dev/null 2>&1 || true
+  fi
+fi
+
 if ! "$install_path" help >/dev/null 2>&1; then
   die "installed binary did not pass the smoke check"
 fi

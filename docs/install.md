@@ -69,6 +69,21 @@ cargo install --path crates/search-cli --locked
 cargo install --path crates/search-server --locked
 ```
 
+### Manual macOS Download
+
+If you skip the installer and instead download the macOS tarball through a browser, macOS attaches `com.apple.quarantine` (and on newer versions `com.apple.provenance`) xattrs to the extracted binaries. On Apple Silicon this causes Gatekeeper to SIGKILL the process on launch, and the shell prints something like `[1] 12345 killed triseek`.
+
+Clear the attributes and re-apply an ad-hoc signature on both binaries:
+
+```sh
+xattr -dr com.apple.quarantine ~/.local/bin/triseek ~/.local/bin/triseek-server
+xattr -dr com.apple.provenance ~/.local/bin/triseek ~/.local/bin/triseek-server
+codesign --force --sign - ~/.local/bin/triseek
+codesign --force --sign - ~/.local/bin/triseek-server
+```
+
+The `scripts/install.sh` installer does all of this automatically.
+
 ## Verify the Install
 
 ```sh
