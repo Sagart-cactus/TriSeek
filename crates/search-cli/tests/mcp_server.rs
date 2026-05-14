@@ -8,7 +8,8 @@
 //! environment may reject unsigned commits. `SearchEngine::build` only
 //! needs a directory with files to walk.
 
-use search_core::DAEMON_PORT_FILE;
+use flate2::read::GzDecoder;
+use search_core::{DAEMON_PORT_FILE, PORTABILITY_SCHEMA_VERSION};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -17,6 +18,7 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+use tar::Archive;
 
 /// Locate the freshly built `triseek` binary next to the current test executable.
 fn triseek_binary() -> PathBuf {
@@ -1009,6 +1011,684 @@ fn fake_search_reuse_response(
         "context_epoch": context_epoch,
         "changed_paths": changed_paths,
     })
+}
+
+fn git_command(repo: &Path, args: &[&str]) {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .expect("run git");
+    assert!(
+        output.status.success(),
+        "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+        args,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn git_command_stdout(repo: &Path, args: &[&str]) -> String {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .expect("run git");
+    assert!(
+        output.status.success(),
+        "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+        args,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+fn write_snapshot_files(snapshot_dir: &Path, session_id: &str, repo_root: &Path, commit: &str) {
+    write_snapshot_files_with_id(
+        snapshot_dir,
+        "snap_two_clone",
+        session_id,
+        repo_root,
+        Some(commit),
+    )
+}
+
+fn write_snapshot_files_with_id(
+    snapshot_dir: &Path,
+    snapshot_id: &str,
+    session_id: &str,
+    repo_root: &Path,
+    commit: Option<&str>,
+) {
+    std::fs::create_dir_all(snapshot_dir.join("pinned_snippets")).expect("snapshot dir");
+    std::fs::write(
+        snapshot_dir.join("manifest.json"),
+        serde_json::to_vec_pretty(&json!({
+            "schema_version": PORTABILITY_SCHEMA_VERSION,
+            "snapshot_id": snapshot_id,
+            "session_id": session_id,
+            "created_at": 1770000000,
+            "repo_root": repo_root.display().to_string(),
+            "repo_commit": commit,
+            "repo_dirty_files": [],
+            "source_harness": "codex",
+            "source_model": null,
+            "generation": 1,
+            "context_epoch": 0
+        }))
+        .expect("manifest json"),
+    )
+    .expect("write manifest");
+    std::fs::write(
+        snapshot_dir.join("working_set.json"),
+        serde_json::to_vec_pretty(&json!({
+            "schema_version": PORTABILITY_SCHEMA_VERSION,
+            "files_read": [],
+            "searches_run": [],
+            "frecency_top_n": []
+        }))
+        .expect("working set json"),
+    )
+    .expect("write working set");
+    std::fs::write(snapshot_dir.join("action_log.jsonl"), "").expect("write action log");
+    std::fs::write(
+        snapshot_dir.join("pinned_snippets.json"),
+        serde_json::to_vec_pretty(&json!([])).expect("pinned json"),
+    )
+    .expect("write pinned");
+    std::fs::write(
+        snapshot_dir.join("git_state.json"),
+        serde_json::to_vec_pretty(&json!({
+            "commit": commit,
+            "dirty_files": [],
+            "hunk_summary": {}
+        }))
+        .expect("git state json"),
+    )
+    .expect("write git state");
+}
+
+fn pack_entries(pack_path: &Path) -> Vec<String> {
+    let file = std::fs::File::open(pack_path).expect("open pack");
+    let decoder = GzDecoder::new(file);
+    let mut archive = Archive::new(decoder);
+    let mut entries = archive
+        .entries()
+        .expect("read archive entries")
+        .map(|entry| {
+            entry
+                .expect("archive entry")
+                .path()
+                .expect("entry path")
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+    entries.sort();
+    entries
+}
+
+#[test]
+fn mcp_schema_exposes_tcp_handoff_fields() {
+    let fixture = build_fixture_repo();
+    let mut client = McpClient::spawn_without_startup_sync(fixture.path());
+    handshake(&mut client);
+
+    let listed = client.call("tools/list", json!({}));
+    let tools = listed
+        .get("result")
+        .and_then(|result| result.get("tools"))
+        .and_then(Value::as_array)
+        .expect("tools array");
+    let handoff = tools
+        .iter()
+        .find(|tool| tool.get("name") == Some(&json!("session_handoff")))
+        .expect("session_handoff tool");
+    let resume = tools
+        .iter()
+        .find(|tool| tool.get("name") == Some(&json!("session_resume")))
+        .expect("session_resume tool");
+
+    assert!(handoff.pointer("/inputSchema/properties/mode").is_some());
+    assert!(
+        handoff
+            .pointer("/inputSchema/properties/target_harness")
+            .is_some()
+    );
+    assert!(
+        handoff
+            .pointer("/inputSchema/properties/pack_output_path")
+            .is_some()
+    );
+    assert!(handoff.pointer("/inputSchema/properties/branch").is_some());
+    assert!(
+        handoff
+            .pointer("/inputSchema/properties/continue_existing")
+            .is_some()
+    );
+    assert!(
+        resume
+            .pointer("/inputSchema/properties/pack_path")
+            .is_some()
+    );
+
+    client.shutdown();
+}
+
+#[test]
+fn session_handoff_writes_metadata_tcp_when_pack_output_path_is_provided() {
+    let fixture = build_fixture_repo();
+    let home = tempfile::tempdir().expect("home tempdir");
+    let session_id = "session_mcp_pack";
+    let snapshot_id = "snap_mcp_pack";
+    let snapshot_dir = home
+        .path()
+        .join(".triseek")
+        .join("daemon")
+        .join("snapshots")
+        .join(snapshot_id);
+    write_snapshot_files_with_id(&snapshot_dir, snapshot_id, session_id, fixture.path(), None);
+    let pack_path = home.path().join("handoff.tcp");
+    let fake_daemon = FakeDaemon::start(
+        home.path(),
+        vec![
+            fake_preload_response(),
+            json!({
+                "snapshot_id": snapshot_id,
+                "snapshot_dir": snapshot_dir.display().to_string(),
+                "manifest": {
+                    "schema_version": PORTABILITY_SCHEMA_VERSION,
+                    "snapshot_id": snapshot_id,
+                    "session_id": session_id,
+                    "created_at": 1770000000,
+                    "repo_root": fixture.path().display().to_string(),
+                    "repo_commit": null,
+                    "repo_dirty_files": [],
+                    "source_harness": "codex",
+                    "source_model": null,
+                    "generation": 1,
+                    "context_epoch": 0
+                }
+            }),
+            json!({"session": {"session_id": session_id}}),
+        ],
+    );
+    let mut client = McpClient::spawn_with_home_and_env(
+        fixture.path(),
+        Some(home.path()),
+        &[("TRISEEK_MCP_DISABLE_STARTUP_SYNC", "1")],
+    );
+    handshake(&mut client);
+
+    let envelope = call_tool(
+        &mut client,
+        "session_handoff",
+        json!({
+            "session_id": session_id,
+            "target_harness": "codex",
+            "pack_output_path": pack_path
+        }),
+    );
+
+    assert_eq!(envelope.get("snapshot_id"), Some(&json!(snapshot_id)));
+    assert_eq!(
+        envelope.pointer("/handoff/mode").and_then(Value::as_str),
+        Some("metadata")
+    );
+    assert_eq!(
+        envelope
+            .pointer("/handoff/pack_path")
+            .and_then(Value::as_str),
+        Some(pack_path.to_str().expect("pack path str"))
+    );
+    assert!(pack_path.exists(), "expected MCP handoff to write tcp pack");
+    assert!(pack_entries(&pack_path).contains(&"handoff.json".to_string()));
+
+    client.shutdown();
+    let requests = fake_daemon.finish();
+    let methods = requests
+        .iter()
+        .filter_map(|request| request.get("method").and_then(Value::as_str))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        methods,
+        vec!["preload_root", "session_snapshot_create", "session_close"]
+    );
+}
+
+#[test]
+fn session_resume_accepts_tcp_pack_path_over_mcp() {
+    let fixture = build_fixture_repo();
+    let home = tempfile::tempdir().expect("home tempdir");
+    let session_id = "session_mcp_resume_pack";
+    let snapshot_id = "snap_mcp_resume_pack";
+    let source_snapshot_dir = home.path().join("source-snapshot");
+    write_snapshot_files_with_id(
+        &source_snapshot_dir,
+        snapshot_id,
+        session_id,
+        fixture.path(),
+        None,
+    );
+    let pack_path = home.path().join("resume-pack.tcp");
+    let binary = triseek_binary();
+    let export = Command::new(&binary)
+        .arg("pack")
+        .arg("export")
+        .arg(snapshot_id)
+        .arg("--output")
+        .arg(&pack_path)
+        .env("HOME", home.path())
+        .env("USERPROFILE", home.path())
+        .output()
+        .expect("run pack export");
+    if !export.status.success() {
+        std::fs::create_dir_all(
+            home.path()
+                .join(".triseek")
+                .join("daemon")
+                .join("snapshots"),
+        )
+        .expect("snapshots root");
+        std::fs::rename(
+            &source_snapshot_dir,
+            home.path()
+                .join(".triseek")
+                .join("daemon")
+                .join("snapshots")
+                .join(snapshot_id),
+        )
+        .expect("move source snapshot");
+        let export = Command::new(&binary)
+            .arg("pack")
+            .arg("export")
+            .arg(snapshot_id)
+            .arg("--output")
+            .arg(&pack_path)
+            .env("HOME", home.path())
+            .env("USERPROFILE", home.path())
+            .output()
+            .expect("rerun pack export");
+        assert!(
+            export.status.success(),
+            "pack export failed: {}",
+            String::from_utf8_lossy(&export.stderr)
+        );
+        std::fs::remove_dir_all(
+            home.path()
+                .join(".triseek")
+                .join("daemon")
+                .join("snapshots")
+                .join(snapshot_id),
+        )
+        .expect("remove original snapshot");
+    }
+    let fake_daemon = FakeDaemon::start(
+        home.path(),
+        vec![
+            fake_preload_response(),
+            json!({
+                "session_id": session_id,
+                "payload_markdown": "# TriSeek Hydration Payload\nfrom pack",
+                "payload_token_estimate": 6,
+                "hydration_report": {
+                    "files_primed": 0,
+                    "searches_warmed": 0,
+                    "frecency_entries_restored": 0,
+                    "stale_files": []
+                },
+                "searches": []
+            }),
+        ],
+    );
+    let mut client = McpClient::spawn_with_home_and_env(
+        fixture.path(),
+        Some(home.path()),
+        &[("TRISEEK_MCP_DISABLE_STARTUP_SYNC", "1")],
+    );
+    handshake(&mut client);
+
+    let envelope = call_tool(
+        &mut client,
+        "session_resume",
+        json!({ "pack_path": pack_path }),
+    );
+
+    assert_eq!(envelope.get("session_id"), Some(&json!(session_id)));
+    assert_eq!(
+        envelope.get("imported_snapshot_id").and_then(Value::as_str),
+        Some(snapshot_id)
+    );
+    assert_eq!(envelope.get("git_restored"), Some(&json!(false)));
+    assert!(
+        envelope
+            .get("payload_markdown")
+            .and_then(Value::as_str)
+            .is_some_and(|payload| payload.contains("Hydration Payload"))
+    );
+
+    client.shutdown();
+    let requests = fake_daemon.finish();
+    let methods = requests
+        .iter()
+        .filter_map(|request| request.get("method").and_then(Value::as_str))
+        .collect::<Vec<_>>();
+    assert_eq!(methods, vec!["preload_root", "session_resume_prepare"]);
+}
+
+#[test]
+fn mcp_git_handoff_pack_resumes_in_second_clone() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let remote = tmp.path().join("remote.git");
+    let clone_a = tmp.path().join("clone-a");
+    let clone_b = tmp.path().join("clone-b");
+    git_command(tmp.path(), &["init", "--bare", remote.to_str().unwrap()]);
+    git_command(
+        tmp.path(),
+        &["clone", remote.to_str().unwrap(), clone_a.to_str().unwrap()],
+    );
+    git_command(&clone_a, &["config", "user.email", "triseek@example.com"]);
+    git_command(&clone_a, &["config", "user.name", "TriSeek Test"]);
+    std::fs::write(clone_a.join("README.md"), "initial\n").expect("write readme");
+    git_command(&clone_a, &["add", "README.md"]);
+    git_command(&clone_a, &["commit", "-m", "initial"]);
+    git_command(&clone_a, &["push", "-u", "origin", "HEAD:main"]);
+    git_command(&clone_a, &["switch", "-c", "feature"]);
+    let commit = git_command_stdout(&clone_a, &["rev-parse", "HEAD"]);
+    git_command(
+        tmp.path(),
+        &["clone", remote.to_str().unwrap(), clone_b.to_str().unwrap()],
+    );
+    git_command(&clone_b, &["switch", "main"]);
+
+    let session_id = "session_mcp_git_two_clone";
+    let snapshot_id = "snap_mcp_git_two_clone";
+    let home_a = tempfile::tempdir().expect("home a");
+    let snapshot_dir = home_a
+        .path()
+        .join(".triseek")
+        .join("daemon")
+        .join("snapshots")
+        .join(snapshot_id);
+    write_snapshot_files_with_id(
+        &snapshot_dir,
+        snapshot_id,
+        session_id,
+        &clone_a,
+        Some(&commit),
+    );
+    let daemon_a = FakeDaemon::start(
+        home_a.path(),
+        vec![
+            json!({
+                "snapshot_id": snapshot_id,
+                "snapshot_dir": snapshot_dir.display().to_string(),
+                "manifest": {
+                    "schema_version": PORTABILITY_SCHEMA_VERSION,
+                    "snapshot_id": snapshot_id,
+                    "session_id": session_id,
+                    "created_at": 1770000000,
+                    "repo_root": clone_a.display().to_string(),
+                    "repo_commit": commit,
+                    "repo_dirty_files": [],
+                    "source_harness": "codex",
+                    "source_model": null,
+                    "generation": 1,
+                    "context_epoch": 0
+                }
+            }),
+            json!({"session": {"session_id": session_id}}),
+        ],
+    );
+    let pack_path = tmp.path().join("mcp-handoff.tcp");
+    let mut client_a = McpClient::spawn_with_home_and_env(
+        &clone_a,
+        Some(home_a.path()),
+        &[("TRISEEK_MCP_DISABLE_STARTUP_SYNC", "1")],
+    );
+    handshake(&mut client_a);
+
+    let handoff = call_tool(
+        &mut client_a,
+        "session_handoff",
+        json!({
+            "session_id": session_id,
+            "mode": "git",
+            "target_harness": "codex",
+            "pack_output_path": pack_path
+        }),
+    );
+
+    assert_eq!(handoff.get("snapshot_id"), Some(&json!(snapshot_id)));
+    assert_eq!(
+        handoff.pointer("/handoff/mode").and_then(Value::as_str),
+        Some("git")
+    );
+    assert_eq!(
+        handoff
+            .pointer("/handoff/git/branch")
+            .and_then(Value::as_str),
+        Some("triseek/handoff/session_mcp_git_two_clone")
+    );
+    assert!(pack_path.exists(), "MCP git handoff should create tcp pack");
+    assert!(pack_entries(&pack_path).contains(&"handoff.json".to_string()));
+    assert_eq!(
+        git_command_stdout(&clone_a, &["branch", "--show-current"]),
+        "triseek/handoff/session_mcp_git_two_clone"
+    );
+
+    client_a.shutdown();
+    let methods_a = daemon_a
+        .finish()
+        .iter()
+        .filter_map(|request| request.get("method").and_then(Value::as_str))
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    assert_eq!(methods_a, vec!["session_snapshot_create", "session_close"]);
+
+    let home_b = tempfile::tempdir().expect("home b");
+    let daemon_b = FakeDaemon::start(
+        home_b.path(),
+        vec![json!({
+            "session_id": session_id,
+            "payload_markdown": "# TriSeek Hydration Payload\nrestored",
+            "payload_token_estimate": 5,
+            "hydration_report": {
+                "files_primed": 0,
+                "searches_warmed": 0,
+                "frecency_entries_restored": 0,
+                "stale_files": []
+            },
+            "searches": []
+        })],
+    );
+    let mut client_b = McpClient::spawn_with_home_and_env(
+        &clone_b,
+        Some(home_b.path()),
+        &[("TRISEEK_MCP_DISABLE_STARTUP_SYNC", "1")],
+    );
+    handshake(&mut client_b);
+
+    let resume = call_tool(
+        &mut client_b,
+        "session_resume",
+        json!({ "pack_path": pack_path }),
+    );
+
+    assert_eq!(resume.get("session_id"), Some(&json!(session_id)));
+    assert_eq!(
+        resume.get("imported_snapshot_id").and_then(Value::as_str),
+        Some(snapshot_id)
+    );
+    assert_eq!(resume.get("git_restored"), Some(&json!(true)));
+    assert_eq!(
+        git_command_stdout(&clone_b, &["branch", "--show-current"]),
+        "triseek/handoff/session_mcp_git_two_clone"
+    );
+    assert_eq!(git_command_stdout(&clone_b, &["rev-parse", "HEAD"]), commit);
+
+    client_b.shutdown();
+    let methods_b = daemon_b
+        .finish()
+        .iter()
+        .filter_map(|request| request.get("method").and_then(Value::as_str))
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    assert_eq!(methods_b, vec!["session_resume_prepare"]);
+}
+
+#[test]
+fn handoff_git_pack_resumes_in_second_clone() {
+    let binary = triseek_binary();
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let remote = tmp.path().join("remote.git");
+    let clone_a = tmp.path().join("clone-a");
+    let clone_b = tmp.path().join("clone-b");
+    git_command(tmp.path(), &["init", "--bare", remote.to_str().unwrap()]);
+    git_command(
+        tmp.path(),
+        &["clone", remote.to_str().unwrap(), clone_a.to_str().unwrap()],
+    );
+    git_command(&clone_a, &["config", "user.email", "triseek@example.com"]);
+    git_command(&clone_a, &["config", "user.name", "TriSeek Test"]);
+    std::fs::write(clone_a.join("README.md"), "initial\n").expect("write readme");
+    git_command(&clone_a, &["add", "README.md"]);
+    git_command(&clone_a, &["commit", "-m", "initial"]);
+    git_command(&clone_a, &["push", "-u", "origin", "HEAD:main"]);
+    git_command(&clone_a, &["switch", "-c", "feature"]);
+    let commit = git_command_stdout(&clone_a, &["rev-parse", "HEAD"]);
+    git_command(
+        tmp.path(),
+        &["clone", remote.to_str().unwrap(), clone_b.to_str().unwrap()],
+    );
+    git_command(&clone_b, &["switch", "main"]);
+
+    let session_id = "session_two_clone";
+    let snapshot_id = "snap_two_clone";
+    let home_a = tempfile::tempdir().expect("home a");
+    let snapshot_dir = home_a
+        .path()
+        .join(".triseek")
+        .join("daemon")
+        .join("snapshots")
+        .join(snapshot_id);
+    write_snapshot_files(&snapshot_dir, session_id, &clone_a, &commit);
+    let daemon_a = FakeDaemon::start(
+        home_a.path(),
+        vec![
+            json!({
+                "snapshot_id": snapshot_id,
+                "snapshot_dir": snapshot_dir.display().to_string(),
+                "manifest": {
+                    "schema_version": PORTABILITY_SCHEMA_VERSION,
+                    "snapshot_id": snapshot_id,
+                    "session_id": session_id,
+                    "created_at": 1770000000,
+                    "repo_root": clone_a.display().to_string(),
+                    "repo_commit": commit,
+                    "repo_dirty_files": [],
+                    "source_harness": "codex",
+                    "source_model": null,
+                    "generation": 1,
+                    "context_epoch": 0
+                }
+            }),
+            json!({
+                "snapshot": {
+                    "manifest": {
+                        "schema_version": PORTABILITY_SCHEMA_VERSION,
+                        "snapshot_id": snapshot_id,
+                        "session_id": session_id,
+                        "created_at": 1770000000,
+                        "repo_root": clone_a.display().to_string(),
+                        "repo_commit": commit,
+                        "repo_dirty_files": [],
+                        "source_harness": "codex",
+                        "source_model": null,
+                        "generation": 1,
+                        "context_epoch": 0
+                    },
+                    "working_set": {
+                        "schema_version": PORTABILITY_SCHEMA_VERSION,
+                        "files_read": [],
+                        "searches_run": [],
+                        "frecency_top_n": []
+                    },
+                    "action_log": [],
+                    "pinned_snippets": []
+                }
+            }),
+        ],
+    );
+    let pack_path = tmp.path().join("handoff.tcp");
+    let handoff = Command::new(&binary)
+        .arg("handoff")
+        .arg("codex")
+        .arg("--mode")
+        .arg("git")
+        .arg("--session")
+        .arg(session_id)
+        .arg("--output")
+        .arg(&pack_path)
+        .current_dir(&clone_a)
+        .env("HOME", home_a.path())
+        .env("USERPROFILE", home_a.path())
+        .output()
+        .expect("run triseek handoff");
+    assert!(
+        handoff.status.success(),
+        "handoff failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&handoff.stdout),
+        String::from_utf8_lossy(&handoff.stderr)
+    );
+    assert!(pack_path.exists(), "handoff should create tcp pack");
+    assert_eq!(
+        git_command_stdout(&clone_a, &["branch", "--show-current"]),
+        "triseek/handoff/session_two_clone"
+    );
+    daemon_a.finish();
+
+    let home_b = tempfile::tempdir().expect("home b");
+    let daemon_b = FakeDaemon::start(
+        home_b.path(),
+        vec![json!({
+            "session_id": session_id,
+            "payload_markdown": "# TriSeek Hydration Payload\nrestored",
+            "payload_token_estimate": 5,
+            "hydration_report": {
+                "files_primed": 0,
+                "searches_warmed": 0,
+                "frecency_entries_restored": 0,
+                "stale_files": []
+            },
+            "searches": []
+        })],
+    );
+    let resume = Command::new(&binary)
+        .arg("resume")
+        .arg(&pack_path)
+        .current_dir(&clone_b)
+        .env("HOME", home_b.path())
+        .env("USERPROFILE", home_b.path())
+        .output()
+        .expect("run triseek resume");
+    assert!(
+        resume.status.success(),
+        "resume failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&resume.stdout),
+        String::from_utf8_lossy(&resume.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&resume.stdout).contains("TriSeek Hydration Payload"),
+        "resume should print hydration payload"
+    );
+    assert_eq!(
+        git_command_stdout(&clone_b, &["branch", "--show-current"]),
+        "triseek/handoff/session_two_clone"
+    );
+    assert_eq!(git_command_stdout(&clone_b, &["rev-parse", "HEAD"]), commit);
+    daemon_b.finish();
 }
 
 #[test]

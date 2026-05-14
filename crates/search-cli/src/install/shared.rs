@@ -553,7 +553,7 @@ fn triseek_command_markdown(source_harness: &str) -> String {
     format!(
         r#"---
 description: Create or resume TriSeek handoffs between Claude and Codex
-argument-hint: handoff <codex|claude> | resume <snapshot_id>
+argument-hint: handoff <codex|claude> | resume <snapshot_id|handoff.tcp>
 ---
 <!-- TRISEEK_MANAGED_COMMAND: source_harness={source_harness} -->
 
@@ -565,26 +565,27 @@ Current harness: `{source_harness}`
 Supported forms:
 - `handoff codex`
 - `handoff claude`
-- `resume <snapshot_id>`
+- `resume <snapshot_id|handoff.tcp>`
 
 For `handoff <target-harness>`:
-1. Prefer the TriSeek MCP tool `session_handoff` with `source_harness` set to `{source_harness}` and the target harness from the user arguments.
+1. Prefer the TriSeek MCP tool `session_handoff` with `source_harness` set to `{source_harness}` and `target_harness` from the user arguments.
 2. If MCP cannot create the handoff because there is no current TriSeek session, run the CLI fallback:
    `triseek handoff <target-harness> --from {source_harness}`
-3. If the MCP result does not include a briefing path, create one with:
+3. For cross-machine transfer, ask whether to use Git transport. If yes, pass `mode: "git"` and a `pack_output_path` such as `handoff.tcp`; otherwise pass `mode: "metadata"` when writing a pack.
+4. If the MCP result does not include a briefing path, create one with:
    `triseek brief <snapshot_id> --mode no-inference`
-4. End by prominently showing the exact target command:
+5. End by prominently showing the exact target command:
    - For Codex: `In Codex, paste: $triseek resume <snapshot_id>`
    - For Claude: `In Claude, paste: /triseek resume <snapshot_id>`
 
-For `resume <snapshot_id>`:
-1. Call the TriSeek MCP tool `session_resume` for the snapshot id.
+For `resume <snapshot_id|handoff.tcp>`:
+1. Call the TriSeek MCP tool `session_resume` with `snapshot_id` for a snapshot id, or `pack_path` for a `.tcp` file.
 2. Read the returned hydration payload into the live context before doing more work.
 3. Summarize the restored goal, relevant files, searches, and suggested next step.
 4. Ask the user to press Enter or say "continue" before making edits or running a new implementation step.
 
 Raw shell fallback remains available as:
-`triseek resume <snapshot_id>`
+`triseek resume <snapshot_id|handoff.tcp>`
 "#
     )
 }
@@ -896,9 +897,10 @@ args = ["mcp", "serve"]
         write_claude_triseek_command(&path).unwrap();
         let generated = std::fs::read_to_string(path).unwrap();
         assert!(generated.contains("TRISEEK_MANAGED_COMMAND"));
-        assert!(generated.contains("handoff <codex|claude> | resume <snapshot_id>"));
+        assert!(generated.contains("handoff <codex|claude> | resume <snapshot_id|handoff.tcp>"));
         assert!(generated.contains("session_handoff"));
         assert!(generated.contains("session_resume"));
+        assert!(generated.contains("pack_path"));
         assert!(generated.contains("In Codex, paste: $triseek resume <snapshot_id>"));
         assert!(generated.contains("In Claude, paste: /triseek resume <snapshot_id>"));
     }

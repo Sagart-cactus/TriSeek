@@ -11,6 +11,7 @@ use crate::mcp::errors::McpToolError;
 use crate::mcp::search_memo::SearchMemoEntry;
 use crate::mcp::server::McpState;
 use crate::search_runner::{self, ExecutedSearch};
+use crate::{git_handoff, handoff, handoff_metadata, pack};
 use search_core::{
     ActionKind, CaseMode, DAEMON_PORT_FILE, DaemonStatus, DaemonStatusParams, MemoCheckParams,
     MemoSessionParams, MemoStatusParams, PinnedSnippetSpec, PortabilitySessionStatus,
@@ -18,7 +19,7 @@ use search_core::{
     SearchHit, SearchKind, SearchReuseCheckParams, SearchReuseReason, SessionCloseParams,
     SessionListParams, SessionListResponse, SessionOpenParams, SessionRecordActionParams,
     SessionResumePrepareParams, SessionSnapshotCreateParams, SessionSnapshotDiffParams,
-    SessionSnapshotGetParams, SessionSnapshotListParams,
+    SessionSnapshotGetParams, SessionSnapshotListParams, SnapshotManifest,
 };
 use search_index::{BuildConfig, SearchEngine, daemon_dir, index_exists, read_index_metadata};
 use serde::Deserialize;
@@ -27,7 +28,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const DEFAULT_LIMIT: usize = 20;
@@ -692,17 +693,19 @@ fn session_snapshot(state: &McpState, arguments: &Value) -> ToolOutcome {
         Ok(args) => args,
         Err(err) => return ToolOutcome::Error(err),
     };
-    let Some(session_id) = args
-        .session_id
-        .or_else(|| state.current_session_id())
-        .or_else(|| newest_open_session_id(state).ok().flatten())
-    else {
-        return ToolOutcome::Error(McpToolError::invalid_query(
-            "`session_id` is required when no current session is open",
-        ));
-    };
+    match create_session_snapshot(state, args) {
+        Ok(value) => ToolOutcome::Success(value),
+        Err(error) => ToolOutcome::Error(error),
+    }
+}
+
+fn create_session_snapshot(
+    state: &McpState,
+    args: SessionSnapshotArgs,
+) -> Result<Value, McpToolError> {
+    let session_id = resolve_portability_session_id(state, args.session_id)?;
     state.set_current_session_id(Some(session_id.clone()));
-    match daemon_rpc(
+    daemon_rpc(
         "session_snapshot_create",
         json!(SessionSnapshotCreateParams {
             target_root: state.repo_root().display().to_string(),
@@ -711,10 +714,22 @@ fn session_snapshot(state: &McpState, arguments: &Value) -> ToolOutcome {
             source_model: args.source_model,
             pinned_snippet_paths: args.pinned_snippet_paths,
         }),
-    ) {
-        Ok(value) => ToolOutcome::Success(value),
-        Err(error) => ToolOutcome::Error(error),
-    }
+    )
+}
+
+fn resolve_portability_session_id(
+    state: &McpState,
+    session_id: Option<String>,
+) -> Result<String, McpToolError> {
+    let Some(session_id) = session_id
+        .or_else(|| state.current_session_id())
+        .or_else(|| newest_open_session_id(state).ok().flatten())
+    else {
+        return Err(McpToolError::invalid_query(
+            "`session_id` is required when no current session is open",
+        ));
+    };
+    Ok(session_id)
 }
 
 #[derive(Debug, Deserialize)]
@@ -788,7 +803,10 @@ fn session_snapshot_diff(state: &McpState, arguments: &Value) -> ToolOutcome {
 
 #[derive(Debug, Deserialize)]
 struct SessionResumeArgs {
-    snapshot_id: String,
+    #[serde(default)]
+    snapshot_id: Option<String>,
+    #[serde(default)]
+    pack_path: Option<PathBuf>,
     #[serde(default)]
     budget_tokens: Option<usize>,
 }
@@ -798,45 +816,24 @@ fn session_resume(state: &McpState, arguments: &Value) -> ToolOutcome {
         Ok(args) => args,
         Err(err) => return ToolOutcome::Error(err),
     };
+    let resume_source = match prepare_mcp_resume_source(state, &args) {
+        Ok(source) => source,
+        Err(error) => return ToolOutcome::Error(error),
+    };
     match daemon_rpc(
         "session_resume_prepare",
         json!(SessionResumePrepareParams {
             target_root: state.repo_root().display().to_string(),
-            snapshot_id: args.snapshot_id,
+            snapshot_id: resume_source.snapshot_id.clone(),
             budget_tokens: args.budget_tokens,
         }),
     ) {
-        Ok(value) => {
-            if let Some(session_id) = value.get("session_id").and_then(Value::as_str) {
-                state.set_current_session_id(Some(session_id.to_string()));
-            }
-            if let Some(searches) = value.get("searches").and_then(Value::as_array) {
-                let entries = searches
-                    .iter()
-                    .filter_map(|search| {
-                        Some(SearchMemoEntry {
-                            search_id: search.get("search_id")?.as_str()?.to_string(),
-                            recorded_generation: 0,
-                            recorded_context_epoch: 0,
-                            matched_paths: search
-                                .get("result_paths")
-                                .and_then(Value::as_array)
-                                .into_iter()
-                                .flatten()
-                                .filter_map(Value::as_str)
-                                .map(ToString::to_string)
-                                .collect(),
-                            files_with_matches: search
-                                .get("result_paths")
-                                .and_then(Value::as_array)
-                                .map(|paths| paths.len() as u64)
-                                .unwrap_or(0),
-                            total_line_matches: 0,
-                            strategy: "hydrated_snapshot".to_string(),
-                        })
-                    })
-                    .collect::<Vec<_>>();
-                state.search_memo.warm_from_snapshot(entries);
+        Ok(mut value) => {
+            warm_state_from_resume_payload(state, &value);
+            if let Some(pack_path) = resume_source.pack_path {
+                value["imported_snapshot_id"] = Value::String(resume_source.snapshot_id);
+                value["pack_path"] = Value::String(pack_path.display().to_string());
+                value["git_restored"] = Value::Bool(resume_source.git_restored);
             }
             ToolOutcome::Success(value)
         }
@@ -844,10 +841,251 @@ fn session_resume(state: &McpState, arguments: &Value) -> ToolOutcome {
     }
 }
 
+struct ResumeSource {
+    snapshot_id: String,
+    pack_path: Option<PathBuf>,
+    git_restored: bool,
+}
+
+fn prepare_mcp_resume_source(
+    state: &McpState,
+    args: &SessionResumeArgs,
+) -> Result<ResumeSource, McpToolError> {
+    let snapshot_id = args.snapshot_id.as_deref();
+    let snapshot_pack_path = snapshot_id
+        .filter(|value| value.ends_with(".tcp"))
+        .map(PathBuf::from);
+    if args.pack_path.is_some() && snapshot_id.is_some() && snapshot_pack_path.is_none() {
+        return Err(McpToolError::invalid_query(
+            "provide either `snapshot_id` or `pack_path`, not both",
+        ));
+    }
+    let pack_path = args.pack_path.clone().or(snapshot_pack_path);
+    let Some(pack_path) = pack_path else {
+        let Some(snapshot_id) = snapshot_id else {
+            return Err(McpToolError::invalid_query(
+                "`snapshot_id` or `pack_path` is required",
+            ));
+        };
+        return Ok(ResumeSource {
+            snapshot_id: snapshot_id.to_string(),
+            pack_path: None,
+            git_restored: false,
+        });
+    };
+    let pack_path = resolve_repo_relative_path(&state.repo_root(), pack_path);
+    let snapshot_id = pack::import(&pack_path, &daemon_dir().join("snapshots"))
+        .map_err(|error| McpToolError::backend_failure(format!("pack import failed: {error}")))?;
+    let snapshot_dir = daemon_dir().join("snapshots").join(&snapshot_id);
+    let mut git_restored = false;
+    if let Some(metadata) = handoff_metadata::read_optional(&snapshot_dir).map_err(|error| {
+        McpToolError::backend_failure(format!("handoff metadata read failed: {error}"))
+    })? && let Some(git) = metadata.git.as_ref()
+    {
+        git_handoff::restore(&state.repo_root(), git).map_err(|error| {
+            McpToolError::backend_failure(format!("git handoff restore failed: {error}"))
+        })?;
+        git_restored = true;
+    }
+    let manifest: SnapshotManifest = serde_json::from_slice(
+        &fs::read(snapshot_dir.join("manifest.json")).map_err(|error| {
+            McpToolError::backend_failure(format!("snapshot manifest read failed: {error}"))
+        })?,
+    )
+    .map_err(|error| {
+        McpToolError::backend_failure(format!("snapshot manifest decode failed: {error}"))
+    })?;
+    if git_restored || manifest.repo_commit.is_some() || !manifest.repo_dirty_files.is_empty() {
+        let expected_dirty_files = if git_restored {
+            None
+        } else {
+            Some(manifest.repo_dirty_files.as_slice())
+        };
+        git_handoff::validate_checkout(
+            &state.repo_root(),
+            manifest.repo_commit.as_deref(),
+            expected_dirty_files,
+        )
+        .map_err(|error| {
+            McpToolError::backend_failure(format!("checkout validation failed: {error}"))
+        })?;
+    }
+    Ok(ResumeSource {
+        snapshot_id,
+        pack_path: Some(pack_path),
+        git_restored,
+    })
+}
+
+fn warm_state_from_resume_payload(state: &McpState, value: &Value) {
+    if let Some(session_id) = value.get("session_id").and_then(Value::as_str) {
+        state.set_current_session_id(Some(session_id.to_string()));
+    }
+    if let Some(searches) = value.get("searches").and_then(Value::as_array) {
+        let entries = searches
+            .iter()
+            .filter_map(|search| {
+                Some(SearchMemoEntry {
+                    search_id: search.get("search_id")?.as_str()?.to_string(),
+                    recorded_generation: 0,
+                    recorded_context_epoch: 0,
+                    matched_paths: search
+                        .get("result_paths")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_str)
+                        .map(ToString::to_string)
+                        .collect(),
+                    files_with_matches: search
+                        .get("result_paths")
+                        .and_then(Value::as_array)
+                        .map(|paths| paths.len() as u64)
+                        .unwrap_or(0),
+                    total_line_matches: 0,
+                    strategy: "hydrated_snapshot".to_string(),
+                })
+            })
+            .collect::<Vec<_>>();
+        state.search_memo.warm_from_snapshot(entries);
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionHandoffArgs {
+    #[serde(default)]
+    session_id: Option<String>,
+    #[serde(default)]
+    source_harness: Option<String>,
+    #[serde(default)]
+    source_model: Option<String>,
+    #[serde(default)]
+    pinned_snippet_paths: Vec<PinnedSnippetSpec>,
+    #[serde(default)]
+    mode: Option<String>,
+    #[serde(default)]
+    target_harness: Option<String>,
+    #[serde(default)]
+    pack_output_path: Option<PathBuf>,
+    #[serde(default)]
+    branch: Option<String>,
+    #[serde(default)]
+    remote: Option<String>,
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(default)]
+    continue_existing: bool,
+}
+
 fn session_handoff(state: &McpState, arguments: &Value) -> ToolOutcome {
-    let snapshot = match session_snapshot(state, arguments) {
-        ToolOutcome::Success(value) => value,
-        ToolOutcome::Error(error) => return ToolOutcome::Error(error),
+    let args: SessionHandoffArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(error) => return ToolOutcome::Error(error),
+    };
+    let mode = match args.mode.as_deref().unwrap_or("metadata") {
+        "metadata" => handoff_metadata::HandoffMode::Metadata,
+        "git" => handoff_metadata::HandoffMode::Git,
+        other => {
+            return ToolOutcome::Error(McpToolError::invalid_query(format!(
+                "unsupported handoff mode `{other}`"
+            )));
+        }
+    };
+    let session_id = match resolve_portability_session_id(state, args.session_id.clone()) {
+        Ok(session_id) => session_id,
+        Err(error) => return ToolOutcome::Error(error),
+    };
+    if matches!(mode, handoff_metadata::HandoffMode::Git) && args.pack_output_path.is_none() {
+        return ToolOutcome::Error(McpToolError::invalid_query(
+            "`pack_output_path` is required for git handoff mode",
+        ));
+    }
+    if (matches!(mode, handoff_metadata::HandoffMode::Git) || args.pack_output_path.is_some())
+        && args.target_harness.is_none()
+    {
+        return ToolOutcome::Error(McpToolError::invalid_query(
+            "`target_harness` is required when writing a handoff pack",
+        ));
+    }
+    let target_harness = match args.target_harness.as_deref() {
+        Some(target) => match handoff::normalize_harness(target) {
+            Ok(target) => Some(target),
+            Err(error) => {
+                return ToolOutcome::Error(McpToolError::invalid_query(error.to_string()));
+            }
+        },
+        None => None,
+    };
+    let git_metadata = if matches!(mode, handoff_metadata::HandoffMode::Git) {
+        match git_handoff::prepare(
+            &state.repo_root(),
+            &session_id,
+            &git_handoff::GitHandoffOptions {
+                branch: args.branch.clone(),
+                remote: args.remote.clone(),
+                message: args.message.clone(),
+                continue_existing: args.continue_existing,
+                interactive: false,
+            },
+        ) {
+            Ok(metadata) => Some(metadata),
+            Err(error) => {
+                return ToolOutcome::Error(McpToolError::backend_failure(format!(
+                    "git handoff prepare failed: {error}"
+                )));
+            }
+        }
+    } else {
+        None
+    };
+    let snapshot_args = SessionSnapshotArgs {
+        session_id: Some(session_id.clone()),
+        source_harness: args.source_harness,
+        source_model: args.source_model,
+        pinned_snippet_paths: args.pinned_snippet_paths,
+    };
+    let mut snapshot = match create_session_snapshot(state, snapshot_args) {
+        Ok(value) => value,
+        Err(error) => return ToolOutcome::Error(error),
+    };
+    if let Some(pack_output_path) = args.pack_output_path {
+        let Some(target_harness) = target_harness.as_deref() else {
+            return ToolOutcome::Error(McpToolError::invalid_query(
+                "`target_harness` is required when writing a handoff pack",
+            ));
+        };
+        let snapshot_dir = match snapshot.get("snapshot_dir").and_then(Value::as_str) {
+            Some(path) => PathBuf::from(path),
+            None => {
+                return ToolOutcome::Error(McpToolError::backend_failure(
+                    "snapshot response missing snapshot_dir",
+                ));
+            }
+        };
+        let metadata = match git_metadata {
+            Some(git) => handoff_metadata::HandoffMetadata::git(target_harness, git),
+            None => handoff_metadata::HandoffMetadata::metadata(target_harness),
+        };
+        if let Err(error) = handoff_metadata::write(&snapshot_dir, &metadata) {
+            return ToolOutcome::Error(McpToolError::backend_failure(format!(
+                "handoff metadata write failed: {error}"
+            )));
+        }
+        let pack_path = resolve_repo_relative_path(&state.repo_root(), pack_output_path);
+        if let Err(error) = pack::export(&snapshot_dir, &pack_path) {
+            return ToolOutcome::Error(McpToolError::backend_failure(format!(
+                "pack export failed: {error}"
+            )));
+        }
+        snapshot["handoff"] = json!({
+            "mode": match metadata.mode {
+                handoff_metadata::HandoffMode::Metadata => "metadata",
+                handoff_metadata::HandoffMode::Git => "git",
+            },
+            "target_harness": target_harness,
+            "pack_path": pack_path.display().to_string(),
+            "git": metadata.git,
+        });
     };
     if let Some(session_id) = state.current_session_id() {
         let _ = daemon_rpc(
@@ -860,6 +1098,14 @@ fn session_handoff(state: &McpState, arguments: &Value) -> ToolOutcome {
         );
     }
     ToolOutcome::Success(snapshot)
+}
+
+fn resolve_repo_relative_path(repo_root: &Path, path: PathBuf) -> PathBuf {
+    if path.is_absolute() {
+        path
+    } else {
+        repo_root.join(path)
+    }
 }
 
 fn newest_open_session_id(state: &McpState) -> Result<Option<String>, McpToolError> {

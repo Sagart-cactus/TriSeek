@@ -1,7 +1,9 @@
 mod brief;
 mod build_output;
 mod context_pack;
+mod git_handoff;
 mod handoff;
+mod handoff_metadata;
 mod hydration_writer;
 mod install;
 mod mcp;
@@ -20,7 +22,7 @@ use search_core::{
     SearchEngineKind, SearchHit, SearchKind, SearchResponse, SessionListParams,
     SessionListResponse, SessionMetrics, SessionQuery, SessionResumePrepareParams,
     SessionSnapshotCreateParams, SessionSnapshotCreateResponse, SessionSnapshotDiffParams,
-    SessionSnapshotGetParams, SessionSnapshotListParams, plan_query, route_query,
+    SessionSnapshotGetParams, SessionSnapshotListParams, SnapshotManifest, plan_query, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
 use search_index::{
@@ -370,6 +372,9 @@ struct SnapshotCreateArgs {
 struct HandoffArgs {
     /// Target harness that will resume this session: `codex` or `claude`.
     target_harness: String,
+    /// Handoff transport mode.
+    #[arg(long, value_enum, default_value_t = HandoffCliMode::Metadata)]
+    mode: HandoffCliMode,
     /// TriSeek session id. Defaults to the newest open session in this repo.
     #[arg(long)]
     session: Option<String>,
@@ -382,8 +387,29 @@ struct HandoffArgs {
     /// Pin a snippet as `path:start:end`.
     #[arg(long = "pin", value_parser = parse_pin)]
     pins: Vec<PinnedSnippetSpec>,
+    /// Output `.tcp` handoff path. Defaults to `triseek-handoff-<snapshot_id>.tcp`.
+    #[arg(long)]
+    output: Option<PathBuf>,
+    /// Git handoff branch. Defaults to `triseek/handoff/<session_id>` in Git mode.
+    #[arg(long)]
+    branch: Option<String>,
+    /// Git remote. Defaults to the current branch upstream remote, then `origin`.
+    #[arg(long)]
+    remote: Option<String>,
+    /// Git commit message. Defaults to `triseek handoff <session_id>`.
+    #[arg(long = "message")]
+    commit_message: Option<String>,
+    /// Continue an existing handoff branch in non-interactive contexts.
+    #[arg(long = "continue")]
+    continue_existing: bool,
     #[arg(value_name = "PATH")]
     path: Option<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum HandoffCliMode {
+    Metadata,
+    Git,
 }
 
 #[derive(Args)]
@@ -407,7 +433,7 @@ struct SnapshotDiffCliArgs {
 
 #[derive(Args)]
 struct ResumeArgs {
-    snapshot_id: String,
+    snapshot_or_pack: String,
     #[arg(long)]
     write_to: Option<PathBuf>,
     #[arg(long)]
@@ -818,6 +844,20 @@ fn handle_handoff(args: HandoffArgs) -> Result<()> {
         Some(session_id) => session_id,
         None => select_newest_open_session(&repo_root)?,
     };
+    let git_metadata = match args.mode {
+        HandoffCliMode::Metadata => None,
+        HandoffCliMode::Git => Some(git_handoff::prepare(
+            &repo_root,
+            &session_id,
+            &git_handoff::GitHandoffOptions {
+                branch: args.branch,
+                remote: args.remote,
+                message: args.commit_message,
+                continue_existing: args.continue_existing,
+                interactive: std::io::stdin().is_terminal(),
+            },
+        )?),
+    };
     let mut stream = connect_to_daemon().context("TriSeek daemon is not running")?;
 
     let result = rpc_call(
@@ -834,17 +874,30 @@ fn handle_handoff(args: HandoffArgs) -> Result<()> {
     let snapshot: SessionSnapshotCreateResponse =
         serde_json::from_value(result).context("failed to decode snapshot create response")?;
     let briefing_path = write_briefing(&repo_root, &snapshot.snapshot_id, &args.brief_mode, None)?;
+    let snapshot_dir = PathBuf::from(&snapshot.snapshot_dir);
+    let handoff_metadata = match git_metadata {
+        Some(git) => handoff_metadata::HandoffMetadata::git(&target_harness, git),
+        None => handoff_metadata::HandoffMetadata::metadata(&target_harness),
+    };
+    handoff_metadata::write(&snapshot_dir, &handoff_metadata)?;
+    let output_path = args
+        .output
+        .unwrap_or_else(|| repo_root.join(format!("triseek-handoff-{}.tcp", snapshot.snapshot_id)));
+    pack::export(&snapshot_dir, &output_path)?;
+    let resume_arg = output_path.display().to_string();
 
     println!(
         "{}",
-        handoff::render_handoff_block(
+        handoff::render_handoff_block_with_resume_arg(
             source_harness.as_deref(),
             &target_harness,
             &session_id,
             &snapshot.snapshot_id,
-            &briefing_path
+            &briefing_path,
+            &resume_arg
         )
     );
+    println!("\nPack: {}", output_path.display());
     Ok(())
 }
 
@@ -869,13 +922,14 @@ fn select_newest_open_session(repo_root: &Path) -> Result<String> {
 
 fn handle_resume(args: ResumeArgs) -> Result<()> {
     let repo_root = resolve_cli_root(args.path.as_deref(), None, None)?;
+    let snapshot_id = prepare_resume_snapshot_arg(&repo_root, &args.snapshot_or_pack)?;
     let mut stream = connect_to_daemon().context("TriSeek daemon is not running")?;
     let result = rpc_call(
         &mut stream,
         "session_resume_prepare",
         serde_json::to_value(SessionResumePrepareParams {
             target_root: repo_root.display().to_string(),
-            snapshot_id: args.snapshot_id,
+            snapshot_id,
             budget_tokens: args.budget_tokens,
         })?,
     )?;
@@ -889,6 +943,41 @@ fn handle_resume(args: ResumeArgs) -> Result<()> {
             hydration_writer::Target::ProjectFile { path }
         });
     hydration_writer::write_payload(target, payload)
+}
+
+fn prepare_resume_snapshot_arg(repo_root: &Path, snapshot_or_pack: &str) -> Result<String> {
+    let arg_path = Path::new(snapshot_or_pack);
+    let is_pack = arg_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("tcp"));
+    if !is_pack {
+        return Ok(snapshot_or_pack.to_string());
+    }
+    let snapshot_id = pack::import(arg_path, &daemon_dir().join("snapshots"))?;
+    let snapshot_dir = daemon_dir().join("snapshots").join(&snapshot_id);
+    let mut restored_git = false;
+    if let Some(metadata) = handoff_metadata::read_optional(&snapshot_dir)?
+        && let Some(git) = metadata.git.as_ref()
+    {
+        git_handoff::restore(repo_root, git)?;
+        restored_git = true;
+    }
+    let manifest: SnapshotManifest =
+        serde_json::from_slice(&fs::read(snapshot_dir.join("manifest.json"))?)?;
+    if restored_git || manifest.repo_commit.is_some() || !manifest.repo_dirty_files.is_empty() {
+        let expected_dirty_files = if restored_git {
+            None
+        } else {
+            Some(manifest.repo_dirty_files.as_slice())
+        };
+        git_handoff::validate_checkout(
+            repo_root,
+            manifest.repo_commit.as_deref(),
+            expected_dirty_files,
+        )?;
+    }
+    Ok(snapshot_id)
 }
 
 fn handle_pack(args: PackArgs) -> Result<()> {
@@ -1620,6 +1709,33 @@ mod tests {
         assert_eq!(args.target_harness, "codex");
         assert_eq!(args.session.as_deref(), Some("demo"));
         assert_eq!(args.source_harness.as_deref(), Some("claude_code"));
+        assert_eq!(args.mode, HandoffCliMode::Metadata);
+    }
+
+    #[test]
+    fn parses_git_handoff_options() {
+        let cli = Cli::parse_from([
+            OsString::from("triseek"),
+            OsString::from("handoff"),
+            OsString::from("codex"),
+            OsString::from("--mode"),
+            OsString::from("git"),
+            OsString::from("--branch"),
+            OsString::from("handoff/demo"),
+            OsString::from("--remote"),
+            OsString::from("fork"),
+            OsString::from("--message"),
+            OsString::from("handoff: demo"),
+            OsString::from("--continue"),
+        ]);
+        let Commands::Handoff(args) = cli.command else {
+            panic!("expected handoff command");
+        };
+        assert_eq!(args.mode, HandoffCliMode::Git);
+        assert_eq!(args.branch.as_deref(), Some("handoff/demo"));
+        assert_eq!(args.remote.as_deref(), Some("fork"));
+        assert_eq!(args.commit_message.as_deref(), Some("handoff: demo"));
+        assert!(args.continue_existing);
     }
 
     #[test]

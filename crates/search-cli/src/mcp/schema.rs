@@ -119,14 +119,14 @@ pub const TOOLS: &[ToolDescriptor] = &[
     ToolDescriptor {
         name: "session_resume",
         title: "Prepare session resume",
-        description: "Hydrate daemon state from a snapshot and return a markdown payload for the new harness.",
+        description: "Hydrate daemon state from a snapshot id or .tcp pack and return a markdown payload for the new harness.",
         input_schema: session_resume_schema,
     },
     ToolDescriptor {
         name: "session_handoff",
         title: "Create handoff snapshot",
-        description: "Convenience wrapper that creates a session snapshot and closes the current session as resolved.",
-        input_schema: session_snapshot_schema,
+        description: "Convenience wrapper that creates a session snapshot, optionally writes a .tcp pack, and closes the current session as resolved.",
+        input_schema: session_handoff_schema,
     },
 ];
 
@@ -388,6 +388,38 @@ pub fn session_snapshot_schema() -> Value {
     })
 }
 
+pub fn session_handoff_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "session_id": {"type": "string"},
+            "source_harness": {"type": "string"},
+            "source_model": {"type": "string"},
+            "pinned_snippet_paths": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "line_start": {"type": "integer", "minimum": 1},
+                        "line_end": {"type": "integer", "minimum": 1}
+                    },
+                    "required": ["path", "line_start", "line_end"],
+                    "additionalProperties": false
+                }
+            },
+            "mode": {"type": "string", "enum": ["metadata", "git"], "default": "metadata"},
+            "target_harness": {"type": "string", "description": "Target harness for handoff metadata, for example codex or claude."},
+            "pack_output_path": {"type": "string", "description": "Optional .tcp output path. Relative paths resolve against the MCP repo root."},
+            "branch": {"type": "string", "description": "Git handoff branch for mode=git."},
+            "remote": {"type": "string", "description": "Git remote for mode=git."},
+            "message": {"type": "string", "description": "Git commit message for mode=git."},
+            "continue_existing": {"type": "boolean", "default": false}
+        },
+        "additionalProperties": false
+    })
+}
+
 pub fn snapshot_list_schema() -> Value {
     json!({
         "type": "object",
@@ -421,10 +453,10 @@ pub fn session_resume_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "snapshot_id": {"type": "string"},
+            "snapshot_id": {"type": "string", "description": "Snapshot id, or for compatibility a .tcp pack path."},
+            "pack_path": {"type": "string", "description": "Optional .tcp pack path. Relative paths resolve against the MCP repo root."},
             "budget_tokens": {"type": "integer", "minimum": 1, "maximum": 12000}
         },
-        "required": ["snapshot_id"],
         "additionalProperties": false
     })
 }
