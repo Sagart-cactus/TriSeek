@@ -63,6 +63,14 @@ jobs:
       - name: Build release binary
         run: cargo build --release --locked --target ${{ matrix.target }} --bin triseek --bin triseek-server
 
+      - name: Re-sign macOS binaries (ad-hoc)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          codesign --force --sign - "target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
+          codesign --force --sign - "target/${{ matrix.target }}/release/${{ matrix.server_binary_name }}"
+
       - name: Package archive (Unix)
         if: runner.os != 'Windows'
         shell: bash
