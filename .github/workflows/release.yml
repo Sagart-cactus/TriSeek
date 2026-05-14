@@ -59,6 +59,8 @@ jobs:
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
       - name: Build release binary
         run: cargo build --release --locked --target ${{ matrix.target }} --bin triseek --bin triseek-server
