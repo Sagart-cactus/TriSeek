@@ -453,7 +453,7 @@ triseek mcp serve</pre>
             </tr>
             <tr>
               <td><span class="tag pu">session_handoff</span></td>
-              <td>MCP convenience wrapper: snapshot the current session, then close it as resolved</td>
+              <td>MCP convenience wrapper: snapshot the current session, optionally write a .tcp pack, then close it as resolved</td>
             </tr>
             <tr>
               <td><span class="tag pu">session_snapshot_list</span></td>
@@ -550,8 +550,8 @@ triseek mcp serve</pre>
   ]
 }</pre>
         </div>
-        <p><code>session_snapshot</code> returns <code>snapshot_id</code>, <code>snapshot_dir</code>, and a manifest. <code>session_resume</code> accepts that id and returns <code>payload_markdown</code>, <code>payload_token_estimate</code>, <code>hydration_report</code>, and warmed search refs.</p>
-        <p>Use <code>session_handoff</code> when you want the MCP wrapper to snapshot and close the session. Use <code>triseek handoff codex</code> for the target-aware CLI flow.</p>
+        <p><code>session_snapshot</code> returns <code>snapshot_id</code>, <code>snapshot_dir</code>, and a manifest. <code>session_resume</code> accepts that id or a <code>pack_path</code> to a <code>.tcp</code> file and returns <code>payload_markdown</code>, <code>payload_token_estimate</code>, <code>hydration_report</code>, and warmed search refs.</p>
+        <p>Use <code>session_handoff</code> when you want the MCP wrapper to snapshot, optionally write a <code>.tcp</code> pack, and close the session. Set <code>mode</code> to <code>git</code> for Git-backed handoff packs, with <code>target_harness</code> and <code>pack_output_path</code>.</p>
       </div>
     </div>
   </section>

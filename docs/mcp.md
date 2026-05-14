@@ -515,7 +515,7 @@ Snapshots include metadata, working set, action log, git state, and pinned snipp
 
 ### `session_handoff`
 
-Convenience wrapper for MCP users: create `session_snapshot`, then mark the current session resolved. It returns the same envelope as `session_snapshot`.
+Convenience wrapper for MCP users: create `session_snapshot`, optionally write a `.tcp` pack, then mark the current session resolved. Without `pack_output_path`, it returns the same envelope as `session_snapshot`.
 
 Input:
 
@@ -523,6 +523,9 @@ Input:
 {
   "session_id": "session-123",
   "source_harness": "claude_code",
+  "target_harness": "codex",
+  "mode": "git",
+  "pack_output_path": "handoff.tcp",
   "pinned_snippet_paths": [
     {
       "path": "src/auth/router.rs",
@@ -533,7 +536,18 @@ Input:
 }
 ```
 
-Use the CLI `triseek handoff codex` or `triseek handoff claude` when you want target-aware project-file writes and briefing generation.
+`mode` defaults to `metadata`. Set `pack_output_path` to write a portable `.tcp` pack. The path is resolved relative to the repository root unless it is absolute. `target_harness` is required when writing a pack.
+
+MCP and CLI handoff support two transport modes:
+
+```sh
+triseek handoff codex --mode metadata
+triseek handoff codex --mode git
+```
+
+`metadata` mode writes a metadata-only `.tcp` pack. It does not copy repository contents, so the target checkout must already match the snapshot commit and dirty-file list.
+
+`git` mode also writes a metadata-only `.tcp` pack, then uses Git as the code transport. By default it creates or uses `triseek/handoff/<session_id>`, commits only when the working tree has uncommitted changes, pushes without force, and records the remote, branch, commit, base branch, and base commit in `handoff.json` inside the pack. Existing handoff branches require `continue_existing: true` through MCP, matching `--continue` in CLI. Override the defaults with `branch`, `remote`, and `message`.
 
 ### `session_snapshot_list`
 
@@ -621,7 +635,7 @@ Input:
 
 ```json
 {
-  "snapshot_id": "snap_1777803396_demo-handoff-real",
+  "pack_path": "handoff.tcp",
   "budget_tokens": 8000
 }
 ```
@@ -631,6 +645,9 @@ Output:
 ```json
 {
   "session_id": "session_1777803396000",
+  "imported_snapshot_id": "snap_1777803396_demo-handoff-real",
+  "pack_path": "/repo/handoff.tcp",
+  "git_restored": true,
   "payload_markdown": "# TriSeek Hydration Payload\n...",
   "payload_token_estimate": 740,
   "hydration_report": {
@@ -643,7 +660,16 @@ Output:
 }
 ```
 
-`snapshot_id` is required. `budget_tokens` is optional and caps the resume payload size. The CLI `triseek resume <snapshot_id> --write-to AGENTS.md` writes that payload to the target harness file.
+Provide either `snapshot_id` or `pack_path`. For compatibility, `snapshot_id` may also be a `.tcp` path. `budget_tokens` is optional and caps the resume payload size.
+
+The CLI also accepts either a snapshot id or a `.tcp` pack:
+
+```sh
+triseek resume snap_1777803396_demo-handoff-real
+triseek resume handoff.tcp
+```
+
+When the argument is a `.tcp` pack, TriSeek imports it before warming the session. If the pack contains Git handoff metadata, TriSeek stashes local target changes, fetches and checks out the recorded handoff branch, reapplies the stash, validates the restored commit, then calls the same resume preparation path. If the pack is metadata-only, TriSeek validates the current checkout against the snapshot commit and dirty-file list before warming the session. Add `--write-to AGENTS.md` to write the hydration payload to a target harness file.
 
 ### When to use what
 
