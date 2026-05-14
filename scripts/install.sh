@@ -339,6 +339,15 @@ chmod 755 "$install_path"
 cp "$server_binary_path" "$server_install_path"
 chmod 755 "$server_install_path"
 
+# On macOS, an ad-hoc-signed binary with the com.apple.quarantine xattr is
+# killed by Gatekeeper on Apple Silicon (the process exits immediately with
+# SIGKILL and the shell prints "killed"). The released arm64 binary is
+# linker-signed ad-hoc, which is enough as long as quarantine is cleared.
+if [ "$os" = "macos" ] && have_cmd xattr; then
+  xattr -d com.apple.quarantine "$install_path" 2>/dev/null || true
+  xattr -d com.apple.quarantine "$server_install_path" 2>/dev/null || true
+fi
+
 if ! "$install_path" help >/dev/null 2>&1; then
   die "installed binary did not pass the smoke check"
 fi
