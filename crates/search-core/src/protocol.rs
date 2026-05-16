@@ -62,6 +62,12 @@ pub struct DaemonStatus {
     pub daemon_dir: String,
     pub uptime_secs: u64,
     pub active_roots: usize,
+    #[serde(default)]
+    pub loaded_engines: usize,
+    #[serde(default)]
+    pub engine_loads: u64,
+    #[serde(default)]
+    pub engine_evictions: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root: Option<DaemonRootStatus>,
 }
@@ -75,6 +81,14 @@ pub struct DaemonRootStatus {
     #[serde(default)]
     pub context_epoch: u64,
     pub delta_docs: u64,
+    #[serde(default)]
+    pub engine_loaded: bool,
+    #[serde(default)]
+    pub engine_loads: u64,
+    #[serde(default)]
+    pub engine_evictions: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine_last_used_ago_secs: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
