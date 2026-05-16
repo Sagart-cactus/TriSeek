@@ -55,6 +55,9 @@ struct RepoService {
     repo_root: PathBuf,
     index_dir: PathBuf,
     engine: RwLock<Option<SearchEngine>>,
+    engine_last_used: Mutex<Option<Instant>>,
+    engine_load_count: AtomicU64,
+    engine_eviction_count: AtomicU64,
     frecency: Mutex<FrecencyStore>,
     watcher: Mutex<Option<WatcherHandle>>,
     last_seen_generation: AtomicU64,
@@ -71,6 +74,8 @@ struct SearchChangeBatch {
 }
 
 const SEARCH_CHANGE_JOURNAL_LIMIT: usize = 256;
+const DEFAULT_MAX_LOADED_ENGINES: usize = 2;
+const DEFAULT_ENGINE_IDLE_TIMEOUT: Duration = Duration::from_secs(600);
 
 impl RepoService {
     fn new(
@@ -79,15 +84,22 @@ impl RepoService {
         session_store: Arc<SessionStore>,
     ) -> Result<Self> {
         let index_dir = default_index_dir(&repo_root);
-        let engine = if index_exists(&index_dir) {
-            Some(SearchEngine::open(&index_dir).context("failed to open index")?)
-        } else {
-            None
-        };
+        Self::new_with_index_dir(repo_root, index_dir, memo, session_store)
+    }
+
+    fn new_with_index_dir(
+        repo_root: PathBuf,
+        index_dir: PathBuf,
+        memo: Arc<MemoState>,
+        session_store: Arc<SessionStore>,
+    ) -> Result<Self> {
         let service = Self {
             repo_root,
             index_dir: index_dir.clone(),
-            engine: RwLock::new(engine),
+            engine: RwLock::new(None),
+            engine_last_used: Mutex::new(None),
+            engine_load_count: AtomicU64::new(0),
+            engine_eviction_count: AtomicU64::new(0),
             frecency: Mutex::new(FrecencyStore::open(&index_dir)),
             watcher: Mutex::new(None),
             last_seen_generation: AtomicU64::new(0),
@@ -108,35 +120,71 @@ impl RepoService {
             return Ok(());
         }
 
-        if self.engine.read().unwrap().is_none() {
-            let new_engine = SearchEngine::open(&self.index_dir)
-                .with_context(|| format!("failed to open index at {}", self.index_dir.display()))?;
-            let mut guard = self.engine.write().unwrap();
-            *guard = Some(new_engine);
-        }
-
         self.start_watcher_if_needed()?;
         self.reload_if_dirty()?;
         Ok(())
     }
 
+    fn ensure_search_ready(&self) -> Result<()> {
+        self.ensure_ready()?;
+        if self.engine.read().unwrap().is_none() {
+            let new_engine = SearchEngine::open(&self.index_dir)
+                .with_context(|| format!("failed to open index at {}", self.index_dir.display()))?;
+            let mut guard = self.engine.write().unwrap();
+            if guard.is_none() {
+                *guard = Some(new_engine);
+                self.engine_load_count.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        self.mark_engine_used();
+        Ok(())
+    }
+
+    fn mark_engine_used(&self) {
+        *self.engine_last_used.lock().unwrap() = Some(Instant::now());
+    }
+
+    fn engine_last_used(&self) -> Option<Instant> {
+        *self.engine_last_used.lock().unwrap()
+    }
+
+    fn engine_loaded(&self) -> bool {
+        self.engine.read().unwrap().is_some()
+    }
+
+    fn evict_engine(&self) {
+        let mut guard = self.engine.write().unwrap();
+        if guard.take().is_some() {
+            self.engine_eviction_count.fetch_add(1, Ordering::SeqCst);
+        }
+        *self.engine_last_used.lock().unwrap() = None;
+    }
+
     fn status(&self) -> DaemonRootStatus {
         let generation = self.current_generation();
-        let (index_available, delta_docs) = self
-            .engine
-            .read()
-            .unwrap()
+        let engine_guard = self.engine.read().unwrap();
+        let engine_loaded = engine_guard.is_some();
+        let delta_docs = engine_guard
             .as_ref()
-            .map(|engine| (true, engine.metadata().delta_docs))
-            .unwrap_or_else(|| (index_exists(&self.index_dir), 0));
+            .map(|engine| engine.metadata().delta_docs)
+            .unwrap_or(0);
+        let engine_last_used_ago_secs = self
+            .engine_last_used
+            .lock()
+            .unwrap()
+            .map(|last_used| last_used.elapsed().as_secs());
 
         DaemonRootStatus {
             target_root: self.repo_root.display().to_string(),
             index_dir: self.index_dir.display().to_string(),
-            index_available,
+            index_available: index_exists(&self.index_dir),
             generation,
             context_epoch: self.context_epoch.load(Ordering::SeqCst),
             delta_docs,
+            engine_loaded,
+            engine_loads: self.engine_load_count.load(Ordering::SeqCst),
+            engine_evictions: self.engine_eviction_count.load(Ordering::SeqCst),
+            engine_last_used_ago_secs,
         }
     }
 
@@ -165,7 +213,7 @@ impl RepoService {
     }
 
     fn start_watcher_if_needed(&self) -> Result<()> {
-        if self.engine.read().unwrap().is_none() {
+        if !index_exists(&self.index_dir) {
             return Ok(());
         }
         let mut guard = self.watcher.lock().unwrap();
@@ -223,10 +271,14 @@ impl RepoService {
             return Ok(());
         }
 
-        let new_engine = SearchEngine::open(&self.index_dir)
-            .with_context(|| format!("failed to reload index at {}", self.index_dir.display()))?;
         let mut guard = self.engine.write().unwrap();
-        *guard = Some(new_engine);
+        if guard.is_some() {
+            let new_engine = SearchEngine::open(&self.index_dir).with_context(|| {
+                format!("failed to reload index at {}", self.index_dir.display())
+            })?;
+            *guard = Some(new_engine);
+            self.engine_load_count.fetch_add(1, Ordering::SeqCst);
+        }
         self.last_seen_generation
             .store(current_generation, Ordering::SeqCst);
         Ok(())
@@ -364,15 +416,31 @@ struct ServerState {
     services: Mutex<HashMap<String, Arc<RepoService>>>,
     memo: Arc<MemoState>,
     session_store: Arc<SessionStore>,
+    max_loaded_engines: usize,
+    engine_idle_timeout: Duration,
 }
 
 impl ServerState {
     fn new(daemon_dir: PathBuf) -> Result<Self> {
+        Self::new_with_engine_policy(
+            daemon_dir,
+            configured_max_loaded_engines(),
+            configured_engine_idle_timeout(),
+        )
+    }
+
+    fn new_with_engine_policy(
+        daemon_dir: PathBuf,
+        max_loaded_engines: usize,
+        engine_idle_timeout: Duration,
+    ) -> Result<Self> {
         Ok(Self {
             session_store: Arc::new(SessionStore::load_from_disk(&daemon_dir)?),
             daemon_dir,
             services: Mutex::new(HashMap::new()),
             memo: Arc::new(MemoState::new(Duration::from_secs(600))),
+            max_loaded_engines,
+            engine_idle_timeout,
         })
     }
 
@@ -404,6 +472,63 @@ impl ServerState {
         self.services.lock().unwrap().len()
     }
 
+    fn loaded_engine_count(&self) -> usize {
+        self.services
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|service| service.engine_loaded())
+            .count()
+    }
+
+    fn engine_load_count(&self) -> u64 {
+        self.services
+            .lock()
+            .unwrap()
+            .values()
+            .map(|service| service.engine_load_count.load(Ordering::SeqCst))
+            .sum()
+    }
+
+    fn engine_eviction_count(&self) -> u64 {
+        self.services
+            .lock()
+            .unwrap()
+            .values()
+            .map(|service| service.engine_eviction_count.load(Ordering::SeqCst))
+            .sum()
+    }
+
+    fn prune_engine_cache(&self) {
+        let services: Vec<_> = self.services.lock().unwrap().values().cloned().collect();
+        let now = Instant::now();
+        for service in &services {
+            if service.engine_loaded()
+                && service.engine_last_used().is_some_and(|last_used| {
+                    now.duration_since(last_used) > self.engine_idle_timeout
+                })
+            {
+                service.evict_engine();
+            }
+        }
+
+        let mut loaded = services
+            .iter()
+            .filter(|service| service.engine_loaded())
+            .cloned()
+            .collect::<Vec<_>>();
+        if loaded.len() <= self.max_loaded_engines {
+            return;
+        }
+        loaded.sort_by_key(|service| service.engine_last_used());
+        for service in loaded.into_iter().take(
+            self.loaded_engine_count()
+                .saturating_sub(self.max_loaded_engines),
+        ) {
+            service.evict_engine();
+        }
+    }
+
     fn flush_all(&self) {
         let services: Vec<_> = self.services.lock().unwrap().values().cloned().collect();
         for service in services {
@@ -418,6 +543,21 @@ impl ServerState {
             service.stop_watcher();
         }
     }
+}
+
+fn configured_max_loaded_engines() -> usize {
+    std::env::var("TRISEEK_DAEMON_MAX_LOADED_ENGINES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_MAX_LOADED_ENGINES)
+}
+
+fn configured_engine_idle_timeout() -> Duration {
+    std::env::var("TRISEEK_DAEMON_ENGINE_IDLE_SECS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(Duration::from_secs)
+        .unwrap_or(DEFAULT_ENGINE_IDLE_TIMEOUT)
 }
 
 fn main() -> Result<()> {
@@ -559,25 +699,32 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                 Ok(service) => service,
                 Err(error) => return RpcResponse::error(id, -32000, error.to_string()),
             };
-            if let Err(error) = service.ensure_ready() {
+            if let Err(error) = service.ensure_search_ready() {
                 return RpcResponse::error(id, -32000, error.to_string());
             }
             let session_id = params.session_id.clone();
             let query = params.request;
-            let guard = service.engine.read().unwrap();
-            let Some(engine) = guard.as_ref() else {
-                return RpcResponse::error(id, -32000, "index not available");
+            let search_result = {
+                let guard = service.engine.read().unwrap();
+                let Some(engine) = guard.as_ref() else {
+                    return RpcResponse::error(id, -32000, "index not available");
+                };
+                let plan = plan_query(&query);
+                let routing = route_query(
+                    &query,
+                    Some(&engine.metadata().repo_stats),
+                    &plan,
+                    true,
+                    false,
+                );
+                engine
+                    .search(&query)
+                    .map(|execution| (routing, plan, execution))
             };
-            let plan = plan_query(&query);
-            let routing = route_query(
-                &query,
-                Some(&engine.metadata().repo_stats),
-                &plan,
-                true,
-                false,
-            );
-            match engine.search(&query) {
-                Ok(execution) => {
+            match search_result {
+                Ok((routing, plan, execution)) => {
+                    service.mark_engine_used();
+                    state.prune_engine_cache();
                     let mut hits = execution.hits;
                     if let Ok(mut store) = service.frecency.lock() {
                         if !store.is_empty() {
@@ -672,6 +819,9 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                     daemon_dir: state.daemon_dir.display().to_string(),
                     uptime_secs: started.elapsed().as_secs(),
                     active_roots: state.active_root_count(),
+                    loaded_engines: state.loaded_engine_count(),
+                    engine_loads: state.engine_load_count(),
+                    engine_evictions: state.engine_eviction_count(),
                     root,
                 },
             )
@@ -710,13 +860,24 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
             if let Err(error) = service.ensure_ready() {
                 return RpcResponse::error(id, -32000, error.to_string());
             }
-            match SearchEngine::open(&service.index_dir) {
-                Ok(new_engine) => {
-                    let mut guard = service.engine.write().unwrap();
-                    *guard = Some(new_engine);
-                    RpcResponse::ok(id, serde_json::json!({"reloaded": true}))
+            if service.engine_loaded() {
+                match SearchEngine::open(&service.index_dir) {
+                    Ok(new_engine) => {
+                        let mut guard = service.engine.write().unwrap();
+                        *guard = Some(new_engine);
+                        service.engine_load_count.fetch_add(1, Ordering::SeqCst);
+                        RpcResponse::ok(
+                            id,
+                            serde_json::json!({"reloaded": true, "engine_loaded": true}),
+                        )
+                    }
+                    Err(error) => RpcResponse::error(id, -32000, error.to_string()),
                 }
-                Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+            } else {
+                RpcResponse::ok(
+                    id,
+                    serde_json::json!({"reloaded": true, "engine_loaded": false}),
+                )
             }
         }
         "preload_root" => {
@@ -1064,6 +1225,9 @@ mod tests {
             repo_root,
             index_dir: index_dir.clone(),
             engine: RwLock::new(None),
+            engine_last_used: Mutex::new(None),
+            engine_load_count: AtomicU64::new(0),
+            engine_eviction_count: AtomicU64::new(0),
             frecency: Mutex::new(FrecencyStore::open(&index_dir)),
             watcher: Mutex::new(None),
             last_seen_generation: AtomicU64::new(initial_generation),
@@ -1074,6 +1238,25 @@ mod tests {
                 SessionStore::load_from_disk(tmp.path()).expect("session store"),
             ),
         };
+        (tmp, service)
+    }
+
+    fn make_indexed_service() -> (tempfile::TempDir, RepoService) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let repo_root = tmp.path().join("repo");
+        std::fs::create_dir_all(repo_root.join("src")).expect("create repo src");
+        std::fs::write(repo_root.join("src/lib.rs"), "pub fn route() {}\n")
+            .expect("write indexed file");
+        let index_dir = tmp.path().join("index");
+        SearchEngine::build(&repo_root, Some(&index_dir), &BuildConfig::default())
+            .expect("build index");
+        let service = RepoService::new_with_index_dir(
+            repo_root,
+            index_dir,
+            Arc::new(MemoState::new(Duration::from_secs(600))),
+            Arc::new(SessionStore::load_from_disk(tmp.path()).expect("session store")),
+        )
+        .expect("repo service");
         (tmp, service)
     }
 
@@ -1110,6 +1293,66 @@ mod tests {
             response.error
         );
         response
+    }
+
+    #[test]
+    fn repo_service_registration_does_not_load_search_engine() {
+        let (_tmp, service) = make_indexed_service();
+
+        assert!(!service.engine_loaded());
+        let status = service.status();
+        assert!(status.index_available);
+        assert!(!status.engine_loaded);
+    }
+
+    #[test]
+    fn repo_service_loads_and_evicts_search_engine_explicitly() {
+        let (_tmp, service) = make_indexed_service();
+
+        service.ensure_search_ready().expect("load engine");
+        assert!(service.engine_loaded());
+
+        service.evict_engine();
+        assert!(!service.engine_loaded());
+        let status = service.status();
+        assert!(status.index_available);
+        assert!(!status.engine_loaded);
+        assert_eq!(status.engine_evictions, 1);
+    }
+
+    #[test]
+    fn server_state_evicts_least_recent_engine_when_loaded_engine_budget_is_exceeded() {
+        let daemon_tmp = tempfile::tempdir().expect("daemon tmp");
+        let state = ServerState::new_with_engine_policy(
+            daemon_tmp.path().join("daemon"),
+            1,
+            Duration::from_secs(600),
+        )
+        .expect("server state");
+        let (_tmp_a, service_a) = make_indexed_service();
+        let (_tmp_b, service_b) = make_indexed_service();
+        let service_a = Arc::new(service_a);
+        let service_b = Arc::new(service_b);
+        state.services.lock().unwrap().insert(
+            service_a.repo_root.display().to_string(),
+            Arc::clone(&service_a),
+        );
+        state.services.lock().unwrap().insert(
+            service_b.repo_root.display().to_string(),
+            Arc::clone(&service_b),
+        );
+
+        service_a.ensure_search_ready().expect("load first engine");
+        std::thread::sleep(Duration::from_millis(5));
+        service_b.ensure_search_ready().expect("load second engine");
+        assert_eq!(state.loaded_engine_count(), 2);
+
+        state.prune_engine_cache();
+
+        assert!(!service_a.engine_loaded());
+        assert!(service_b.engine_loaded());
+        assert_eq!(state.loaded_engine_count(), 1);
+        assert_eq!(state.engine_eviction_count(), 1);
     }
 
     #[test]
