@@ -49,6 +49,17 @@ pub struct ContextPackRequest {
     pub changed_files: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ContextPackOptions {
+    pub use_index: bool,
+}
+
+impl Default for ContextPackOptions {
+    fn default() -> Self {
+        Self { use_index: true }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct ContextPackEnvelope {
     pub version: &'static str,
@@ -90,6 +101,15 @@ pub fn build_context_pack(
     index_dir: &Path,
     request: ContextPackRequest,
 ) -> Result<ContextPackEnvelope> {
+    build_context_pack_with_options(repo_root, index_dir, request, ContextPackOptions::default())
+}
+
+pub fn build_context_pack_with_options(
+    repo_root: &Path,
+    index_dir: &Path,
+    request: ContextPackRequest,
+    options: ContextPackOptions,
+) -> Result<ContextPackEnvelope> {
     let goal = request.goal.trim().to_string();
     if goal.is_empty() {
         bail!("`goal` must not be empty for context_pack");
@@ -101,8 +121,16 @@ pub fn build_context_pack(
     let mut candidates = BTreeMap::<String, Candidate>::new();
 
     for term in terms.iter().take(MAX_TERMS) {
-        collect_content_candidates(repo_root, index_dir, term, &mut candidates);
-        collect_path_candidates(repo_root, index_dir, term, &mut candidates);
+        collect_content_candidates(
+            repo_root,
+            index_dir,
+            term,
+            options.use_index,
+            &mut candidates,
+        );
+        if options.use_index {
+            collect_path_candidates(repo_root, index_dir, term, true, &mut candidates);
+        }
     }
 
     for path in normalize_changed_files(&request.changed_files) {
@@ -115,7 +143,9 @@ pub fn build_context_pack(
     }
 
     apply_intent_heuristics(request.intent, &terms, &mut candidates);
-    add_test_adjacency(repo_root, index_dir, &terms, &mut candidates);
+    if options.use_index {
+        add_test_adjacency(repo_root, index_dir, &terms, true, &mut candidates);
+    }
 
     let mut ranked: Vec<(String, Candidate)> = candidates.into_iter().collect();
     ranked.sort_by(|(path_a, a), (path_b, b)| {
@@ -186,6 +216,7 @@ fn collect_content_candidates(
     repo_root: &Path,
     index_dir: &Path,
     term: &str,
+    use_index: bool,
     candidates: &mut BTreeMap<String, Candidate>,
 ) {
     let request = QueryRequest {
@@ -196,8 +227,14 @@ fn collect_content_candidates(
         max_results: Some(SEARCH_LIMIT),
         ..QueryRequest::default()
     };
-    let Ok(executed) = search_runner::execute_search(repo_root, index_dir, &request, true, false)
-    else {
+    let executed_result = if use_index {
+        search_runner::execute_search(repo_root, index_dir, &request, true, false)
+    } else {
+        search_runner::execute_search_without_index_with_metadata(
+            repo_root, index_dir, &request, true, false,
+        )
+    };
+    let Ok(executed) = executed_result else {
         return;
     };
     for hit in executed.response.hits {
@@ -233,6 +270,7 @@ fn collect_path_candidates(
     repo_root: &Path,
     index_dir: &Path,
     term: &str,
+    use_index: bool,
     candidates: &mut BTreeMap<String, Candidate>,
 ) {
     let request = QueryRequest {
@@ -243,8 +281,14 @@ fn collect_path_candidates(
         max_results: Some(SEARCH_LIMIT),
         ..QueryRequest::default()
     };
-    let Ok(executed) = search_runner::execute_search(repo_root, index_dir, &request, true, false)
-    else {
+    let executed_result = if use_index {
+        search_runner::execute_search(repo_root, index_dir, &request, true, false)
+    } else {
+        search_runner::execute_search_without_index_with_metadata(
+            repo_root, index_dir, &request, true, false,
+        )
+    };
+    let Ok(executed) = executed_result else {
         return;
     };
     for hit in executed.response.hits {
@@ -301,6 +345,7 @@ fn add_test_adjacency(
     repo_root: &Path,
     index_dir: &Path,
     terms: &[String],
+    use_index: bool,
     candidates: &mut BTreeMap<String, Candidate>,
 ) {
     let terms: Vec<&String> = terms
@@ -317,9 +362,14 @@ fn add_test_adjacency(
             max_results: Some(SEARCH_LIMIT),
             ..QueryRequest::default()
         };
-        let Ok(executed) =
+        let executed_result = if use_index {
             search_runner::execute_search(repo_root, index_dir, &request, true, false)
-        else {
+        } else {
+            search_runner::execute_search_without_index_with_metadata(
+                repo_root, index_dir, &request, true, false,
+            )
+        };
+        let Ok(executed) = executed_result else {
             continue;
         };
         for hit in executed.response.hits {
