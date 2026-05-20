@@ -236,6 +236,14 @@ pub struct MemoSessionResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoObserveResponse {
     pub observed: bool,
+    #[serde(default)]
+    pub redundant_reads_prevented: u64,
+    #[serde(default)]
+    pub tokens_saved: u64,
+    #[serde(default)]
+    pub total_reads_observed: u64,
+    #[serde(default)]
+    pub compaction_invalidations: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -6,7 +6,13 @@ pub mod repo;
 pub mod result;
 pub mod trigram;
 
-pub use metrics::{BenchmarkRunMetrics, ProcessMetrics, SearchMetrics, SessionMetrics};
+pub use metrics::{
+    BenchmarkRunMetrics, ContextPackUsageMetric, MemoUsageMetric, PortabilityUsageMetric,
+    ProcessMetrics, ReliabilityUsageMetric, SearchMetrics, SearchUsageMetric, SessionMetrics,
+    USAGE_METRICS_SCHEMA_VERSION, UsageMetricSource, UsageMetrics, UsageMetricsEvent,
+    UsageMetricsReport, append_usage_metrics_event, default_usage_metrics_dir, private_repo_hash,
+    read_usage_metrics_events,
+};
 pub use planner::{
     AdaptiveRoute, AdaptiveRoutingDecision, QueryPlan, QuerySelectivity, QueryShape,
     SearchExecutionStrategy, plan_query, route_query,

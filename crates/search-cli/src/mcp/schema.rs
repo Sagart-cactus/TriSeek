@@ -51,6 +51,12 @@ pub const TOOLS: &[ToolDescriptor] = &[
         input_schema: reindex_schema,
     },
     ToolDescriptor {
+        name: "usage_metrics",
+        title: "Report privacy-preserving usage metrics",
+        description: "Return local aggregate MCP usage counters and cache sizes. Does not include query text, paths, file contents, session ids, user ids, or network telemetry.",
+        input_schema: empty_object_schema,
+    },
+    ToolDescriptor {
         name: "memo_status",
         title: "Check file freshness in session cache",
         description: "Check whether files changed since this session last read them. Use this before re-reading files to avoid redundant tokens.",

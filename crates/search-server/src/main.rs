@@ -3,6 +3,7 @@ mod hydrate;
 mod memo;
 mod session_state;
 mod snapshot;
+mod usage_metrics;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -33,6 +34,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::time::{Duration, Instant};
+use usage_metrics::UsageMetricsStore;
 
 #[derive(Parser)]
 #[command(name = "triseek-server")]
@@ -416,6 +418,7 @@ struct ServerState {
     services: Mutex<HashMap<String, Arc<RepoService>>>,
     memo: Arc<MemoState>,
     session_store: Arc<SessionStore>,
+    usage_metrics: Arc<UsageMetricsStore>,
     max_loaded_engines: usize,
     engine_idle_timeout: Duration,
 }
@@ -436,6 +439,7 @@ impl ServerState {
     ) -> Result<Self> {
         Ok(Self {
             session_store: Arc::new(SessionStore::load_from_disk(&daemon_dir)?),
+            usage_metrics: Arc::new(UsageMetricsStore::load_from_disk(&daemon_dir)?),
             daemon_dir,
             services: Mutex::new(HashMap::new()),
             memo: Arc::new(MemoState::new(Duration::from_secs(600))),
@@ -534,6 +538,7 @@ impl ServerState {
         for service in services {
             service.flush();
         }
+        let _ = self.usage_metrics.flush_to_disk();
     }
 
     fn shutdown(&self) {
@@ -542,6 +547,7 @@ impl ServerState {
             service.flush();
             service.stop_watcher();
         }
+        let _ = self.usage_metrics.flush_to_disk();
     }
 }
 
@@ -764,6 +770,9 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                         summary: execution.summary,
                         metrics: execution.metrics,
                     };
+                    state
+                        .usage_metrics
+                        .record_search_success(&service.repo_root, &response);
                     if let Some(session_id) = session_id {
                         let result_paths = response
                             .hits
@@ -788,8 +797,23 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                     }
                     RpcResponse::ok(id, response)
                 }
-                Err(error) => RpcResponse::error(id, -32000, error.to_string()),
+                Err(error) => {
+                    state
+                        .usage_metrics
+                        .record_search_error(Some(&service.repo_root));
+                    RpcResponse::error(id, -32000, error.to_string())
+                }
             }
+        }
+        "usage_metrics" => RpcResponse::ok(id, state.usage_metrics.snapshot()),
+        "usage_metrics_record" => {
+            let tool = request
+                .params
+                .get("tool")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("other");
+            state.usage_metrics.record_tool(tool);
+            RpcResponse::ok(id, serde_json::json!({"recorded": true}))
         }
         "status" => {
             let params: DaemonStatusParams = if request.params.is_null() {
@@ -916,7 +940,9 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
             {
                 service.invalidate_search_context();
             }
-            RpcResponse::ok(id, state.memo.observe(&params))
+            let response = state.memo.observe(&params);
+            state.usage_metrics.record_memo_observe(&params, &response);
+            RpcResponse::ok(id, response)
         }
         "memo_status" => {
             let params: MemoStatusParams = match serde_json::from_value(request.params) {
@@ -952,7 +978,9 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                     return RpcResponse::error(id, -32602, format!("invalid params: {error}"));
                 }
             };
-            RpcResponse::ok(id, state.memo.session(&params))
+            let response = state.memo.session(&params);
+            state.usage_metrics.record_memo_session(&response);
+            RpcResponse::ok(id, response)
         }
         "memo_check" => {
             let params: MemoCheckParams = match serde_json::from_value(request.params) {
@@ -962,6 +990,7 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                 }
             };
             let response = state.memo.check(&params);
+            state.usage_metrics.record_memo_check(&params, &response);
             RpcResponse::ok(id, response)
         }
         "search_reuse_check" => {
@@ -1074,12 +1103,15 @@ fn dispatch(request: RpcRequest, state: &ServerState, started: Instant) -> RpcRe
                 params.kind,
                 params.payload,
             ) {
-                Ok(entry) => RpcResponse::ok(
-                    id,
-                    SessionRecordActionResponse {
-                        entry_id: entry.entry_id,
-                    },
-                ),
+                Ok(entry) => {
+                    state.usage_metrics.record_tool("session_action");
+                    RpcResponse::ok(
+                        id,
+                        SessionRecordActionResponse {
+                            entry_id: entry.entry_id,
+                        },
+                    )
+                }
                 Err(error) => RpcResponse::error(id, -32000, error.to_string()),
             }
         }

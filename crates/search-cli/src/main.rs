@@ -12,17 +12,20 @@ mod output_format;
 mod pack;
 mod rg;
 mod search_runner;
+mod usage_metrics;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use search_core::{
-    AdaptiveRoute, AdaptiveRoutingDecision, CaseMode, DAEMON_HOST, DAEMON_PID_FILE,
-    DAEMON_PORT_FILE, DaemonSearchParams, DaemonStatusParams, FullSnapshot, PinnedSnippetSpec,
-    PortabilitySessionStatus, ProcessMetrics, QueryRequest, RpcRequest, RpcResponse,
-    SearchEngineKind, SearchHit, SearchKind, SearchResponse, SessionListParams,
-    SessionListResponse, SessionMetrics, SessionQuery, SessionResumePrepareParams,
-    SessionSnapshotCreateParams, SessionSnapshotCreateResponse, SessionSnapshotDiffParams,
-    SessionSnapshotGetParams, SessionSnapshotListParams, SnapshotManifest, plan_query, route_query,
+    AdaptiveRoute, AdaptiveRoutingDecision, CaseMode, ContextPackUsageMetric, DAEMON_HOST,
+    DAEMON_PID_FILE, DAEMON_PORT_FILE, DaemonSearchParams, DaemonStatusParams, FullSnapshot,
+    PinnedSnippetSpec, PortabilitySessionStatus, ProcessMetrics, QueryRequest, RpcRequest,
+    RpcResponse, SearchEngineKind, SearchHit, SearchKind, SearchResponse, SearchUsageMetric,
+    SessionListParams, SessionListResponse, SessionMetrics, SessionQuery,
+    SessionResumePrepareParams, SessionSnapshotCreateParams, SessionSnapshotCreateResponse,
+    SessionSnapshotDiffParams, SessionSnapshotGetParams, SessionSnapshotListParams,
+    SnapshotManifest, UsageMetricSource, UsageMetricsEvent, append_usage_metrics_event,
+    default_usage_metrics_dir, plan_query, private_repo_hash, route_query,
 };
 use search_frecency::{FrecencyStore, QueryEvent};
 use search_index::{
@@ -61,6 +64,8 @@ enum Commands {
     ContextPack(ContextPackArgs),
     Session(SessionArgs),
     Stats(StatsArgs),
+    /// Show privacy-preserving TriSeek index and usage metrics.
+    Metrics(MetricsArgs),
     FrecencySelect(FrecencySelectArgs),
     Daemon(DaemonArgs),
     /// MCP (Model Context Protocol) server for Claude Code, Codex, and other agent clients.
@@ -245,6 +250,18 @@ struct SessionArgs {
 struct StatsArgs {
     #[arg(long)]
     index_dir: PathBuf,
+}
+
+#[derive(Args)]
+struct MetricsArgs {
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+    #[arg(long, hide = true)]
+    repo: Option<PathBuf>,
+    #[arg(long)]
+    index_dir: Option<PathBuf>,
+    #[arg(long)]
+    json: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -561,6 +578,7 @@ fn main() -> Result<()> {
         Commands::ContextPack(args) => handle_context_pack(args),
         Commands::Session(args) => handle_session(args).map(|_| ()),
         Commands::Stats(args) => handle_stats(args),
+        Commands::Metrics(args) => handle_metrics(args),
         Commands::FrecencySelect(args) => handle_frecency_select(args),
         Commands::Daemon(args) => match args.command {
             DaemonCommands::Start(args) => handle_daemon_start(args),
@@ -680,6 +698,7 @@ fn handle_search(args: SearchArgs) -> Result<SearchResponse> {
         && !args.no_daemon
         && let Some(response) = try_daemon_search(&repo_root, &request)
     {
+        record_cli_search_metric(&repo_root, &response);
         if args.json {
             print_json(&response)?;
         } else {
@@ -732,7 +751,59 @@ fn handle_search(args: SearchArgs) -> Result<SearchResponse> {
     } else {
         print_human_search(&response);
     }
+    record_cli_search_metric(&repo_root, &response);
     Ok(response)
+}
+
+fn record_cli_search_metric(repo_root: &Path, response: &SearchResponse) {
+    let event = UsageMetricsEvent {
+        source: UsageMetricSource::Cli,
+        tool: "search".to_string(),
+        repo_hash: Some(private_repo_hash(repo_root.display().to_string())),
+        search: Some(SearchUsageMetric {
+            indexed: matches!(response.engine, SearchEngineKind::Indexed),
+            fallback_used: !matches!(response.engine, SearchEngineKind::Indexed),
+            reuse_hit: false,
+            results_omitted: response.hits.is_empty() && response.summary.files_with_matches > 0,
+            estimated_tokens_saved: 0,
+            wall_millis: Some(response.metrics.process.wall_millis),
+            files_with_matches: response.summary.files_with_matches as u64,
+            total_line_matches: response.summary.total_line_matches as u64,
+        }),
+        ..UsageMetricsEvent::default()
+    };
+    let _ = append_usage_metrics_event(&default_usage_metrics_dir(), &event);
+}
+
+fn record_cli_context_pack_metric(repo_root: &Path, envelope: &serde_json::Value) {
+    let items_returned = envelope
+        .get("items")
+        .and_then(serde_json::Value::as_array)
+        .map(|items| items.len() as u64)
+        .unwrap_or(0);
+    let event = UsageMetricsEvent {
+        source: UsageMetricSource::Cli,
+        tool: "context_pack".to_string(),
+        repo_hash: Some(private_repo_hash(repo_root.display().to_string())),
+        context_pack: Some(ContextPackUsageMetric {
+            calls: 1,
+            items_returned,
+            estimated_tokens: envelope
+                .get("estimated_tokens")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0),
+            budget_tokens: envelope
+                .get("budget_tokens")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0),
+            intent: envelope
+                .get("intent")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string),
+        }),
+        ..UsageMetricsEvent::default()
+    };
+    let _ = append_usage_metrics_event(&default_usage_metrics_dir(), &event);
 }
 
 fn handle_context_pack(args: ContextPackArgs) -> Result<()> {
@@ -755,10 +826,12 @@ fn handle_context_pack(args: ContextPackArgs) -> Result<()> {
         },
     )?;
 
+    let value = serde_json::to_value(&envelope)?;
+    record_cli_context_pack_metric(&repo_root, &value);
+
     if args.json {
         print_json(&envelope)
     } else {
-        let value = serde_json::to_value(&envelope)?;
         println!(
             "{}",
             output_format::render_digest("context_pack", &value, None)
@@ -1212,6 +1285,26 @@ fn handle_stats(args: StatsArgs) -> Result<()> {
     print_json(&metadata)
 }
 
+fn handle_metrics(args: MetricsArgs) -> Result<()> {
+    let _ = (&args.path, &args.repo, &args.index_dir);
+    let report = usage_metrics::build_report(&default_usage_metrics_dir())?;
+    if args.json {
+        print_json(&report)
+    } else {
+        println!(
+            "triseek metrics: calls={} searches={} rereads_saved={} tokens_saved={} reuse_hits={} active_days={} repos={}",
+            report.usage.total_calls,
+            report.search.total_searches,
+            report.memo.redundant_rereads_prevented,
+            report.memo.tokens_saved + report.search.estimated_result_tokens_saved,
+            report.search.reuse_hits,
+            report.usage.active_days,
+            report.usage.unique_repos
+        );
+        Ok(())
+    }
+}
+
 fn handle_frecency_select(args: FrecencySelectArgs) -> Result<()> {
     let repo_root = resolve_cli_root(
         args.path.as_deref(),
@@ -1345,6 +1438,7 @@ where
             | "context-pack"
             | "session"
             | "stats"
+            | "metrics"
             | "frecency-select"
             | "daemon"
             | "mcp"

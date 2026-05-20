@@ -114,6 +114,14 @@ fn build_repeated_match_repo(line_matches: usize) -> tempfile::TempDir {
     tmp
 }
 
+fn write_usage_metric_event(triseek_home: &Path, event: Value) {
+    let metrics_dir = triseek_home.join("metrics");
+    std::fs::create_dir_all(&metrics_dir).expect("create metrics dir");
+    let mut line = serde_json::to_string(&event).expect("serialize metric event");
+    line.push('\n');
+    std::fs::write(metrics_dir.join("events.jsonl"), line).expect("write metrics event");
+}
+
 #[cfg(unix)]
 fn build_fake_rg_dir() -> tempfile::TempDir {
     use std::os::unix::fs::PermissionsExt;
@@ -440,6 +448,7 @@ fn initialize_handshake_and_tools_list() {
     assert!(names.contains(&"memo_session"));
     assert!(names.contains(&"memo_check"));
     assert!(names.contains(&"context_pack"));
+    assert!(names.contains(&"usage_metrics"));
     let tool_map: std::collections::HashMap<&str, &Value> = tools
         .iter()
         .filter_map(|tool| {
@@ -459,6 +468,12 @@ fn initialize_handshake_and_tools_list() {
         .expect("memo_check description");
     assert!(memo_check_description.contains("skip_reread"));
     assert!(memo_check_description.contains("do not read the file again"));
+    let usage_metrics_description = tool_map["usage_metrics"]
+        .get("description")
+        .and_then(Value::as_str)
+        .expect("usage_metrics description");
+    assert!(usage_metrics_description.contains("query text"));
+    assert!(usage_metrics_description.contains("network telemetry"));
 
     client.shutdown();
 }
@@ -619,6 +634,165 @@ fn context_pack_cli_outputs_json_and_human_digests() {
     assert!(human.contains("context_pack"));
     assert!(human.contains("reasons"));
     assert!(human.contains("src/auth/router.rs"));
+}
+
+#[test]
+fn metrics_cli_outputs_private_rollup_json() {
+    let triseek_home = tempfile::tempdir().expect("triseek home");
+    write_usage_metric_event(
+        triseek_home.path(),
+        json!({
+            "schema_version": 1,
+            "ts": 1772880000,
+            "source": "mcp",
+            "tool": "search_content",
+            "repo_hash": "repo_test",
+            "search": {
+                "indexed": true,
+                "fallback_used": false,
+                "reuse_hit": true,
+                "results_omitted": true,
+                "estimated_tokens_saved": 80,
+                "wall_millis": 9.5,
+                "files_with_matches": 2,
+                "total_line_matches": 3
+            }
+        }),
+    );
+    let binary = triseek_binary();
+
+    let output = Command::new(&binary)
+        .arg("metrics")
+        .arg("--json")
+        .env("TRISEEK_HOME", triseek_home.path())
+        .output()
+        .expect("run metrics json");
+    assert!(
+        output.status.success(),
+        "metrics json failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: Value = serde_json::from_slice(&output.stdout).expect("parse metrics json");
+
+    assert_eq!(report.get("schema_version"), Some(&json!(1)));
+    assert_eq!(
+        report
+            .pointer("/storage/privacy_mode")
+            .and_then(Value::as_str),
+        Some("private_rollups")
+    );
+    assert_eq!(
+        report.pointer("/usage/total_calls").and_then(Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        report.pointer("/search/reuse_hits").and_then(Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        report
+            .pointer("/search/estimated_result_tokens_saved")
+            .and_then(Value::as_u64),
+        Some(80)
+    );
+    let serialized = serde_json::to_string(&report).expect("serialize report");
+    assert!(!serialized.contains(triseek_home.path().to_string_lossy().as_ref()));
+}
+
+#[test]
+fn usage_metrics_tool_returns_private_rollup() {
+    let fixture = build_fixture_repo();
+    let triseek_home = tempfile::tempdir().expect("triseek home");
+    write_usage_metric_event(
+        triseek_home.path(),
+        json!({
+            "schema_version": 1,
+            "ts": 1772880000,
+            "source": "daemon",
+            "tool": "memo_observe",
+            "repo_hash": "repo_test",
+            "memo": {
+                "redundant_reads_prevented": 1,
+                "tokens_saved": 144,
+                "total_reads_observed": 2
+            }
+        }),
+    );
+    let home_str = triseek_home.path().to_str().expect("triseek home path str");
+    let mut client = McpClient::spawn_with_home_and_env(
+        fixture.path(),
+        Some(triseek_home.path()),
+        &[("TRISEEK_HOME", home_str)],
+    );
+    handshake(&mut client);
+
+    let envelope = call_tool(&mut client, "usage_metrics", json!({}));
+
+    assert_eq!(envelope.get("version"), Some(&json!("1")));
+    assert_eq!(
+        envelope
+            .pointer("/storage/privacy_mode")
+            .and_then(Value::as_str),
+        Some("private_rollups")
+    );
+    assert_eq!(
+        envelope
+            .pointer("/memo/redundant_rereads_prevented")
+            .and_then(Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        envelope
+            .pointer("/memo/tokens_saved")
+            .and_then(Value::as_u64),
+        Some(144)
+    );
+    client.shutdown();
+}
+
+#[test]
+fn mcp_search_records_private_usage_metric() {
+    let fixture = build_fixture_repo();
+    let triseek_home = tempfile::tempdir().expect("triseek home");
+    let home_str = triseek_home.path().to_str().expect("triseek home path str");
+    let mut client = McpClient::spawn_with_home_and_env(
+        fixture.path(),
+        Some(triseek_home.path()),
+        &[("TRISEEK_HOME", home_str)],
+    );
+    handshake(&mut client);
+
+    let search = call_tool(
+        &mut client,
+        "search_content",
+        json!({"query": "AuthConfig", "limit": 10}),
+    );
+    assert_eq!(search.get("version"), Some(&json!("1")));
+
+    let metrics = call_tool(&mut client, "usage_metrics", json!({}));
+    assert_eq!(
+        metrics
+            .pointer("/usage/total_calls")
+            .and_then(Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        metrics
+            .pointer("/search/total_searches")
+            .and_then(Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        metrics.pointer("/usage/mcp_calls").and_then(Value::as_u64),
+        Some(1)
+    );
+
+    let events = std::fs::read_to_string(triseek_home.path().join("metrics/events.jsonl"))
+        .expect("read metrics events");
+    assert!(!events.contains("AuthConfig"));
+    assert!(!events.contains(fixture.path().to_string_lossy().as_ref()));
+
+    client.shutdown();
 }
 
 #[test]

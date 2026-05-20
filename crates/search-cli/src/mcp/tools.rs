@@ -11,15 +11,18 @@ use crate::mcp::errors::McpToolError;
 use crate::mcp::search_memo::SearchMemoEntry;
 use crate::mcp::server::McpState;
 use crate::search_runner::{self, ExecutedSearch};
-use crate::{git_handoff, handoff, handoff_metadata, pack};
+use crate::{git_handoff, handoff, handoff_metadata, pack, usage_metrics};
 use search_core::{
-    ActionKind, CaseMode, DAEMON_PORT_FILE, DaemonStatus, DaemonStatusParams, MemoCheckParams,
-    MemoSessionParams, MemoStatusParams, PinnedSnippetSpec, PortabilitySessionStatus,
-    PortabilitySessionStatusParams, QueryRequest, RpcRequest, RpcResponse, SearchEngineKind,
-    SearchHit, SearchKind, SearchReuseCheckParams, SearchReuseReason, SessionCloseParams,
-    SessionListParams, SessionListResponse, SessionOpenParams, SessionRecordActionParams,
-    SessionResumePrepareParams, SessionSnapshotCreateParams, SessionSnapshotDiffParams,
-    SessionSnapshotGetParams, SessionSnapshotListParams, SnapshotManifest,
+    ActionKind, CaseMode, ContextPackUsageMetric, DAEMON_PORT_FILE, DaemonStatus,
+    DaemonStatusParams, MemoCheckParams, MemoSessionParams, MemoStatusParams, MemoUsageMetric,
+    PinnedSnippetSpec, PortabilitySessionStatus, PortabilitySessionStatusParams,
+    PortabilityUsageMetric, QueryRequest, ReliabilityUsageMetric, RpcRequest, RpcResponse,
+    SearchEngineKind, SearchHit, SearchKind, SearchReuseCheckParams, SearchReuseReason,
+    SearchUsageMetric, SessionCloseParams, SessionListParams, SessionListResponse,
+    SessionOpenParams, SessionRecordActionParams, SessionResumePrepareParams,
+    SessionSnapshotCreateParams, SessionSnapshotDiffParams, SessionSnapshotGetParams,
+    SessionSnapshotListParams, SnapshotManifest, UsageMetricSource, UsageMetricsEvent,
+    append_usage_metrics_event, default_usage_metrics_dir, private_repo_hash,
 };
 use search_index::{BuildConfig, SearchEngine, daemon_dir, index_exists, read_index_metadata};
 use serde::Deserialize;
@@ -50,13 +53,14 @@ pub fn dispatch(
     arguments: &Value,
     session_id_hint: Option<&str>,
 ) -> ToolOutcome {
-    match name {
+    let outcome = match name {
         "find_files" => find_files(state, arguments, session_id_hint),
         "search_content" => search_content(state, arguments, session_id_hint),
         "search_path_and_content" => search_path_and_content(state, arguments, session_id_hint),
         "context_pack" => context_pack_tool(state, arguments),
         "index_status" => index_status(state, arguments),
         "reindex" => reindex(state, arguments),
+        "usage_metrics" => usage_metrics(state, arguments),
         "memo_status" => memo_status(state, arguments, session_id_hint),
         "memo_session" => memo_session(arguments, session_id_hint),
         "memo_check" => memo_check(state, arguments, session_id_hint),
@@ -73,7 +77,285 @@ pub fn dispatch(
         other => ToolOutcome::Error(McpToolError::invalid_query(format!(
             "unknown tool `{other}`"
         ))),
+    };
+    record_mcp_usage_metric(state, name, &outcome);
+    outcome
+}
+
+fn record_mcp_usage_metric(state: &McpState, tool_name: &str, outcome: &ToolOutcome) {
+    let mut event = UsageMetricsEvent {
+        source: UsageMetricSource::Mcp,
+        tool: tool_name.to_string(),
+        repo_hash: Some(private_repo_hash(state.repo_root().display().to_string())),
+        ..UsageMetricsEvent::default()
+    };
+
+    match outcome {
+        ToolOutcome::Success(envelope) => match tool_name {
+            "find_files" | "search_content" | "search_path_and_content" => {
+                event.search = Some(search_metric_from_envelope(envelope));
+            }
+            "context_pack" => {
+                let items_returned = envelope
+                    .get("items")
+                    .and_then(Value::as_array)
+                    .map(|items| items.len() as u64)
+                    .unwrap_or(0);
+                event.context_pack = Some(ContextPackUsageMetric {
+                    calls: 1,
+                    items_returned,
+                    estimated_tokens: envelope
+                        .get("estimated_tokens")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0),
+                    budget_tokens: envelope
+                        .get("budget_tokens")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0),
+                    intent: envelope
+                        .get("intent")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                });
+            }
+            "memo_check" => {
+                let recommendation = envelope
+                    .get("recommendation")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let status = envelope.get("status").and_then(Value::as_str).unwrap_or("");
+                event.memo = Some(MemoUsageMetric {
+                    memo_checks: 1,
+                    skip_reread: u64::from(recommendation == "skip_reread"),
+                    stale_detections: u64::from(status == "stale"),
+                    unknown_detections: u64::from(status == "unknown"),
+                    tokens_saved: if recommendation == "skip_reread" {
+                        envelope
+                            .get("tokens_at_last_read")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0)
+                    } else {
+                        0
+                    },
+                    ..MemoUsageMetric::default()
+                });
+            }
+            "memo_session" => {
+                event.memo = Some(MemoUsageMetric {
+                    redundant_reads_prevented: envelope
+                        .get("redundant_reads_prevented")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0),
+                    tokens_saved: envelope
+                        .get("tokens_saved")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0),
+                    total_reads_observed: envelope
+                        .get("total_reads")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0),
+                    tracked_files: envelope
+                        .get("tracked_files")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0),
+                    compaction_invalidations: envelope
+                        .get("compaction_count")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0),
+                    ..MemoUsageMetric::default()
+                });
+            }
+            "memo_status" => {
+                let mut metric = MemoUsageMetric::default();
+                for result in envelope
+                    .get("results")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    match result.get("status").and_then(Value::as_str).unwrap_or("") {
+                        "fresh" => {}
+                        "stale" => metric.stale_detections += 1,
+                        "unknown" => metric.unknown_detections += 1,
+                        _ => {}
+                    }
+                }
+                event.memo = Some(metric);
+            }
+            "session_open" => {
+                event.portability = Some(PortabilityUsageMetric {
+                    sessions_opened: 1,
+                    ..PortabilityUsageMetric::default()
+                });
+            }
+            "session_snapshot" => {
+                event.portability = Some(PortabilityUsageMetric {
+                    snapshots_created: 1,
+                    ..PortabilityUsageMetric::default()
+                });
+            }
+            "session_resume" => {
+                event.portability = Some(PortabilityUsageMetric {
+                    resumes: 1,
+                    ..PortabilityUsageMetric::default()
+                });
+            }
+            "session_handoff" => {
+                event.portability = Some(PortabilityUsageMetric {
+                    handoffs: 1,
+                    ..PortabilityUsageMetric::default()
+                });
+            }
+            "index_status" => {
+                event.reliability = Some(ReliabilityUsageMetric {
+                    index_available: envelope.get("index_available").and_then(Value::as_bool),
+                    ..ReliabilityUsageMetric::default()
+                });
+            }
+            "reindex" => {
+                event.reliability = Some(ReliabilityUsageMetric {
+                    reindex_count: 1,
+                    ..ReliabilityUsageMetric::default()
+                });
+            }
+            _ => {}
+        },
+        ToolOutcome::Error(_) => {
+            event.reliability = Some(ReliabilityUsageMetric {
+                errors: 1,
+                ..ReliabilityUsageMetric::default()
+            });
+        }
     }
+
+    let _ = append_usage_metrics_event(&default_usage_metrics_dir(), &event);
+}
+
+fn search_metric_from_envelope(envelope: &Value) -> SearchUsageMetric {
+    let fallback_used = envelope
+        .get("fallback_used")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let results_omitted = envelope
+        .get("results_omitted")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let files_with_matches = envelope
+        .get("files_with_matches")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let total_line_matches = envelope
+        .get("total_line_matches")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let estimated_tokens_saved = envelope
+        .get("estimated_tokens_saved")
+        .and_then(Value::as_u64)
+        .unwrap_or_else(|| {
+            if results_omitted {
+                estimate_search_result_tokens(files_with_matches, total_line_matches)
+            } else {
+                0
+            }
+        });
+    SearchUsageMetric {
+        indexed: envelope
+            .get("strategy")
+            .and_then(Value::as_str)
+            .is_some_and(|strategy| strategy == "triseek_indexed"),
+        fallback_used,
+        reuse_hit: envelope
+            .get("cache")
+            .and_then(Value::as_str)
+            .is_some_and(|cache| cache == "hit")
+            || envelope
+                .get("reuse_status")
+                .and_then(Value::as_str)
+                .is_some_and(|status| status == "fresh_duplicate"),
+        results_omitted,
+        estimated_tokens_saved,
+        wall_millis: None,
+        files_with_matches,
+        total_line_matches,
+    }
+}
+
+fn estimate_search_result_tokens(files_with_matches: u64, total_line_matches: u64) -> u64 {
+    24 + files_with_matches.saturating_mul(8) + total_line_matches.saturating_mul(24)
+}
+
+// ---------------------------------------------------------------------------
+// usage_metrics
+// ---------------------------------------------------------------------------
+
+fn usage_metrics(state: &McpState, _arguments: &Value) -> ToolOutcome {
+    let report = match usage_metrics::build_report(&default_usage_metrics_dir()) {
+        Ok(report) => report,
+        Err(err) => {
+            return ToolOutcome::Error(McpToolError::backend_failure(format!(
+                "usage metrics failed: {err}"
+            )));
+        }
+    };
+    let (query_cache_hits, query_cache_misses) = state.query_cache.stats();
+    let query_cache_lookups = query_cache_hits + query_cache_misses;
+    let query_cache_hit_rate = if query_cache_lookups == 0 {
+        0.0
+    } else {
+        query_cache_hits as f64 / query_cache_lookups as f64
+    };
+    let (search_memo_hits, search_memo_misses) = state.search_memo.stats();
+    let search_memo_lookups = search_memo_hits + search_memo_misses;
+    let search_memo_hit_rate = if search_memo_lookups == 0 {
+        0.0
+    } else {
+        search_memo_hits as f64 / search_memo_lookups as f64
+    };
+
+    let daemon = try_daemon_rpc("usage_metrics", Value::Null);
+
+    ToolOutcome::Success(json!({
+        "version": ENVELOPE_VERSION,
+        "schema_version": report.schema_version,
+        "storage": report.storage,
+        "usage": report.usage,
+        "search": report.search,
+        "memo": report.memo,
+        "context": report.context,
+        "portability": report.portability,
+        "reliability": report.reliability,
+        "repo_impact": report.repo_impact,
+        "help_score": report.help_score,
+        "privacy": {
+            "scope": "local_aggregate_only",
+            "contains_query_text": false,
+            "contains_paths": false,
+            "contains_file_contents": false,
+            "contains_session_ids": false,
+            "contains_user_ids": false,
+            "network_telemetry": false
+        },
+        "query_cache": {
+            "hits": query_cache_hits,
+            "misses": query_cache_misses,
+            "lookups": query_cache_lookups,
+            "hit_rate": query_cache_hit_rate,
+            "entries": state.query_cache.len()
+        },
+        "search_memo": {
+            "hits": search_memo_hits,
+            "misses": search_memo_misses,
+            "lookups": search_memo_lookups,
+            "hit_rate": search_memo_hit_rate,
+            "entries": state.search_memo.len()
+        },
+        "index": {
+            "present": index_exists(&state.index_dir()),
+            "sync_in_progress": state.index_sync_in_progress(),
+            "using_memory_safety_fallback": state.should_avoid_index_for_memory()
+        },
+        "daemon": daemon
+    }))
 }
 
 // ---------------------------------------------------------------------------

@@ -85,6 +85,10 @@ impl MemoState {
             .entry(params.session_id.clone())
             .or_insert_with(SessionState::new);
         session.touch();
+        let mut redundant_reads_prevented = 0;
+        let mut tokens_saved = 0;
+        let mut total_reads_observed = 0;
+        let mut compaction_invalidations = 0;
         match params.event {
             MemoEventKind::SessionStart => {}
             MemoEventKind::SessionEnd => {
@@ -93,6 +97,7 @@ impl MemoState {
             MemoEventKind::PreCompact => {
                 session.compaction_count += 1;
                 session.files.clear();
+                compaction_invalidations = 1;
             }
             MemoEventKind::Edit => {
                 if let Some(ref path) = params.path {
@@ -128,6 +133,9 @@ impl MemoState {
                             session.redundant_reads_prevented += 1;
                             session.tokens_saved += saved;
                             session.total_reads += 1;
+                            redundant_reads_prevented = 1;
+                            tokens_saved = saved;
+                            total_reads_observed = 1;
                         }
                         _ => {
                             let token_value = observed_tokens.max(existing.map_or(0, |f| f.tokens));
@@ -147,12 +155,19 @@ impl MemoState {
                             file.stale = false;
                             file.last_read_at = Instant::now();
                             session.total_reads += 1;
+                            total_reads_observed = 1;
                         }
                     }
                 }
             }
         }
-        MemoObserveResponse { observed: true }
+        MemoObserveResponse {
+            observed: true,
+            redundant_reads_prevented,
+            tokens_saved,
+            total_reads_observed,
+            compaction_invalidations,
+        }
     }
 
     pub fn status(&self, params: &MemoStatusParams) -> MemoStatusResponse {
