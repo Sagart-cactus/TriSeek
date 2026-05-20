@@ -114,6 +114,38 @@ fn build_repeated_match_repo(line_matches: usize) -> tempfile::TempDir {
     tmp
 }
 
+#[cfg(unix)]
+fn build_fake_rg_dir() -> tempfile::TempDir {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = tempfile::tempdir().expect("fake rg dir");
+    let rg = tmp.path().join("rg");
+    std::fs::write(
+        &rg,
+        r#"#!/bin/sh
+case " $* " in
+  *" route_auth "*)
+    printf '%s\n' '{"type":"match","data":{"path":{"text":"src/auth/router.rs"},"lines":{"text":"pub fn route_auth() {\n"},"line_number":1,"submatches":[{"match":{"text":"route_auth"},"start":7,"end":17}]}}'
+    printf '%s\n' '{"type":"match","data":{"path":{"text":"tests/auth_test.rs"},"lines":{"text":"fn route_auth_handles_service_accounts() {\n"},"line_number":2,"submatches":[{"match":{"text":"route_auth"},"start":4,"end":14}]}}'
+    ;;
+  *" panic "*)
+    printf '%s\n' '{"type":"match","data":{"path":{"text":"src/auth/router.rs"},"lines":{"text":"    panic!(\"auth panic\");\n"},"line_number":2,"submatches":[{"match":{"text":"panic"},"start":4,"end":9}]}}'
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+"#,
+    )
+    .expect("write fake rg");
+    let mut permissions = std::fs::metadata(&rg)
+        .expect("fake rg metadata")
+        .permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&rg, permissions).expect("chmod fake rg");
+    tmp
+}
+
 struct McpClient {
     child: Child,
     stdin: ChildStdin,
@@ -870,6 +902,67 @@ fn reindex_invalidates_cached_engine() {
         json!({ "query": "fresh_symbol", "mode": "literal", "limit": 5 }),
     );
     assert_eq!(fresh.get("files_with_matches"), Some(&json!(1)));
+
+    client.shutdown();
+}
+
+#[test]
+#[cfg(unix)]
+fn mcp_search_avoids_large_delta_overlay_indexes() {
+    let fixture = build_fixture_repo();
+    let fake_rg = build_fake_rg_dir();
+    let fake_path = format!(
+        "{}:{}",
+        fake_rg.path().display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    std::fs::write(
+        fixture.path().join(".triseek-index").join("delta.bin"),
+        b"non-empty",
+    )
+    .unwrap();
+    std::fs::write(
+        fixture.path().join(".triseek-index").join("fast.idx"),
+        b"not a valid index",
+    )
+    .unwrap();
+
+    let mut client = McpClient::spawn_with_home_and_env(
+        fixture.path(),
+        None,
+        &[
+            ("TRISEEK_MCP_DISABLE_STARTUP_SYNC", "1"),
+            ("TRISEEK_MCP_LEGACY_INDEX_MAX_BYTES", "1"),
+            ("PATH", fake_path.as_str()),
+        ],
+    );
+    handshake(&mut client);
+
+    let envelope = call_tool(
+        &mut client,
+        "search_content",
+        json!({ "query": "route_auth", "mode": "literal", "limit": 5 }),
+    );
+    assert_eq!(envelope.get("fallback_used"), Some(&json!(true)));
+    assert_eq!(envelope.get("files_with_matches"), Some(&json!(2)));
+
+    let pack = call_tool(
+        &mut client,
+        "context_pack",
+        json!({
+            "goal": "fix route_auth panic",
+            "intent": "bugfix",
+            "budget_tokens": 1200,
+            "max_files": 4
+        }),
+    );
+    assert_eq!(pack.get("version"), Some(&json!("1")));
+    assert!(
+        pack.get("items")
+            .and_then(Value::as_array)
+            .is_some_and(|items| !items.is_empty()),
+        "context_pack should still work through the no-index fallback: {pack}"
+    );
 
     client.shutdown();
 }

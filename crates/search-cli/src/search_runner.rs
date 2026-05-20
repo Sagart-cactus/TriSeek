@@ -22,6 +22,13 @@ pub struct ExecutedSearch {
     pub fallback_used: bool,
 }
 
+#[derive(Clone, Copy)]
+enum IndexMode {
+    Available,
+    Unavailable,
+    UnavailableWithMetadata,
+}
+
 /// Execute a [`QueryRequest`] end-to-end against the given repo/index.
 ///
 /// This function is intentionally pure and side-effect-free beyond the search
@@ -62,7 +69,11 @@ pub fn execute_search_with_engine(
         repeated_session_hint,
         summary_only,
         indexed_engine,
-        index_exists(index_dir),
+        if index_exists(index_dir) {
+            IndexMode::Available
+        } else {
+            IndexMode::Unavailable
+        },
     )
 }
 
@@ -80,7 +91,25 @@ pub fn execute_search_without_index(
         repeated_session_hint,
         summary_only,
         None,
-        false,
+        IndexMode::Unavailable,
+    )
+}
+
+pub fn execute_search_without_index_with_metadata(
+    repo_root: &Path,
+    index_dir: &Path,
+    request: &QueryRequest,
+    repeated_session_hint: bool,
+    summary_only: bool,
+) -> Result<ExecutedSearch> {
+    execute_search_inner(
+        repo_root,
+        index_dir,
+        request,
+        repeated_session_hint,
+        summary_only,
+        None,
+        IndexMode::UnavailableWithMetadata,
     )
 }
 
@@ -91,12 +120,14 @@ fn execute_search_inner(
     repeated_session_hint: bool,
     summary_only: bool,
     indexed_engine: Option<&SearchEngine>,
-    index_available: bool,
+    index_mode: IndexMode,
 ) -> Result<ExecutedSearch> {
-    let index_metadata = if index_available {
+    let index_metadata = if matches!(index_mode, IndexMode::Available) {
         Some(read_index_metadata(index_dir).with_context(|| {
             format!("failed to read index metadata from {}", index_dir.display())
         })?)
+    } else if matches!(index_mode, IndexMode::UnavailableWithMetadata) {
+        read_index_metadata(index_dir).ok()
     } else {
         None
     };
@@ -106,7 +137,7 @@ fn execute_search_inner(
         request,
         index_metadata.as_ref().map(|metadata| &metadata.repo_stats),
         &plan,
-        index_available,
+        matches!(index_mode, IndexMode::Available),
         repeated_session_hint,
     );
     let selected_route = adjust_route_for_filters(routing.selected_engine, request);

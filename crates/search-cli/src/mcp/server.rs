@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use search_core::{DAEMON_PORT_FILE, DaemonRootParams, RpcRequest, RpcResponse};
 use search_index::{
     BuildConfig, SearchEngine, UpdateOutcome, daemon_dir, default_index_dir, index_exists,
+    read_index_metadata,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -33,12 +34,15 @@ const PROTOCOL_VERSION: &str = "2025-06-18";
 const SERVER_NAME: &str = "triseek";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DISABLE_STARTUP_SYNC_ENV: &str = "TRISEEK_MCP_DISABLE_STARTUP_SYNC";
+const LEGACY_INDEX_MAX_BYTES_ENV: &str = "TRISEEK_MCP_LEGACY_INDEX_MAX_BYTES";
+const DEFAULT_LEGACY_INDEX_MAX_BYTES: u64 = 512 * 1024 * 1024;
 
 pub struct McpState {
     repo_root: PathBuf,
     index_dir: PathBuf,
     cached_engine: Mutex<Option<SearchEngine>>,
     index_sync_in_progress: AtomicBool,
+    avoid_index_for_memory: bool,
     index_mutation_lock: Mutex<()>,
     pub query_cache: QueryCache,
     pub search_memo: SearchMemo,
@@ -59,6 +63,7 @@ impl Drop for IndexMutationGuard<'_> {
 impl McpState {
     pub fn new(repo_root: PathBuf, index_dir_override: Option<PathBuf>) -> Self {
         let index_dir = index_dir_override.unwrap_or_else(|| default_index_dir(&repo_root));
+        let avoid_index_for_memory = should_avoid_index_for_memory(&index_dir);
         let ttl_secs: u64 = std::env::var("TRISEEK_SEARCH_CACHE_TTL_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -68,6 +73,7 @@ impl McpState {
             index_dir,
             cached_engine: Mutex::new(None),
             index_sync_in_progress: AtomicBool::new(false),
+            avoid_index_for_memory,
             index_mutation_lock: Mutex::new(()),
             query_cache: QueryCache::new(Duration::from_secs(ttl_secs), 256),
             search_memo: SearchMemo::new(256),
@@ -103,6 +109,9 @@ impl McpState {
     }
 
     pub fn should_bypass_index_for_startup_sync(&self) -> bool {
+        if self.avoid_index_for_memory {
+            return true;
+        }
         if !self.index_sync_in_progress.load(Ordering::Relaxed) {
             return false;
         }
@@ -129,18 +138,8 @@ impl McpState {
         self.index_sync_in_progress.load(Ordering::Relaxed)
     }
 
-    pub fn prime_cached_engine(&self) -> Result<bool> {
-        let mut guard = self
-            .cached_engine
-            .lock()
-            .expect("MCP cached engine mutex poisoned");
-        if guard.is_some() || !index_exists(&self.index_dir) {
-            return Ok(guard.is_some());
-        }
-        let engine = SearchEngine::open(&self.index_dir)
-            .with_context(|| format!("failed to open index at {}", self.index_dir.display()))?;
-        *guard = Some(engine);
-        Ok(true)
+    pub fn should_avoid_index_for_memory(&self) -> bool {
+        self.avoid_index_for_memory
     }
 
     pub fn start_index_mutation(&self) -> IndexMutationGuard<'_> {
@@ -178,18 +177,18 @@ pub fn run(repo_root: &Path, index_dir: Option<&Path>) -> Result<()> {
     ));
     let index_was_present = index_exists(&state.index_dir());
     if index_was_present {
-        if let Err(err) = state.prime_cached_engine() {
-            eprintln!(
-                "triseek mcp: failed to prime existing index at {}: {err}; early queries will fall back until refresh completes",
-                state.index_dir().display()
-            );
-        }
         register_root_with_daemon(state.as_ref());
     }
     if std::env::var_os(DISABLE_STARTUP_SYNC_ENV).is_some() {
         eprintln!(
             "triseek mcp: startup sync disabled by {DISABLE_STARTUP_SYNC_ENV}; repo_root={}",
             state.repo_root().display()
+        );
+    } else if state.should_avoid_index_for_memory() {
+        eprintln!(
+            "triseek mcp: startup sync skipped for memory-risk legacy index; repo_root={} index_dir={}",
+            state.repo_root().display(),
+            state.index_dir().display()
         );
     } else {
         spawn_startup_sync(Arc::clone(&state), index_was_present);
@@ -300,6 +299,23 @@ fn startup_update_changed_index(outcome: &UpdateOutcome) -> bool {
     outcome.rebuilt_full
         || outcome.metadata.delta_docs > 0
         || outcome.metadata.delta_removed_paths > 0
+}
+
+fn should_avoid_index_for_memory(index_dir: &Path) -> bool {
+    if !index_exists(index_dir)
+        || !index_dir.join("fast.idx").exists()
+        || !index_dir.join("delta.bin").exists()
+    {
+        return false;
+    }
+    let threshold = std::env::var(LEGACY_INDEX_MAX_BYTES_ENV)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_LEGACY_INDEX_MAX_BYTES);
+    match read_index_metadata(index_dir) {
+        Ok(metadata) => metadata.repo_stats.searchable_bytes > threshold,
+        Err(_) => false,
+    }
 }
 
 fn register_root_with_daemon(state: &McpState) {

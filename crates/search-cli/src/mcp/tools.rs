@@ -107,7 +107,7 @@ fn context_pack_tool(state: &McpState, arguments: &Value) -> ToolOutcome {
         Ok(intent) => intent,
         Err(err) => return ToolOutcome::Error(McpToolError::invalid_query(err.to_string())),
     };
-    match context_pack::build_context_pack(
+    match context_pack::build_context_pack_with_options(
         &state.repo_root(),
         &state.index_dir(),
         ContextPackRequest {
@@ -116,6 +116,9 @@ fn context_pack_tool(state: &McpState, arguments: &Value) -> ToolOutcome {
             budget_tokens: args.budget_tokens,
             max_files: args.max_files,
             changed_files: args.changed_files,
+        },
+        context_pack::ContextPackOptions {
+            use_index: !state.should_avoid_index_for_memory(),
         },
     ) {
         Ok(envelope) => ToolOutcome::Success(
@@ -1293,7 +1296,12 @@ fn run_and_envelope(
     let search_context = search_context_status(state);
 
     // Execute search.
-    let executed_result = if state.should_bypass_index_for_startup_sync() {
+    let executed_result = if state.should_avoid_index_for_memory() {
+        search_runner::execute_search_without_index_with_metadata(
+            &repo_root, &index_dir, request, /* repeated_session_hint */ true,
+            /* summary_only */ false,
+        )
+    } else if state.should_bypass_index_for_startup_sync() {
         search_runner::execute_search_without_index(
             &repo_root, &index_dir, request, /* repeated_session_hint */ true,
             /* summary_only */ false,
