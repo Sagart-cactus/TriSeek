@@ -27,6 +27,8 @@ struct Inner {
     entries: HashMap<String, SearchMemoEntry>,
     order: VecDeque<String>,
     next_id: u64,
+    hits: u64,
+    misses: u64,
 }
 
 impl SearchMemo {
@@ -36,6 +38,8 @@ impl SearchMemo {
                 entries: HashMap::new(),
                 order: VecDeque::new(),
                 next_id: 0,
+                hits: 0,
+                misses: 0,
             }),
             max_entries,
         }
@@ -43,7 +47,11 @@ impl SearchMemo {
 
     pub fn get(&self, key: &str) -> Option<SearchMemoEntry> {
         let mut guard = self.inner.lock().expect("search_memo mutex poisoned");
-        let entry = guard.entries.get(key).cloned()?;
+        let Some(entry) = guard.entries.get(key).cloned() else {
+            guard.misses += 1;
+            return None;
+        };
+        guard.hits += 1;
         guard.order.retain(|existing| existing != key);
         guard.order.push_back(key.to_string());
         Some(entry)
@@ -72,6 +80,19 @@ impl SearchMemo {
         let mut guard = self.inner.lock().expect("search_memo mutex poisoned");
         guard.entries.clear();
         guard.order.clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner
+            .lock()
+            .expect("search_memo mutex poisoned")
+            .entries
+            .len()
+    }
+
+    pub fn stats(&self) -> (u64, u64) {
+        let guard = self.inner.lock().expect("search_memo mutex poisoned");
+        (guard.hits, guard.misses)
     }
 
     #[allow(dead_code)]

@@ -117,7 +117,6 @@ impl QueryCache {
     }
 
     /// Return the number of currently live (possibly expired) entries.
-    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.inner
             .lock()

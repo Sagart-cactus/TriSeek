@@ -129,9 +129,44 @@ pub fn render_digest(tool_name: &str, envelope: &Value, query_hint: Option<&str>
         "context_pack" => render_context_pack_digest(envelope),
         "index_status" => render_index_status_digest(envelope),
         "reindex" => render_reindex_digest(envelope),
+        "usage_metrics" => render_usage_metrics_digest(envelope),
         "memo_status" | "memo_session" | "memo_check" => render_memo_digest(tool_name, envelope),
         _ => envelope.to_string(),
     }
+}
+
+fn render_usage_metrics_digest(envelope: &Value) -> String {
+    let total_calls = envelope
+        .pointer("/usage/total_calls")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let search_calls = envelope
+        .pointer("/search/total_searches")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let reuse_hits = envelope
+        .pointer("/search/reuse_hits")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let memo_saved = envelope
+        .pointer("/memo/tokens_saved")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let privacy_mode = envelope
+        .pointer("/storage/privacy_mode")
+        .and_then(Value::as_str)
+        .unwrap_or("private_rollups");
+    let search_word = if search_calls == 1 {
+        "search"
+    } else {
+        "searches"
+    };
+    format!(
+        "usage_metrics: {total_calls} private rollup event{}, {search_calls} {search_word}, {reuse_hits} reuse hit{}, {memo_saved} memo token{} saved, storage={privacy_mode}",
+        plural(total_calls as usize),
+        plural(reuse_hits as usize),
+        plural(memo_saved as usize)
+    )
 }
 
 fn render_context_pack_digest(envelope: &Value) -> String {
@@ -1035,6 +1070,23 @@ mod tests {
         assert!(out.contains("reuse prior result from context"));
         assert!(out.contains("search-000001"));
         assert!(!out.contains("no matches"));
+    }
+
+    #[test]
+    fn render_usage_metrics_digest_uses_private_rollup_fields() {
+        let envelope = json!({
+            "version": "1",
+            "storage": {"privacy_mode": "private_rollups"},
+            "usage": {"total_calls": 3},
+            "search": {"total_searches": 2, "reuse_hits": 1},
+            "memo": {"tokens_saved": 144}
+        });
+        let out = render_digest("usage_metrics", &envelope, None);
+        assert!(out.contains("3 private rollup events"));
+        assert!(out.contains("2 searches"));
+        assert!(out.contains("1 reuse hit"));
+        assert!(out.contains("144 memo tokens saved"));
+        assert!(out.contains("storage=private_rollups"));
     }
 
     #[test]
