@@ -340,6 +340,39 @@ fn default_direct_scan_includes_allowlisted_hidden_paths() {
     assert_eq!(skipped.summary.files_with_matches, 0);
 }
 
+#[cfg(unix)]
+#[test]
+fn direct_path_search_does_not_read_file_contents() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = FixtureRepo::new();
+    let locked = fixture.root.path().join("src/secret_path_only.txt");
+    fs::write(&locked, "path search should not read this body").expect("write locked file");
+    let mut permissions = fs::metadata(&locked).expect("metadata").permissions();
+    permissions.set_mode(0o000);
+    fs::set_permissions(&locked, permissions).expect("lock file");
+
+    let result = SearchEngine::search_direct(
+        fixture.root.path(),
+        &QueryRequest {
+            kind: SearchKind::Path,
+            engine: SearchEngineKind::DirectScan,
+            pattern: "secret_path_only".to_string(),
+            case_mode: CaseMode::Insensitive,
+            ..QueryRequest::default()
+        },
+        &BuildConfig::default(),
+    )
+    .expect("path search should not read unreadable contents");
+
+    let mut permissions = fs::metadata(&locked).expect("metadata").permissions();
+    permissions.set_mode(0o644);
+    fs::set_permissions(&locked, permissions).expect("unlock file");
+
+    assert_eq!(result.summary.files_with_matches, 1);
+    assert_eq!(result.metrics.bytes_scanned, 0);
+}
+
 struct FixtureRepo {
     root: TempDir,
 }
