@@ -5,7 +5,7 @@ use crate::model::{RuntimeIndex, SearchExecution};
 use crate::storage::{
     default_index_dir, fast_index_exists, fast_index_path, load_base, load_delta,
 };
-use crate::walker::{ScanOptions, scan_repository};
+use crate::walker::{ScanOptions, scan_repository, scan_repository_paths};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use memmap2::Mmap;
 use rayon::prelude::*;
@@ -160,6 +160,10 @@ impl SearchEngine {
         request: &QueryRequest,
         config: &BuildConfig,
     ) -> Result<SearchExecution, SearchIndexError> {
+        if matches!(request.kind, SearchKind::Path) {
+            return Self::search_paths_direct(repo_root, request, config);
+        }
+
         let started = Instant::now();
         let scan = scan_repository(repo_root, &ScanOptions::from(config))?;
         let matcher = if matches!(request.kind, SearchKind::Path) {
@@ -229,6 +233,52 @@ impl SearchEngine {
                 bytes_scanned,
                 index_bytes_read: None,
             },
+        })
+    }
+
+    fn search_paths_direct(
+        repo_root: &Path,
+        request: &QueryRequest,
+        config: &BuildConfig,
+    ) -> Result<SearchExecution, SearchIndexError> {
+        let started = Instant::now();
+        let scan = scan_repository_paths(repo_root, &ScanOptions::from(config))?;
+        let globset = build_globset(&request.globs)?;
+        let mut hits = Vec::new();
+
+        for file in scan.files {
+            if path_matches_filters(
+                &file.relative_path,
+                &file.file_name,
+                file.extension.as_deref(),
+                request,
+                globset.as_ref(),
+            ) {
+                hits.push(SearchHit::Path {
+                    path: file.relative_path,
+                });
+            }
+        }
+
+        Ok(SearchExecution {
+            summary: SearchSummary {
+                files_with_matches: hits.len(),
+                total_line_matches: hits.len(),
+            },
+            metrics: SearchMetrics {
+                process: search_core::ProcessMetrics {
+                    wall_millis: started.elapsed().as_secs_f64() * 1_000.0,
+                    user_cpu_millis: None,
+                    system_cpu_millis: None,
+                    max_rss_kib: None,
+                },
+                candidate_docs: scan.repo_stats.searchable_files as usize,
+                verified_docs: 0,
+                matches_returned: hits.len(),
+                bytes_scanned: 0,
+                index_bytes_read: None,
+            },
+            hits,
         })
     }
 

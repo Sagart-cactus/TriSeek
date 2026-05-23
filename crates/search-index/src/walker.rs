@@ -127,6 +127,20 @@ pub struct ScanSummary {
     pub files: Vec<ScannedFile>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ScannedPath {
+    pub relative_path: String,
+    pub file_name: String,
+    pub extension: Option<String>,
+    pub file_size: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct PathScanSummary {
+    pub repo_stats: RepoStats,
+    pub files: Vec<ScannedPath>,
+}
+
 #[derive(Debug)]
 enum CandidateFile {
     Searchable(ScannedFile),
@@ -143,6 +157,18 @@ pub fn scan_repository(
         Ok(())
     })?;
     Ok(ScanSummary { repo_stats, files })
+}
+
+pub fn scan_repository_paths(
+    repo_root: &Path,
+    options: &ScanOptions,
+) -> Result<PathScanSummary, SearchIndexError> {
+    let mut files = Vec::new();
+    let repo_stats = walk_repository_paths(repo_root, options, |file| {
+        files.push(file);
+        Ok(())
+    })?;
+    Ok(PathScanSummary { repo_stats, files })
 }
 
 pub fn walk_repository<F>(
@@ -191,6 +217,80 @@ where
             }
             None => {}
         }
+        Ok(())
+    };
+
+    let mut builder = WalkBuilder::new(repo_root);
+    configure_walk_builder(&mut builder, options.include_hidden);
+    let walker = builder.build();
+
+    for entry in walker {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => continue,
+        };
+        if !entry
+            .file_type()
+            .map(|kind| kind.is_file())
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        process_path(entry.into_path())?;
+    }
+
+    if !options.include_hidden {
+        walk_default_searchable_hidden_files(repo_root, process_path)?;
+    }
+
+    let mut languages: Vec<(String, u64)> = languages.into_iter().collect();
+    languages.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+    repo_stats.languages = languages;
+    repo_stats.category = Some(classify_repo(
+        repo_stats.searchable_files,
+        repo_stats.searchable_bytes,
+    ));
+
+    Ok(repo_stats)
+}
+
+pub fn walk_repository_paths<F>(
+    repo_root: &Path,
+    options: &ScanOptions,
+    mut on_file: F,
+) -> Result<RepoStats, SearchIndexError>
+where
+    F: FnMut(ScannedPath) -> Result<(), SearchIndexError>,
+{
+    let repo_name = repo_root
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| repo_root.display().to_string());
+    let commit_sha = git_head(repo_root).unwrap_or_else(|_| "unresolved".to_string());
+    let mut repo_stats = RepoStats {
+        repo_name,
+        repo_root: repo_root.display().to_string(),
+        commit_sha,
+        ..RepoStats::default()
+    };
+    let mut languages = HashMap::<String, u64>::new();
+
+    let mut process_path = |path: PathBuf| -> Result<(), SearchIndexError> {
+        let Some(file) = inspect_path_candidate(repo_root, &path, options)? else {
+            return Ok(());
+        };
+        repo_stats.tracked_files += 1;
+        repo_stats.total_disk_bytes += file.file_size;
+        repo_stats.searchable_files += 1;
+        repo_stats.searchable_bytes += file.file_size;
+        *languages
+            .entry(
+                file.extension
+                    .clone()
+                    .unwrap_or_else(|| "<none>".to_string()),
+            )
+            .or_default() += 1;
+        on_file(file)?;
         Ok(())
     };
 
@@ -482,6 +582,44 @@ fn inspect_file_candidate(
         content_hash: xxh3_64(&contents),
         contents,
     })))
+}
+
+fn inspect_path_candidate(
+    repo_root: &Path,
+    path: &Path,
+    options: &ScanOptions,
+) -> Result<Option<ScannedPath>, SearchIndexError> {
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => metadata,
+        _ => return Ok(None),
+    };
+
+    let relative_path = normalize_relative(repo_root, path);
+    if !is_path_searchable(Path::new(&relative_path), options.include_hidden) {
+        return Ok(None);
+    }
+
+    let size = metadata.len();
+    if let Some(max_file_size) = options.max_file_size
+        && size > max_file_size
+    {
+        return Ok(None);
+    }
+
+    let file_name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let extension = path
+        .extension()
+        .map(|ext| ext.to_string_lossy().to_ascii_lowercase());
+
+    Ok(Some(ScannedPath {
+        relative_path,
+        file_name,
+        extension,
+        file_size: size,
+    }))
 }
 
 fn git_head(repo_root: &Path) -> Result<String, SearchIndexError> {
