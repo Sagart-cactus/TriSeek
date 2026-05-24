@@ -24,7 +24,7 @@ use search_core::{
 use search_frecency::{FrecencyStore, QueryEvent};
 use search_index::{
     BuildConfig, SearchEngine, WatcherHandle, daemon_dir, default_index_dir, index_exists,
-    query_matches_path_filters, start_watcher,
+    query_matches_path_filters, read_index_metadata, start_watcher,
 };
 use session_state::SessionStore;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -78,6 +78,8 @@ struct SearchChangeBatch {
 const SEARCH_CHANGE_JOURNAL_LIMIT: usize = 256;
 const DEFAULT_MAX_LOADED_ENGINES: usize = 2;
 const DEFAULT_ENGINE_IDLE_TIMEOUT: Duration = Duration::from_secs(600);
+const WATCHER_MAX_BYTES_ENV: &str = "TRISEEK_DAEMON_WATCHER_MAX_BYTES";
+const DEFAULT_WATCHER_MAX_BYTES: u64 = 512 * 1024 * 1024;
 
 impl RepoService {
     fn new(
@@ -216,6 +218,13 @@ impl RepoService {
 
     fn start_watcher_if_needed(&self) -> Result<()> {
         if !index_exists(&self.index_dir) {
+            return Ok(());
+        }
+        if should_skip_watcher_for_memory(&self.index_dir) {
+            eprintln!(
+                "triseek-server: skipping watcher for memory-risk root {}",
+                self.repo_root.display()
+            );
             return Ok(());
         }
         let mut guard = self.watcher.lock().unwrap();
@@ -1211,6 +1220,20 @@ fn canonicalize_target_root(path: &Path) -> Result<PathBuf> {
         .with_context(|| format!("failed to canonicalize root {}", path.display()))
 }
 
+fn should_skip_watcher_for_memory(index_dir: &Path) -> bool {
+    if !index_exists(index_dir) {
+        return false;
+    }
+    let threshold = std::env::var(WATCHER_MAX_BYTES_ENV)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_WATCHER_MAX_BYTES);
+    match read_index_metadata(index_dir) {
+        Ok(metadata) => metadata.repo_stats.searchable_bytes > threshold,
+        Err(_) => false,
+    }
+}
+
 fn normalize_relative_path(repo_root: &Path, absolute_path: &Path) -> Option<String> {
     let relative = absolute_path.strip_prefix(repo_root).ok()?;
     let rendered = relative.to_string_lossy().replace('\\', "/");
@@ -1335,6 +1358,41 @@ mod tests {
         let status = service.status();
         assert!(status.index_available);
         assert!(!status.engine_loaded);
+    }
+
+    #[test]
+    fn repo_service_skips_watcher_for_memory_risk_index() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let repo_root = tmp.path().join("repo");
+        std::fs::create_dir_all(repo_root.join("src")).expect("create repo src");
+        std::fs::write(repo_root.join("src/lib.rs"), "pub fn route() {}\n")
+            .expect("write indexed file");
+        let index_dir = tmp.path().join("index");
+        SearchEngine::build(&repo_root, Some(&index_dir), &BuildConfig::default())
+            .expect("build index");
+
+        let metadata_path = index_dir.join("metadata.json");
+        let mut metadata: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&metadata_path).expect("read metadata"))
+                .expect("parse metadata");
+        metadata["repo_stats"]["searchable_bytes"] =
+            serde_json::json!(DEFAULT_WATCHER_MAX_BYTES + 1);
+        std::fs::write(
+            &metadata_path,
+            serde_json::to_vec_pretty(&metadata).expect("serialize metadata"),
+        )
+        .expect("write metadata");
+
+        let service = RepoService::new_with_index_dir(
+            repo_root,
+            index_dir,
+            Arc::new(MemoState::new(Duration::from_secs(600))),
+            Arc::new(SessionStore::load_from_disk(tmp.path()).expect("session store")),
+        )
+        .expect("repo service");
+
+        assert!(service.watcher.lock().unwrap().is_none());
+        assert!(!service.engine_loaded());
     }
 
     #[test]
