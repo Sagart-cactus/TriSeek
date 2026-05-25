@@ -8,8 +8,9 @@
 
 use crate::context_pack::{self, ContextPackRequest};
 use crate::mcp::errors::McpToolError;
+use crate::mcp::repo_root::{self, RootSafety};
 use crate::mcp::search_memo::SearchMemoEntry;
-use crate::mcp::server::McpState;
+use crate::mcp::server::{self, McpState};
 use crate::search_runner::{self, ExecutedSearch};
 use crate::{git_handoff, handoff, handoff_metadata, pack, usage_metrics};
 use search_core::{
@@ -38,6 +39,51 @@ const DEFAULT_LIMIT: usize = 20;
 const HARD_LIMIT: usize = 100;
 const PREVIEW_MAX_CHARS: usize = 200;
 const ENVELOPE_VERSION: &str = "1";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RootUse {
+    Search,
+    Reindex,
+}
+
+#[derive(Debug, Clone)]
+struct ToolRoot {
+    root: PathBuf,
+    index_dir: PathBuf,
+    safety: RootSafety,
+    force_no_index: bool,
+}
+
+fn resolve_tool_root(
+    state: &McpState,
+    root_arg: Option<&Path>,
+    root_use: RootUse,
+) -> Result<ToolRoot, McpToolError> {
+    let resolved = if let Some(root) = root_arg {
+        repo_root::resolve_explicit_tool_root(root).map_err(|error| {
+            McpToolError::invalid_query(format!("invalid root `{}`: {error}", root.display()))
+        })?
+    } else {
+        state
+            .default_root()
+            .ok_or_else(McpToolError::root_required)?
+    };
+
+    if root_use == RootUse::Reindex && resolved.safety == RootSafety::Broad {
+        return Err(McpToolError::broad_root_reindex_denied(
+            resolved.root.display().to_string(),
+        ));
+    }
+
+    let force_no_index = resolved.safety == RootSafety::Broad;
+    let index_dir = state.index_dir_for(&resolved.root);
+    Ok(ToolRoot {
+        root: resolved.root,
+        index_dir,
+        safety: resolved.safety,
+        force_no_index,
+    })
+}
 
 /// Outcome of a tool invocation. `Success` is serialized as the tool's
 /// JSON envelope; `Error` is serialized as an MCP `CallToolResult` with
@@ -350,7 +396,7 @@ fn usage_metrics(state: &McpState, _arguments: &Value) -> ToolOutcome {
             "entries": state.search_memo.len()
         },
         "index": {
-            "present": index_exists(&state.index_dir()),
+            "present": state.default_index_dir().is_some_and(|index_dir| index_exists(&index_dir)),
             "sync_in_progress": state.index_sync_in_progress(),
             "using_memory_safety_fallback": state.should_avoid_index_for_memory()
         },
@@ -365,6 +411,8 @@ fn usage_metrics(state: &McpState, _arguments: &Value) -> ToolOutcome {
 #[derive(Debug, Deserialize)]
 struct ContextPackArgs {
     goal: String,
+    #[serde(default)]
+    root: Option<PathBuf>,
     #[serde(default)]
     intent: Option<String>,
     #[serde(default)]
@@ -389,9 +437,13 @@ fn context_pack_tool(state: &McpState, arguments: &Value) -> ToolOutcome {
         Ok(intent) => intent,
         Err(err) => return ToolOutcome::Error(McpToolError::invalid_query(err.to_string())),
     };
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
     match context_pack::build_context_pack_with_options(
-        &state.repo_root(),
-        &state.index_dir(),
+        &tool_root.root,
+        &tool_root.index_dir,
         ContextPackRequest {
             goal: args.goal,
             intent,
@@ -400,7 +452,8 @@ fn context_pack_tool(state: &McpState, arguments: &Value) -> ToolOutcome {
             changed_files: args.changed_files,
         },
         context_pack::ContextPackOptions {
-            use_index: !state.should_avoid_index_for_memory(),
+            use_index: !tool_root.force_no_index
+                && !state.should_avoid_index_for_memory_at(&tool_root.index_dir),
         },
     ) {
         Ok(envelope) => ToolOutcome::Success(
@@ -420,6 +473,8 @@ fn context_pack_tool(state: &McpState, arguments: &Value) -> ToolOutcome {
 struct FindFilesArgs {
     query: String,
     #[serde(default)]
+    root: Option<PathBuf>,
+    #[serde(default)]
     limit: Option<usize>,
     #[serde(default)]
     force_refresh: bool,
@@ -436,6 +491,10 @@ fn find_files(state: &McpState, arguments: &Value, session_id_hint: Option<&str>
         ));
     }
     let limit = clamp_limit(args.limit);
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
 
     let request = QueryRequest {
         kind: SearchKind::Path,
@@ -448,12 +507,15 @@ fn find_files(state: &McpState, arguments: &Value, session_id_hint: Option<&str>
 
     run_and_envelope(
         state,
-        "find_files",
-        &request,
-        limit,
-        path_result_mapper,
-        args.force_refresh,
-        session_id_hint,
+        SearchInvocation {
+            tool_root: &tool_root,
+            tool_name: "find_files",
+            request: &request,
+            limit,
+            mapper: path_result_mapper,
+            force_refresh: args.force_refresh,
+            session_id_hint,
+        },
     )
 }
 
@@ -464,6 +526,8 @@ fn find_files(state: &McpState, arguments: &Value, session_id_hint: Option<&str>
 #[derive(Debug, Deserialize)]
 struct SearchContentArgs {
     query: String,
+    #[serde(default)]
+    root: Option<PathBuf>,
     #[serde(default)]
     mode: Option<String>,
     #[serde(default)]
@@ -491,6 +555,10 @@ fn search_content(
         Err(err) => return ToolOutcome::Error(err),
     };
     let limit = clamp_limit(args.limit);
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
 
     let request = QueryRequest {
         kind,
@@ -503,12 +571,15 @@ fn search_content(
 
     run_and_envelope(
         state,
-        "search_content",
-        &request,
-        limit,
-        content_result_mapper,
-        args.force_refresh,
-        session_id_hint,
+        SearchInvocation {
+            tool_root: &tool_root,
+            tool_name: "search_content",
+            request: &request,
+            limit,
+            mapper: content_result_mapper,
+            force_refresh: args.force_refresh,
+            session_id_hint,
+        },
     )
 }
 
@@ -520,6 +591,8 @@ fn search_content(
 struct SearchPathContentArgs {
     path_query: String,
     content_query: String,
+    #[serde(default)]
+    root: Option<PathBuf>,
     #[serde(default)]
     mode: Option<String>,
     #[serde(default)]
@@ -552,6 +625,10 @@ fn search_path_and_content(
         Err(err) => return ToolOutcome::Error(err),
     };
     let limit = clamp_limit(args.limit);
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
 
     let request = QueryRequest {
         kind,
@@ -565,12 +642,15 @@ fn search_path_and_content(
 
     run_and_envelope(
         state,
-        "search_path_and_content",
-        &request,
-        limit,
-        content_result_mapper,
-        args.force_refresh,
-        session_id_hint,
+        SearchInvocation {
+            tool_root: &tool_root,
+            tool_name: "search_path_and_content",
+            request: &request,
+            limit,
+            mapper: content_result_mapper,
+            force_refresh: args.force_refresh,
+            session_id_hint,
+        },
     )
 }
 
@@ -578,14 +658,32 @@ fn search_path_and_content(
 // index_status
 // ---------------------------------------------------------------------------
 
-fn index_status(state: &McpState, _arguments: &Value) -> ToolOutcome {
-    let index_dir = state.index_dir();
+#[derive(Debug, Deserialize)]
+struct RootOnlyArgs {
+    #[serde(default)]
+    root: Option<PathBuf>,
+}
+
+fn index_status(state: &McpState, arguments: &Value) -> ToolOutcome {
+    let args: RootOnlyArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    let index_dir = tool_root.index_dir.clone();
     let present = index_exists(&index_dir);
     let mut payload = Map::new();
     payload.insert("version".into(), json!(ENVELOPE_VERSION));
     payload.insert(
         "repo_root".into(),
-        json!(state.repo_root().display().to_string()),
+        json!(tool_root.root.display().to_string()),
+    );
+    payload.insert(
+        "root_classification".into(),
+        json!(root_safety_label(tool_root.safety)),
     );
     payload.insert("index_present".into(), json!(present));
 
@@ -631,6 +729,8 @@ fn index_status(state: &McpState, _arguments: &Value) -> ToolOutcome {
 #[derive(Debug, Deserialize)]
 struct ReindexArgs {
     #[serde(default)]
+    root: Option<PathBuf>,
+    #[serde(default)]
     mode: Option<String>,
 }
 
@@ -646,8 +746,12 @@ fn reindex(state: &McpState, arguments: &Value) -> ToolOutcome {
         )));
     }
 
-    let repo_root = state.repo_root();
-    let index_dir = state.index_dir();
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Reindex) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    let repo_root = tool_root.root;
+    let index_dir = tool_root.index_dir;
     let config = BuildConfig::default();
     let _mutation = state.start_index_mutation();
     let index_present = index_exists(&index_dir);
@@ -686,6 +790,7 @@ fn reindex(state: &McpState, arguments: &Value) -> ToolOutcome {
     };
 
     state.invalidate_cached_engine();
+    server::register_root_with_daemon(&repo_root);
 
     ToolOutcome::Success(json!({
         "version": ENVELOPE_VERSION,
@@ -695,6 +800,7 @@ fn reindex(state: &McpState, arguments: &Value) -> ToolOutcome {
         "rebuilt_full": rebuilt_full,
         "elapsed_ms": started.elapsed().as_millis() as u64,
         "indexed_files": metadata.build_stats.docs_indexed,
+        "root_classification": root_safety_label(tool_root.safety),
     }))
 }
 
@@ -705,6 +811,8 @@ fn reindex(state: &McpState, arguments: &Value) -> ToolOutcome {
 #[derive(Debug, Deserialize)]
 struct MemoStatusArgs {
     files: Vec<String>,
+    #[serde(default)]
+    root: Option<PathBuf>,
     #[serde(default)]
     session_id: Option<String>,
 }
@@ -719,19 +827,24 @@ fn memo_status(state: &McpState, arguments: &Value, session_id_hint: Option<&str
             "`files` must contain at least one non-empty path",
         ));
     }
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    let repo_root = tool_root.root.display().to_string();
     let session_id = resolve_session_id(args.session_id, session_id_hint);
     if let Err(error) = daemon_rpc(
         "memo_session_start",
         json!(MemoSessionParams {
             session_id: session_id.clone(),
-            repo_root: Some(state.repo_root().display().to_string()),
+            repo_root: Some(repo_root.clone()),
         }),
     ) {
         return ToolOutcome::Error(error);
     }
     let params = MemoStatusParams {
         session_id,
-        repo_root: state.repo_root().display().to_string(),
+        repo_root,
         files: args.files,
     };
     record_action(
@@ -790,6 +903,8 @@ fn memo_session(arguments: &Value, session_id_hint: Option<&str>) -> ToolOutcome
 struct MemoCheckArgs {
     path: String,
     #[serde(default)]
+    root: Option<PathBuf>,
+    #[serde(default)]
     session_id: Option<String>,
 }
 
@@ -803,19 +918,24 @@ fn memo_check(state: &McpState, arguments: &Value, session_id_hint: Option<&str>
             "`path` must not be empty for memo_check",
         ));
     }
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    let repo_root = tool_root.root.display().to_string();
     let session_id = resolve_session_id(args.session_id, session_id_hint);
     if let Err(error) = daemon_rpc(
         "memo_session_start",
         json!(MemoSessionParams {
             session_id: session_id.clone(),
-            repo_root: Some(state.repo_root().display().to_string()),
+            repo_root: Some(repo_root.clone()),
         }),
     ) {
         return ToolOutcome::Error(error);
     }
     let params = MemoCheckParams {
         session_id,
-        repo_root: state.repo_root().display().to_string(),
+        repo_root,
         path: args.path,
     };
     record_action(
@@ -836,6 +956,8 @@ fn memo_check(state: &McpState, arguments: &Value, session_id_hint: Option<&str>
 #[derive(Debug, Deserialize)]
 struct SessionOpenArgs {
     #[serde(default)]
+    root: Option<PathBuf>,
+    #[serde(default)]
     session_id: Option<String>,
     #[serde(default)]
     goal: String,
@@ -846,10 +968,14 @@ fn session_open(state: &McpState, arguments: &Value) -> ToolOutcome {
         Ok(args) => args,
         Err(err) => return ToolOutcome::Error(err),
     };
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
     match daemon_rpc(
         "session_open",
         json!(SessionOpenParams {
-            target_root: state.repo_root().display().to_string(),
+            target_root: tool_root.root.display().to_string(),
             session_id: args.session_id,
             goal: args.goal,
         }),
@@ -871,12 +997,18 @@ fn session_open(state: &McpState, arguments: &Value) -> ToolOutcome {
 #[derive(Debug, Deserialize)]
 struct SessionIdArgs {
     #[serde(default)]
+    root: Option<PathBuf>,
+    #[serde(default)]
     session_id: Option<String>,
 }
 
 fn session_status(state: &McpState, arguments: &Value) -> ToolOutcome {
     let args: SessionIdArgs = match deserialize_args(arguments) {
         Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
         Err(err) => return ToolOutcome::Error(err),
     };
     let Some(session_id) = args.session_id.or_else(|| state.current_session_id()) else {
@@ -887,7 +1019,7 @@ fn session_status(state: &McpState, arguments: &Value) -> ToolOutcome {
     match daemon_rpc(
         "session_status",
         json!(PortabilitySessionStatusParams {
-            target_root: state.repo_root().display().to_string(),
+            target_root: tool_root.root.display().to_string(),
             session_id,
         }),
     ) {
@@ -896,11 +1028,19 @@ fn session_status(state: &McpState, arguments: &Value) -> ToolOutcome {
     }
 }
 
-fn session_list(state: &McpState, _arguments: &Value) -> ToolOutcome {
+fn session_list(state: &McpState, arguments: &Value) -> ToolOutcome {
+    let args: RootOnlyArgs = match deserialize_args(arguments) {
+        Ok(args) => args,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
     match daemon_rpc(
         "session_list",
         json!(SessionListParams {
-            target_root: state.repo_root().display().to_string(),
+            target_root: tool_root.root.display().to_string(),
         }),
     ) {
         Ok(value) => ToolOutcome::Success(value),
@@ -910,6 +1050,8 @@ fn session_list(state: &McpState, _arguments: &Value) -> ToolOutcome {
 
 #[derive(Debug, Deserialize)]
 struct SessionCloseArgs {
+    #[serde(default)]
+    root: Option<PathBuf>,
     #[serde(default)]
     session_id: Option<String>,
     #[serde(default = "default_resolved_status")]
@@ -936,6 +1078,10 @@ fn session_close(state: &McpState, arguments: &Value) -> ToolOutcome {
         Ok(args) => args,
         Err(err) => return ToolOutcome::Error(err),
     };
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
     let Some(session_id) = args.session_id.or_else(|| state.current_session_id()) else {
         return ToolOutcome::Error(McpToolError::invalid_query(
             "`session_id` is required when no current session is open",
@@ -948,7 +1094,7 @@ fn session_close(state: &McpState, arguments: &Value) -> ToolOutcome {
     match daemon_rpc(
         "session_close",
         json!(SessionCloseParams {
-            target_root: state.repo_root().display().to_string(),
+            target_root: tool_root.root.display().to_string(),
             session_id: session_id.clone(),
             status,
         }),
@@ -963,6 +1109,8 @@ fn session_close(state: &McpState, arguments: &Value) -> ToolOutcome {
 
 #[derive(Debug, Deserialize)]
 struct SessionSnapshotArgs {
+    #[serde(default)]
+    root: Option<PathBuf>,
     #[serde(default)]
     session_id: Option<String>,
     #[serde(default)]
@@ -988,12 +1136,13 @@ fn create_session_snapshot(
     state: &McpState,
     args: SessionSnapshotArgs,
 ) -> Result<Value, McpToolError> {
-    let session_id = resolve_portability_session_id(state, args.session_id)?;
+    let tool_root = resolve_tool_root(state, args.root.as_deref(), RootUse::Search)?;
+    let session_id = resolve_portability_session_id(state, &tool_root.root, args.session_id)?;
     state.set_current_session_id(Some(session_id.clone()));
     daemon_rpc(
         "session_snapshot_create",
         json!(SessionSnapshotCreateParams {
-            target_root: state.repo_root().display().to_string(),
+            target_root: tool_root.root.display().to_string(),
             session_id,
             source_harness: args.source_harness,
             source_model: args.source_model,
@@ -1004,11 +1153,12 @@ fn create_session_snapshot(
 
 fn resolve_portability_session_id(
     state: &McpState,
+    repo_root: &Path,
     session_id: Option<String>,
 ) -> Result<String, McpToolError> {
     let Some(session_id) = session_id
         .or_else(|| state.current_session_id())
-        .or_else(|| newest_open_session_id(state).ok().flatten())
+        .or_else(|| newest_open_session_id(repo_root).ok().flatten())
     else {
         return Err(McpToolError::invalid_query(
             "`session_id` is required when no current session is open",
@@ -1020,6 +1170,8 @@ fn resolve_portability_session_id(
 #[derive(Debug, Deserialize)]
 struct SnapshotListArgs {
     #[serde(default)]
+    root: Option<PathBuf>,
+    #[serde(default)]
     session_id: Option<String>,
 }
 
@@ -1028,10 +1180,14 @@ fn session_snapshot_list(state: &McpState, arguments: &Value) -> ToolOutcome {
         Ok(args) => args,
         Err(err) => return ToolOutcome::Error(err),
     };
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
     match daemon_rpc(
         "session_snapshot_list",
         json!(SessionSnapshotListParams {
-            target_root: state.repo_root().display().to_string(),
+            target_root: tool_root.root.display().to_string(),
             session_id: args.session_id,
         }),
     ) {
@@ -1043,6 +1199,8 @@ fn session_snapshot_list(state: &McpState, arguments: &Value) -> ToolOutcome {
 #[derive(Debug, Deserialize)]
 struct SnapshotGetArgs {
     snapshot_id: String,
+    #[serde(default)]
+    root: Option<PathBuf>,
 }
 
 fn session_snapshot_get(state: &McpState, arguments: &Value) -> ToolOutcome {
@@ -1050,10 +1208,14 @@ fn session_snapshot_get(state: &McpState, arguments: &Value) -> ToolOutcome {
         Ok(args) => args,
         Err(err) => return ToolOutcome::Error(err),
     };
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
     match daemon_rpc(
         "session_snapshot_get",
         json!(SessionSnapshotGetParams {
-            target_root: state.repo_root().display().to_string(),
+            target_root: tool_root.root.display().to_string(),
             snapshot_id: args.snapshot_id,
         }),
     ) {
@@ -1066,6 +1228,8 @@ fn session_snapshot_get(state: &McpState, arguments: &Value) -> ToolOutcome {
 struct SnapshotDiffArgs {
     snapshot_a: String,
     snapshot_b: String,
+    #[serde(default)]
+    root: Option<PathBuf>,
 }
 
 fn session_snapshot_diff(state: &McpState, arguments: &Value) -> ToolOutcome {
@@ -1073,10 +1237,14 @@ fn session_snapshot_diff(state: &McpState, arguments: &Value) -> ToolOutcome {
         Ok(args) => args,
         Err(err) => return ToolOutcome::Error(err),
     };
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
     match daemon_rpc(
         "session_snapshot_diff",
         json!(SessionSnapshotDiffParams {
-            target_root: state.repo_root().display().to_string(),
+            target_root: tool_root.root.display().to_string(),
             snapshot_a: args.snapshot_a,
             snapshot_b: args.snapshot_b,
         }),
@@ -1088,6 +1256,8 @@ fn session_snapshot_diff(state: &McpState, arguments: &Value) -> ToolOutcome {
 
 #[derive(Debug, Deserialize)]
 struct SessionResumeArgs {
+    #[serde(default)]
+    root: Option<PathBuf>,
     #[serde(default)]
     snapshot_id: Option<String>,
     #[serde(default)]
@@ -1101,14 +1271,18 @@ fn session_resume(state: &McpState, arguments: &Value) -> ToolOutcome {
         Ok(args) => args,
         Err(err) => return ToolOutcome::Error(err),
     };
-    let resume_source = match prepare_mcp_resume_source(state, &args) {
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(err) => return ToolOutcome::Error(err),
+    };
+    let resume_source = match prepare_mcp_resume_source(&tool_root.root, &args) {
         Ok(source) => source,
         Err(error) => return ToolOutcome::Error(error),
     };
     match daemon_rpc(
         "session_resume_prepare",
         json!(SessionResumePrepareParams {
-            target_root: state.repo_root().display().to_string(),
+            target_root: tool_root.root.display().to_string(),
             snapshot_id: resume_source.snapshot_id.clone(),
             budget_tokens: args.budget_tokens,
         }),
@@ -1133,7 +1307,7 @@ struct ResumeSource {
 }
 
 fn prepare_mcp_resume_source(
-    state: &McpState,
+    repo_root: &Path,
     args: &SessionResumeArgs,
 ) -> Result<ResumeSource, McpToolError> {
     let snapshot_id = args.snapshot_id.as_deref();
@@ -1158,7 +1332,7 @@ fn prepare_mcp_resume_source(
             git_restored: false,
         });
     };
-    let pack_path = resolve_repo_relative_path(&state.repo_root(), pack_path);
+    let pack_path = resolve_repo_relative_path(repo_root, pack_path);
     let snapshot_id = pack::import(&pack_path, &daemon_dir().join("snapshots"))
         .map_err(|error| McpToolError::backend_failure(format!("pack import failed: {error}")))?;
     let snapshot_dir = daemon_dir().join("snapshots").join(&snapshot_id);
@@ -1167,7 +1341,7 @@ fn prepare_mcp_resume_source(
         McpToolError::backend_failure(format!("handoff metadata read failed: {error}"))
     })? && let Some(git) = metadata.git.as_ref()
     {
-        git_handoff::restore(&state.repo_root(), git).map_err(|error| {
+        git_handoff::restore(repo_root, git).map_err(|error| {
             McpToolError::backend_failure(format!("git handoff restore failed: {error}"))
         })?;
         git_restored = true;
@@ -1187,7 +1361,7 @@ fn prepare_mcp_resume_source(
             Some(manifest.repo_dirty_files.as_slice())
         };
         git_handoff::validate_checkout(
-            &state.repo_root(),
+            repo_root,
             manifest.repo_commit.as_deref(),
             expected_dirty_files,
         )
@@ -1239,6 +1413,8 @@ fn warm_state_from_resume_payload(state: &McpState, value: &Value) {
 #[derive(Debug, Deserialize)]
 struct SessionHandoffArgs {
     #[serde(default)]
+    root: Option<PathBuf>,
+    #[serde(default)]
     session_id: Option<String>,
     #[serde(default)]
     source_harness: Option<String>,
@@ -1267,6 +1443,10 @@ fn session_handoff(state: &McpState, arguments: &Value) -> ToolOutcome {
         Ok(args) => args,
         Err(error) => return ToolOutcome::Error(error),
     };
+    let tool_root = match resolve_tool_root(state, args.root.as_deref(), RootUse::Search) {
+        Ok(root) => root,
+        Err(error) => return ToolOutcome::Error(error),
+    };
     let mode = match args.mode.as_deref().unwrap_or("metadata") {
         "metadata" => handoff_metadata::HandoffMode::Metadata,
         "git" => handoff_metadata::HandoffMode::Git,
@@ -1276,10 +1456,11 @@ fn session_handoff(state: &McpState, arguments: &Value) -> ToolOutcome {
             )));
         }
     };
-    let session_id = match resolve_portability_session_id(state, args.session_id.clone()) {
-        Ok(session_id) => session_id,
-        Err(error) => return ToolOutcome::Error(error),
-    };
+    let session_id =
+        match resolve_portability_session_id(state, &tool_root.root, args.session_id.clone()) {
+            Ok(session_id) => session_id,
+            Err(error) => return ToolOutcome::Error(error),
+        };
     if matches!(mode, handoff_metadata::HandoffMode::Git) && args.pack_output_path.is_none() {
         return ToolOutcome::Error(McpToolError::invalid_query(
             "`pack_output_path` is required for git handoff mode",
@@ -1303,7 +1484,7 @@ fn session_handoff(state: &McpState, arguments: &Value) -> ToolOutcome {
     };
     let git_metadata = if matches!(mode, handoff_metadata::HandoffMode::Git) {
         match git_handoff::prepare(
-            &state.repo_root(),
+            &tool_root.root,
             &session_id,
             &git_handoff::GitHandoffOptions {
                 branch: args.branch.clone(),
@@ -1324,6 +1505,7 @@ fn session_handoff(state: &McpState, arguments: &Value) -> ToolOutcome {
         None
     };
     let snapshot_args = SessionSnapshotArgs {
+        root: Some(tool_root.root.clone()),
         session_id: Some(session_id.clone()),
         source_harness: args.source_harness,
         source_model: args.source_model,
@@ -1356,7 +1538,7 @@ fn session_handoff(state: &McpState, arguments: &Value) -> ToolOutcome {
                 "handoff metadata write failed: {error}"
             )));
         }
-        let pack_path = resolve_repo_relative_path(&state.repo_root(), pack_output_path);
+        let pack_path = resolve_repo_relative_path(&tool_root.root, pack_output_path);
         if let Err(error) = pack::export(&snapshot_dir, &pack_path) {
             return ToolOutcome::Error(McpToolError::backend_failure(format!(
                 "pack export failed: {error}"
@@ -1376,7 +1558,7 @@ fn session_handoff(state: &McpState, arguments: &Value) -> ToolOutcome {
         let _ = daemon_rpc(
             "session_close",
             json!(SessionCloseParams {
-                target_root: state.repo_root().display().to_string(),
+                target_root: tool_root.root.display().to_string(),
                 session_id,
                 status: PortabilitySessionStatus::Resolved,
             }),
@@ -1393,11 +1575,11 @@ fn resolve_repo_relative_path(repo_root: &Path, path: PathBuf) -> PathBuf {
     }
 }
 
-fn newest_open_session_id(state: &McpState) -> Result<Option<String>, McpToolError> {
+fn newest_open_session_id(repo_root: &Path) -> Result<Option<String>, McpToolError> {
     let value = daemon_rpc(
         "session_list",
         json!(SessionListParams {
-            target_root: state.repo_root().display().to_string(),
+            target_root: repo_root.display().to_string(),
         }),
     )?;
     let response: SessionListResponse = serde_json::from_value(value).map_err(|error| {
@@ -1539,7 +1721,25 @@ fn parse_mode(mode: Option<&str>) -> Result<SearchKind, McpToolError> {
     }
 }
 
+fn root_safety_label(safety: RootSafety) -> &'static str {
+    match safety {
+        RootSafety::Safe => "safe",
+        RootSafety::Broad => "broad_explicit",
+        RootSafety::UnsafeImplicit => "unsafe_implicit",
+    }
+}
+
 type ResultMapper = fn(&SearchHit, &mut usize, usize) -> Option<Value>;
+
+struct SearchInvocation<'a> {
+    tool_root: &'a ToolRoot,
+    tool_name: &'a str,
+    request: &'a QueryRequest,
+    limit: usize,
+    mapper: ResultMapper,
+    force_refresh: bool,
+    session_id_hint: Option<&'a str>,
+}
 
 #[derive(Debug, Clone)]
 struct SearchContextStatus {
@@ -1547,17 +1747,18 @@ struct SearchContextStatus {
     context_epoch: u64,
 }
 
-fn run_and_envelope(
-    state: &McpState,
-    tool_name: &str,
-    request: &QueryRequest,
-    limit: usize,
-    mapper: ResultMapper,
-    force_refresh: bool,
-    session_id_hint: Option<&str>,
-) -> ToolOutcome {
-    let repo_root = state.repo_root();
-    let index_dir = state.index_dir();
+fn run_and_envelope(state: &McpState, invocation: SearchInvocation<'_>) -> ToolOutcome {
+    let SearchInvocation {
+        tool_root,
+        tool_name,
+        request,
+        limit,
+        mapper,
+        force_refresh,
+        session_id_hint,
+    } = invocation;
+    let repo_root = tool_root.root.clone();
+    let index_dir = tool_root.index_dir.clone();
     let context_key = search_context_key(session_id_hint);
     let cache_key = format!(
         "{}|{}|{}|{}",
@@ -1567,7 +1768,11 @@ fn run_and_envelope(
         serde_json::to_string(request).unwrap_or_default(),
     );
 
-    if !force_refresh
+    let cache_and_reuse_enabled =
+        state.has_single_default_root(&repo_root, &index_dir) && !tool_root.force_no_index;
+
+    if cache_and_reuse_enabled
+        && !force_refresh
         && let Some(entry) = state.search_memo.get(&cache_key)
         && let Some(reuse_envelope) = build_context_reuse_envelope(state, request, &entry)
     {
@@ -1575,31 +1780,36 @@ fn run_and_envelope(
         return ToolOutcome::Success(reuse_envelope);
     }
 
-    let search_context = search_context_status(state);
+    let search_context = if cache_and_reuse_enabled {
+        search_context_status(&repo_root)
+    } else {
+        None
+    };
 
     // Execute search.
-    let executed_result = if state.should_avoid_index_for_memory() {
-        search_runner::execute_search_without_index_with_metadata(
-            &repo_root, &index_dir, request, /* repeated_session_hint */ true,
-            /* summary_only */ false,
-        )
-    } else if state.should_bypass_index_for_startup_sync() {
-        search_runner::execute_search_without_index(
-            &repo_root, &index_dir, request, /* repeated_session_hint */ true,
-            /* summary_only */ false,
-        )
-    } else {
-        state.with_cached_engine(|indexed_engine| {
-            search_runner::execute_search_with_engine(
-                &repo_root,
-                &index_dir,
-                request,
-                /* repeated_session_hint */ true,
+    let executed_result =
+        if tool_root.force_no_index || state.should_avoid_index_for_memory_at(&index_dir) {
+            search_runner::execute_search_without_index_with_metadata(
+                &repo_root, &index_dir, request, /* repeated_session_hint */ true,
                 /* summary_only */ false,
-                indexed_engine,
             )
-        })
-    };
+        } else if state.should_bypass_index_for_startup_sync() {
+            search_runner::execute_search_without_index(
+                &repo_root, &index_dir, request, /* repeated_session_hint */ true,
+                /* summary_only */ false,
+            )
+        } else {
+            state.with_cached_engine(&index_dir, |indexed_engine| {
+                search_runner::execute_search_with_engine(
+                    &repo_root,
+                    &index_dir,
+                    request,
+                    /* repeated_session_hint */ true,
+                    /* summary_only */ false,
+                    indexed_engine,
+                )
+            })
+        };
     let executed = match executed_result {
         Ok(v) => v,
         Err(err) => {
@@ -1610,6 +1820,18 @@ fn run_and_envelope(
     };
 
     let mut envelope = build_envelope(&repo_root, limit, executed, mapper);
+    if let Some(obj) = envelope.as_object_mut() {
+        obj.insert(
+            "root_classification".into(),
+            json!(root_safety_label(tool_root.safety)),
+        );
+        if tool_root.force_no_index {
+            obj.insert(
+                "root_warning".into(),
+                json!("broad_root_direct_search_only"),
+            );
+        }
+    }
 
     let fallback_used = envelope
         .get("fallback_used")
@@ -1623,7 +1845,7 @@ fn run_and_envelope(
         }
     }
 
-    if fallback_used {
+    if fallback_used || !cache_and_reuse_enabled {
         return ToolOutcome::Success(envelope);
     }
 
@@ -1665,11 +1887,11 @@ fn search_context_key(session_id_hint: Option<&str>) -> String {
         .unwrap_or_else(|| format!("process:{}", std::process::id()))
 }
 
-fn search_context_status(state: &McpState) -> Option<SearchContextStatus> {
+fn search_context_status(repo_root: &Path) -> Option<SearchContextStatus> {
     let value = try_daemon_rpc(
         "status",
         json!(DaemonStatusParams {
-            target_root: Some(state.repo_root().display().to_string()),
+            target_root: Some(repo_root.display().to_string()),
         }),
     )?;
     let status: DaemonStatus = serde_json::from_value(value).ok()?;
@@ -1740,13 +1962,18 @@ fn record_search_action(
 }
 
 fn record_action(state: &McpState, kind: ActionKind, payload: Value) {
+    let repo_root = state.repo_root();
+    record_action_for_root(state, &repo_root, kind, payload);
+}
+
+fn record_action_for_root(state: &McpState, repo_root: &Path, kind: ActionKind, payload: Value) {
     let Some(session_id) = state.current_session_id() else {
         return;
     };
     let _ = daemon_rpc(
         "session_record_action",
         json!(SessionRecordActionParams {
-            target_root: state.repo_root().display().to_string(),
+            target_root: repo_root.display().to_string(),
             session_id,
             kind,
             payload,

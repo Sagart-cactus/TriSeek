@@ -215,6 +215,37 @@ impl McpClient {
         }
     }
 
+    fn spawn_without_repo_from_cwd(cwd: &Path, home: Option<&Path>) -> Self {
+        let binary = triseek_binary();
+        assert!(
+            binary.exists(),
+            "triseek binary not found at {}; cargo test should build it",
+            binary.display()
+        );
+        let mut command = Command::new(&binary);
+        command
+            .arg("mcp")
+            .arg("serve")
+            .current_dir(cwd)
+            .env("TRISEEK_MCP_DISABLE_STARTUP_SYNC", "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        if let Some(home) = home {
+            command.env("HOME", home);
+            command.env("USERPROFILE", home);
+        }
+        let mut child = command.spawn().expect("spawn triseek mcp serve");
+        let stdin = child.stdin.take().expect("stdin");
+        let stdout = BufReader::new(child.stdout.take().expect("stdout"));
+        Self {
+            child,
+            stdin,
+            stdout,
+            next_id: 1,
+        }
+    }
+
     fn call(&mut self, method: &str, params: Value) -> Value {
         let id = self.next_id;
         self.next_id += 1;
@@ -260,6 +291,22 @@ impl McpClient {
 
 fn call_tool(client: &mut McpClient, name: &str, arguments: Value) -> Value {
     call_tool_with_meta(client, name, arguments, Value::Null)
+}
+
+fn call_tool_error(client: &mut McpClient, name: &str, arguments: Value) -> Value {
+    let response = client.call(
+        "tools/call",
+        json!({
+            "name": name,
+            "arguments": arguments,
+        }),
+    );
+    let result = response.get("result").expect("result");
+    assert_eq!(result.get("isError"), Some(&json!(true)));
+    result
+        .get("structuredContent")
+        .cloned()
+        .expect("structuredContent on error")
 }
 
 fn call_tool_with_meta(client: &mut McpClient, name: &str, arguments: Value, meta: Value) -> Value {
@@ -371,25 +418,6 @@ impl FakeDaemon {
             );
             thread::sleep(Duration::from_millis(25));
         }
-    }
-}
-
-fn wait_for_index_status(
-    client: &mut McpClient,
-    predicate: impl Fn(&Value) -> bool,
-    timeout: Duration,
-) -> Value {
-    let deadline = Instant::now() + timeout;
-    loop {
-        let status = call_tool(client, "index_status", json!({}));
-        if predicate(&status) {
-            return status;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "timed out waiting for expected index_status, last response: {status}"
-        );
-        thread::sleep(Duration::from_millis(25));
     }
 }
 
@@ -796,39 +824,20 @@ fn mcp_search_records_private_usage_metric() {
 }
 
 #[test]
-fn mcp_serve_registers_root_with_daemon_on_startup() {
-    let fixture = build_fixture_repo();
-    let fake_home = tempfile::tempdir().expect("fake home");
-    let daemon = FakeDaemon::start(
-        fake_home.path(),
-        vec![json!({"preloaded": true}), json!({"reloaded": true})],
-    );
-
-    let mut client = McpClient::spawn_with_home(fixture.path(), Some(fake_home.path()));
+fn mcp_serve_does_not_register_or_index_on_startup() {
+    let fixture = build_unindexed_fixture_repo();
+    let mut client = McpClient::spawn(fixture.path());
     handshake(&mut client);
-    daemon.wait_for_requests(2, Duration::from_secs(5));
-    client.shutdown();
 
-    let requests = daemon.finish();
-    let expected_repo_root = fixture
-        .path()
-        .canonicalize()
-        .unwrap_or_else(|_| fixture.path().to_path_buf());
-    assert_eq!(requests.len(), 2);
-    assert_eq!(
-        requests[0].pointer("/method").and_then(Value::as_str),
-        Some("preload_root")
+    let envelope = call_tool(&mut client, "index_status", json!({}));
+    assert_eq!(envelope.get("version"), Some(&json!("1")));
+    assert_eq!(envelope.get("index_present"), Some(&json!(false)));
+    assert!(
+        !fixture.path().join(".triseek-index").exists(),
+        "MCP startup must not create an index"
     );
-    assert_eq!(
-        requests[0]
-            .pointer("/params/target_root")
-            .and_then(Value::as_str),
-        Some(expected_repo_root.to_str().expect("fixture path str"))
-    );
-    assert_eq!(
-        requests[1].pointer("/method").and_then(Value::as_str),
-        Some("reload")
-    );
+
+    client.shutdown();
 }
 
 #[test]
@@ -861,6 +870,196 @@ fn find_files_returns_envelope_with_version_and_strategy() {
             .is_some_and(|p| p.contains("parser"))),
         "expected a result containing 'parser', got {results:?}"
     );
+
+    client.shutdown();
+}
+
+#[test]
+fn find_files_without_detected_repo_returns_structured_error() {
+    let cwd = tempfile::tempdir().expect("cwd");
+    let fake_home = tempfile::tempdir().expect("fake home");
+    let mut client = McpClient::spawn_without_repo_from_cwd(cwd.path(), Some(fake_home.path()));
+    handshake(&mut client);
+
+    let error = call_tool_error(
+        &mut client,
+        "find_files",
+        json!({ "query": "parser", "limit": 10 }),
+    );
+    assert_eq!(error.get("version"), Some(&json!("1")));
+    assert_eq!(
+        error.pointer("/error/code").and_then(Value::as_str),
+        Some("ROOT_REQUIRED")
+    );
+
+    client.shutdown();
+}
+
+#[test]
+fn find_files_launched_from_filesystem_root_requires_explicit_root() {
+    let fake_home = tempfile::tempdir().expect("fake home");
+    let mut client = McpClient::spawn_without_repo_from_cwd(Path::new("/"), Some(fake_home.path()));
+    handshake(&mut client);
+
+    let error = call_tool_error(
+        &mut client,
+        "find_files",
+        json!({ "query": "parser", "limit": 10 }),
+    );
+    assert_eq!(
+        error.pointer("/error/code").and_then(Value::as_str),
+        Some("ROOT_REQUIRED")
+    );
+
+    client.shutdown();
+}
+
+#[test]
+fn find_files_explicit_root_works_without_detected_repo() {
+    let cwd = tempfile::tempdir().expect("cwd");
+    let fake_home = tempfile::tempdir().expect("fake home");
+    let fixture = build_fixture_repo();
+    let root = fixture.path().canonicalize().expect("fixture canonicalize");
+    let mut client = McpClient::spawn_without_repo_from_cwd(cwd.path(), Some(fake_home.path()));
+    handshake(&mut client);
+
+    let envelope = call_tool(
+        &mut client,
+        "find_files",
+        json!({ "query": "parser", "limit": 10, "root": root }),
+    );
+    assert_eq!(
+        envelope.get("repo_root").and_then(Value::as_str),
+        Some(root.to_str().expect("root str"))
+    );
+    assert!(envelope.get("fallback_used").is_some());
+    let results = envelope
+        .get("results")
+        .and_then(Value::as_array)
+        .expect("results array");
+    assert!(
+        results.iter().any(|r| r
+            .get("path")
+            .and_then(Value::as_str)
+            .is_some_and(|p| p.contains("parser"))),
+        "expected a result containing 'parser', got {results:?}"
+    );
+
+    client.shutdown();
+}
+
+#[test]
+fn find_files_explicit_unindexed_root_uses_fallback_without_creating_index() {
+    let cwd = tempfile::tempdir().expect("cwd");
+    let fake_home = tempfile::tempdir().expect("fake home");
+    let fixture = build_unindexed_fixture_repo();
+    let root = fixture.path().canonicalize().expect("fixture canonicalize");
+    let index_root = fake_home.path().join(".triseek").join("indexes");
+    let mut client = McpClient::spawn_without_repo_from_cwd(cwd.path(), Some(fake_home.path()));
+    handshake(&mut client);
+
+    let envelope = call_tool(
+        &mut client,
+        "find_files",
+        json!({ "query": "fallback", "limit": 10, "root": root }),
+    );
+    assert!(envelope.get("fallback_used").is_some());
+    let results = envelope
+        .get("results")
+        .and_then(Value::as_array)
+        .expect("results array");
+    assert!(
+        results.iter().any(|r| r
+            .get("path")
+            .and_then(Value::as_str)
+            .is_some_and(|p| p == "src/fallback.rs")),
+        "expected fallback file result, got {results:?}"
+    );
+
+    client.shutdown();
+    assert!(
+        !index_root.exists(),
+        "explicit root fallback should not create indexes under {}",
+        index_root.display()
+    );
+}
+
+#[test]
+fn find_files_explicit_broad_root_uses_direct_search_without_indexing() {
+    let cwd = tempfile::tempdir().expect("cwd");
+    let fake_home = tempfile::tempdir().expect("fake home");
+    let broad_root = fake_home.path().join("Documents").join("Projects");
+    std::fs::create_dir_all(broad_root.join("alpha/src")).unwrap();
+    std::fs::write(
+        broad_root.join("alpha/src/broad.rs"),
+        "pub fn broad_workspace_symbol() {}\n",
+    )
+    .unwrap();
+    let mut client = McpClient::spawn_without_repo_from_cwd(cwd.path(), Some(fake_home.path()));
+    handshake(&mut client);
+
+    let envelope = call_tool(
+        &mut client,
+        "find_files",
+        json!({ "query": "broad", "limit": 10, "root": broad_root }),
+    );
+    assert_eq!(envelope.get("fallback_used"), Some(&json!(true)));
+    assert_eq!(
+        envelope.get("root_classification").and_then(Value::as_str),
+        Some("broad_explicit")
+    );
+    assert_eq!(
+        envelope.get("root_warning").and_then(Value::as_str),
+        Some("broad_root_direct_search_only")
+    );
+    assert!(
+        !fake_home.path().join(".triseek").join("indexes").exists(),
+        "broad direct search must not create an index"
+    );
+
+    client.shutdown();
+}
+
+#[test]
+fn reindex_rejects_explicit_broad_root() {
+    let cwd = tempfile::tempdir().expect("cwd");
+    let fake_home = tempfile::tempdir().expect("fake home");
+    let broad_root = fake_home.path().join("Documents").join("Projects");
+    std::fs::create_dir_all(&broad_root).unwrap();
+    let mut client = McpClient::spawn_without_repo_from_cwd(cwd.path(), Some(fake_home.path()));
+    handshake(&mut client);
+
+    let error = call_tool_error(
+        &mut client,
+        "reindex",
+        json!({ "mode": "incremental", "root": broad_root }),
+    );
+    assert_eq!(
+        error.pointer("/error/code").and_then(Value::as_str),
+        Some("BROAD_ROOT_REINDEX_DENIED")
+    );
+
+    client.shutdown();
+}
+
+#[test]
+fn repo_scoped_memo_and_session_tools_require_root_when_undetected() {
+    let cwd = tempfile::tempdir().expect("cwd");
+    let fake_home = tempfile::tempdir().expect("fake home");
+    let mut client = McpClient::spawn_without_repo_from_cwd(cwd.path(), Some(fake_home.path()));
+    handshake(&mut client);
+
+    for (tool, args) in [
+        ("memo_check", json!({ "path": "src/lib.rs" })),
+        ("session_list", json!({})),
+    ] {
+        let error = call_tool_error(&mut client, tool, args);
+        assert_eq!(
+            error.pointer("/error/code").and_then(Value::as_str),
+            Some("ROOT_REQUIRED"),
+            "{tool} should require an explicit root"
+        );
+    }
 
     client.shutdown();
 }
@@ -982,25 +1181,21 @@ fn index_status_reports_present_index() {
 }
 
 #[test]
-fn mcp_serve_bootstraps_missing_index_on_startup() {
+fn mcp_serve_reports_missing_index_without_bootstrap_on_startup() {
     let fixture = build_unindexed_fixture_repo();
     let mut client = McpClient::spawn(fixture.path());
     handshake(&mut client);
 
-    let envelope = wait_for_index_status(
-        &mut client,
-        |status| status.get("index_present") == Some(&json!(true)),
-        Duration::from_secs(5),
-    );
+    let envelope = call_tool(&mut client, "index_status", json!({}));
     assert_eq!(envelope.get("version"), Some(&json!("1")));
-    assert_eq!(envelope.get("index_present"), Some(&json!(true)));
-    assert_eq!(envelope.get("indexed_files"), Some(&json!(1)));
+    assert_eq!(envelope.get("index_present"), Some(&json!(false)));
+    assert!(!fixture.path().join(".triseek-index").exists());
 
     client.shutdown();
 }
 
 #[test]
-fn mcp_serve_reindexes_existing_index_on_startup() {
+fn mcp_serve_does_not_reindex_existing_index_on_startup() {
     let fixture = build_fixture_repo();
     std::fs::write(
         fixture.path().join("src/new_feature.rs"),
@@ -1011,16 +1206,9 @@ fn mcp_serve_reindexes_existing_index_on_startup() {
     let mut client = McpClient::spawn(fixture.path());
     handshake(&mut client);
 
-    let status = wait_for_index_status(
-        &mut client,
-        |status| {
-            status.get("index_present") == Some(&json!(true))
-                && status.get("indexed_files") == Some(&json!(6))
-        },
-        Duration::from_secs(5),
-    );
+    let status = call_tool(&mut client, "index_status", json!({}));
     assert_eq!(status.get("index_present"), Some(&json!(true)));
-    assert_eq!(status.get("indexed_files"), Some(&json!(6)));
+    assert_eq!(status.get("indexed_files"), Some(&json!(5)));
 
     client.shutdown();
 }
@@ -1460,7 +1648,6 @@ fn session_handoff_writes_metadata_tcp_when_pack_output_path_is_provided() {
     let fake_daemon = FakeDaemon::start(
         home.path(),
         vec![
-            fake_preload_response(),
             json!({
                 "snapshot_id": snapshot_id,
                 "snapshot_dir": snapshot_dir.display().to_string(),
@@ -1518,10 +1705,7 @@ fn session_handoff_writes_metadata_tcp_when_pack_output_path_is_provided() {
         .iter()
         .filter_map(|request| request.get("method").and_then(Value::as_str))
         .collect::<Vec<_>>();
-    assert_eq!(
-        methods,
-        vec!["preload_root", "session_snapshot_create", "session_close"]
-    );
+    assert_eq!(methods, vec!["session_snapshot_create", "session_close"]);
 }
 
 #[test]
@@ -1593,21 +1777,18 @@ fn session_resume_accepts_tcp_pack_path_over_mcp() {
     }
     let fake_daemon = FakeDaemon::start(
         home.path(),
-        vec![
-            fake_preload_response(),
-            json!({
-                "session_id": session_id,
-                "payload_markdown": "# TriSeek Hydration Payload\nfrom pack",
-                "payload_token_estimate": 6,
-                "hydration_report": {
-                    "files_primed": 0,
-                    "searches_warmed": 0,
-                    "frecency_entries_restored": 0,
-                    "stale_files": []
-                },
-                "searches": []
-            }),
-        ],
+        vec![json!({
+            "session_id": session_id,
+            "payload_markdown": "# TriSeek Hydration Payload\nfrom pack",
+            "payload_token_estimate": 6,
+            "hydration_report": {
+                "files_primed": 0,
+                "searches_warmed": 0,
+                "frecency_entries_restored": 0,
+                "stale_files": []
+            },
+            "searches": []
+        })],
     );
     let mut client = McpClient::spawn_with_home_and_env(
         fixture.path(),
@@ -1641,7 +1822,7 @@ fn session_resume_accepts_tcp_pack_path_over_mcp() {
         .iter()
         .filter_map(|request| request.get("method").and_then(Value::as_str))
         .collect::<Vec<_>>();
-    assert_eq!(methods, vec!["preload_root", "session_resume_prepare"]);
+    assert_eq!(methods, vec!["session_resume_prepare"]);
 }
 
 #[test]
@@ -1965,7 +2146,6 @@ fn search_content_reuses_prior_result_when_fresh() {
     let fake_daemon = FakeDaemon::start(
         home.path(),
         vec![
-            fake_preload_response(),
             fake_status_response(10, 1),
             fake_search_reuse_response(true, "unchanged", 10, 1, &[]),
         ],
@@ -2006,11 +2186,10 @@ fn search_content_reuses_prior_result_when_fresh() {
         second.get("search_id").and_then(Value::as_str),
         Some(first_search_id.as_str())
     );
-    fake_daemon.wait_for_requests(3, Duration::from_secs(2));
+    fake_daemon.wait_for_requests(2, Duration::from_secs(2));
     let requests = fake_daemon.finish();
-    assert_eq!(requests[0]["method"], json!("preload_root"));
-    assert_eq!(requests[1]["method"], json!("status"));
-    assert_eq!(requests[2]["method"], json!("search_reuse_check"));
+    assert_eq!(requests[0]["method"], json!("status"));
+    assert_eq!(requests[1]["method"], json!("search_reuse_check"));
 
     client.shutdown();
 }
@@ -2022,7 +2201,6 @@ fn search_content_reruns_when_matching_file_changes() {
     let fake_daemon = FakeDaemon::start(
         home.path(),
         vec![
-            fake_preload_response(),
             fake_status_response(10, 1),
             fake_search_reuse_response(
                 false,
@@ -2060,9 +2238,8 @@ fn search_content_reruns_when_matching_file_changes() {
             .and_then(Value::as_array)
             .is_some_and(|results| !results.is_empty())
     );
-    fake_daemon.wait_for_requests(4, Duration::from_secs(2));
+    fake_daemon.wait_for_requests(3, Duration::from_secs(2));
     let requests = fake_daemon.finish();
-    assert_eq!(requests[0]["method"], json!("preload_root"));
     let methods: Vec<_> = requests
         .iter()
         .filter_map(|request| request.get("method").and_then(Value::as_str))
@@ -2081,11 +2258,7 @@ fn different_meta_session_ids_do_not_share_search_memo() {
     let home = tempfile::tempdir().expect("home tempdir");
     let fake_daemon = FakeDaemon::start(
         home.path(),
-        vec![
-            fake_preload_response(),
-            fake_status_response(10, 1),
-            fake_status_response(10, 1),
-        ],
+        vec![fake_status_response(10, 1), fake_status_response(10, 1)],
     );
     let mut client = McpClient::spawn_with_home_and_env(
         fixture.path(),
@@ -2108,11 +2281,10 @@ fn different_meta_session_ids_do_not_share_search_memo() {
     );
     assert_eq!(first.get("cache").and_then(Value::as_str), Some("miss"));
     assert_eq!(second.get("cache").and_then(Value::as_str), Some("miss"));
-    fake_daemon.wait_for_requests(3, Duration::from_secs(2));
+    fake_daemon.wait_for_requests(2, Duration::from_secs(2));
     let requests = fake_daemon.finish();
-    assert_eq!(requests[0]["method"], json!("preload_root"));
+    assert_eq!(requests[0]["method"], json!("status"));
     assert_eq!(requests[1]["method"], json!("status"));
-    assert_eq!(requests[2]["method"], json!("status"));
 
     client.shutdown();
 }
@@ -2124,9 +2296,9 @@ fn reindex_invalidates_search_memo() {
     let fake_daemon = FakeDaemon::start(
         home.path(),
         vec![
-            fake_preload_response(),
             fake_status_response(10, 1),
             fake_search_reuse_response(true, "unchanged", 10, 1, &[]),
+            fake_preload_response(),
             fake_status_response(10, 1),
         ],
     );
@@ -2160,9 +2332,9 @@ fn reindex_invalidates_search_memo() {
     assert!(after.get("reuse_status").is_none());
     fake_daemon.wait_for_requests(4, Duration::from_secs(2));
     let requests = fake_daemon.finish();
-    assert_eq!(requests[0]["method"], json!("preload_root"));
-    assert_eq!(requests[1]["method"], json!("status"));
-    assert_eq!(requests[2]["method"], json!("search_reuse_check"));
+    assert_eq!(requests[0]["method"], json!("status"));
+    assert_eq!(requests[1]["method"], json!("search_reuse_check"));
+    assert_eq!(requests[2]["method"], json!("preload_root"));
     assert_eq!(requests[3]["method"], json!("status"));
 
     client.shutdown();
@@ -2201,8 +2373,6 @@ fn memo_check_uses_meta_session_id_and_forwards_to_daemon() {
     let daemon = FakeDaemon::start(
         fake_home.path(),
         vec![
-            json!({"preloaded": true}),
-            json!({"reloaded": true}),
             json!({"ok": true}),
             json!({
                 "path": "src/auth/router.rs",
@@ -2216,7 +2386,6 @@ fn memo_check_uses_meta_session_id_and_forwards_to_daemon() {
 
     let mut client = McpClient::spawn_with_home(fixture.path(), Some(fake_home.path()));
     handshake(&mut client);
-    daemon.wait_for_requests(2, Duration::from_secs(5));
 
     let response = call_tool_with_meta(
         &mut client,
@@ -2238,45 +2407,37 @@ fn memo_check_uses_meta_session_id_and_forwards_to_daemon() {
         .unwrap_or_else(|_| fixture.path().to_path_buf());
     assert_eq!(
         requests.len(),
-        4,
-        "memo_check should make preload_root + reload + 2 daemon RPC calls"
+        2,
+        "memo_check should make 2 daemon RPC calls"
     );
     assert_eq!(
         requests[0].pointer("/method").and_then(Value::as_str),
-        Some("preload_root")
-    );
-    assert_eq!(
-        requests[1].pointer("/method").and_then(Value::as_str),
-        Some("reload")
-    );
-    assert_eq!(
-        requests[2].pointer("/method").and_then(Value::as_str),
         Some("memo_session_start")
     );
     assert_eq!(
-        requests[2]
+        requests[0]
             .pointer("/params/session_id")
             .and_then(Value::as_str),
         Some("codex-meta-session")
     );
     assert_eq!(
-        requests[2]
+        requests[0]
             .pointer("/params/repo_root")
             .and_then(Value::as_str),
         Some(expected_repo_root.to_str().expect("fixture path str"))
     );
     assert_eq!(
-        requests[3].pointer("/method").and_then(Value::as_str),
+        requests[1].pointer("/method").and_then(Value::as_str),
         Some("memo_check")
     );
     assert_eq!(
-        requests[3]
+        requests[1]
             .pointer("/params/session_id")
             .and_then(Value::as_str),
         Some("codex-meta-session")
     );
     assert_eq!(
-        requests[3].pointer("/params/path").and_then(Value::as_str),
+        requests[1].pointer("/params/path").and_then(Value::as_str),
         Some("src/auth/router.rs")
     );
 }
@@ -2288,8 +2449,6 @@ fn memo_status_uses_meta_session_id_and_returns_current_tokens() {
     let daemon = FakeDaemon::start(
         fake_home.path(),
         vec![
-            json!({"preloaded": true}),
-            json!({"reloaded": true}),
             json!({"ok": true}),
             json!({
                 "session_id": "claude-meta-session",
@@ -2307,7 +2466,6 @@ fn memo_status_uses_meta_session_id_and_returns_current_tokens() {
 
     let mut client = McpClient::spawn_with_home(fixture.path(), Some(fake_home.path()));
     handshake(&mut client);
-    daemon.wait_for_requests(2, Duration::from_secs(5));
 
     let response = call_tool_with_meta(
         &mut client,
@@ -2331,29 +2489,21 @@ fn memo_status_uses_meta_session_id_and_returns_current_tokens() {
 
     let requests = daemon.finish();
     assert_eq!(
-        requests[1].pointer("/method").and_then(Value::as_str),
-        Some("reload")
-    );
-    assert_eq!(
-        requests[2]
+        requests[0]
             .pointer("/params/session_id")
             .and_then(Value::as_str),
         Some("claude-meta-session")
     );
     assert_eq!(
         requests[0].pointer("/method").and_then(Value::as_str),
-        Some("preload_root")
-    );
-    assert_eq!(
-        requests[2].pointer("/method").and_then(Value::as_str),
         Some("memo_session_start")
     );
     assert_eq!(
-        requests[3].pointer("/method").and_then(Value::as_str),
+        requests[1].pointer("/method").and_then(Value::as_str),
         Some("memo_status")
     );
     assert_eq!(
-        requests[3]
+        requests[1]
             .pointer("/params/files/0")
             .and_then(Value::as_str),
         Some("src/auth/router.rs")

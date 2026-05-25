@@ -153,7 +153,8 @@ pub fn ensure_codex_hooks_enabled(existing: Option<&str>) -> Result<String> {
     let features = doc["features"]
         .as_table_mut()
         .context("`features` is not a table in Codex config")?;
-    features["codex_hooks"] = value(true);
+    features.remove("codex_hooks");
+    features["hooks"] = value(true);
     Ok(doc.to_string())
 }
 
@@ -162,10 +163,14 @@ pub fn codex_hooks_enabled(existing: &str) -> Result<bool> {
     let doc: DocumentMut = existing
         .parse()
         .context("failed to parse existing Codex config.toml")?;
-    Ok(doc
-        .get("features")
-        .and_then(|item| item.as_table())
-        .and_then(|table| table.get("codex_hooks"))
+    let Some(features) = doc.get("features").and_then(|item| item.as_table()) else {
+        return Ok(true);
+    };
+    if features.contains_key("codex_hooks") && !features.contains_key("hooks") {
+        return Ok(false);
+    }
+    Ok(features
+        .get("hooks")
         .and_then(|item| item.as_bool())
         .unwrap_or(true))
 }
@@ -878,16 +883,20 @@ args = ["mcp", "serve"]
 
     #[test]
     fn ensure_codex_hooks_enabled_sets_feature_flag() {
-        let out = ensure_codex_hooks_enabled(Some("[features]\nfoo=true\n")).unwrap();
+        let out = ensure_codex_hooks_enabled(Some("[features]\nfoo=true\ncodex_hooks = false\n"))
+            .unwrap();
         assert!(codex_hooks_enabled(&out).unwrap());
         assert!(out.contains("foo"));
+        assert!(out.contains("hooks = true"));
+        assert!(!out.contains("codex_hooks"));
     }
 
     #[test]
     fn codex_hooks_enabled_defaults_to_true_when_omitted() {
         assert!(codex_hooks_enabled("").unwrap());
         assert!(codex_hooks_enabled("[features]\nfoo=true\n").unwrap());
-        assert!(!codex_hooks_enabled("[features]\ncodex_hooks = false\n").unwrap());
+        assert!(!codex_hooks_enabled("[features]\nhooks = false\n").unwrap());
+        assert!(!codex_hooks_enabled("[features]\ncodex_hooks = true\n").unwrap());
     }
 
     #[test]
