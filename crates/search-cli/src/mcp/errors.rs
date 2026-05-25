@@ -15,6 +15,8 @@ pub enum McpErrorCode {
     IndexStale,
     InvalidQuery,
     RepoNotDetected,
+    RootRequired,
+    BroadRootReindexDenied,
     BackendFailure,
     FallbackFailure,
     ConfigWriteFailed,
@@ -60,6 +62,27 @@ impl McpToolError {
             "TriSeek could not detect a repository root from the working directory",
             false,
             "Start the server with --repo <PATH>, set TRISEEK_REPO_ROOT, or run it from inside a git repository",
+        )
+    }
+
+    pub fn root_required() -> Self {
+        Self::new(
+            McpErrorCode::RootRequired,
+            "TriSeek MCP started without a safe default root",
+            false,
+            "Pass `root` with the smallest folder that should be searched",
+        )
+    }
+
+    pub fn broad_root_reindex_denied(root: impl Into<String>) -> Self {
+        Self::new(
+            McpErrorCode::BroadRootReindexDenied,
+            format!(
+                "TriSeek refused to create or update an index for broad root {}",
+                root.into()
+            ),
+            false,
+            "Pass a narrower project folder, or search this broad folder without reindexing",
         )
     }
 

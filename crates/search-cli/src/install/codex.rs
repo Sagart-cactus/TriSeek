@@ -150,16 +150,16 @@ fn enable_hooks_flag() -> Result<()> {
     let path = shared::codex_config_path()?;
     let existing = fs::read_to_string(&path).ok();
     let hooks_enabled = shared::codex_hooks_enabled(existing.as_deref().unwrap_or(""))
-        .context("failed to read codex_hooks feature flag in Codex config.toml")?;
+        .context("failed to read hooks feature flag in Codex config.toml")?;
     if hooks_enabled {
         println!("triseek: Codex hooks feature flag is enabled by default");
         return Ok(());
     }
     let updated = shared::ensure_codex_hooks_enabled(existing.as_deref())
-        .context("failed to enable codex_hooks feature flag in Codex config.toml")?;
+        .context("failed to enable hooks feature flag in Codex config.toml")?;
     shared::atomic_write(&path, &updated)
         .with_context(|| format!("failed to write {}", path.display()))?;
-    println!("triseek: enabled Codex feature flag `codex_hooks = true`");
+    println!("triseek: enabled Codex feature flag `hooks = true`");
     Ok(())
 }
 

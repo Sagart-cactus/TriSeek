@@ -9,8 +9,7 @@
 use anyhow::{Context, Result};
 use search_core::{DAEMON_PORT_FILE, DaemonRootParams, RpcRequest, RpcResponse};
 use search_index::{
-    BuildConfig, SearchEngine, UpdateOutcome, daemon_dir, default_index_dir, index_exists,
-    read_index_metadata,
+    SearchEngine, daemon_dir, default_index_dir, index_exists, read_index_metadata,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -21,10 +20,10 @@ use std::sync::{
     Arc, Mutex, MutexGuard,
     atomic::{AtomicBool, Ordering},
 };
-use std::thread;
 use std::time::Duration;
 
 use crate::mcp::query_cache::QueryCache;
+use crate::mcp::repo_root::ResolvedRoot;
 use crate::mcp::schema::{TOOLS, ToolDescriptor};
 use crate::mcp::search_memo::SearchMemo;
 use crate::mcp::tools::{ToolOutcome, dispatch};
@@ -33,13 +32,13 @@ use crate::output_format;
 const PROTOCOL_VERSION: &str = "2025-06-18";
 const SERVER_NAME: &str = "triseek";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
-const DISABLE_STARTUP_SYNC_ENV: &str = "TRISEEK_MCP_DISABLE_STARTUP_SYNC";
 const LEGACY_INDEX_MAX_BYTES_ENV: &str = "TRISEEK_MCP_LEGACY_INDEX_MAX_BYTES";
 const DEFAULT_LEGACY_INDEX_MAX_BYTES: u64 = 512 * 1024 * 1024;
 
 pub struct McpState {
-    repo_root: PathBuf,
-    index_dir: PathBuf,
+    repo_root: Option<ResolvedRoot>,
+    fallback_root: PathBuf,
+    index_dir_override: Option<PathBuf>,
     cached_engine: Mutex<Option<SearchEngine>>,
     index_sync_in_progress: AtomicBool,
     avoid_index_for_memory: bool,
@@ -61,16 +60,28 @@ impl Drop for IndexMutationGuard<'_> {
 }
 
 impl McpState {
-    pub fn new(repo_root: PathBuf, index_dir_override: Option<PathBuf>) -> Self {
-        let index_dir = index_dir_override.unwrap_or_else(|| default_index_dir(&repo_root));
-        let avoid_index_for_memory = should_avoid_index_for_memory(&index_dir);
+    pub fn new(repo_root: Option<ResolvedRoot>, index_dir_override: Option<PathBuf>) -> Self {
+        let fallback_root = std::env::current_dir()
+            .ok()
+            .and_then(|path| path.canonicalize().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
+        let avoid_index_for_memory = repo_root
+            .as_ref()
+            .map(|resolved| {
+                let index_dir = index_dir_override
+                    .clone()
+                    .unwrap_or_else(|| default_index_dir(&resolved.root));
+                should_avoid_index_for_memory(&index_dir)
+            })
+            .unwrap_or(false);
         let ttl_secs: u64 = std::env::var("TRISEEK_SEARCH_CACHE_TTL_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(60);
         Self {
             repo_root,
-            index_dir,
+            fallback_root,
+            index_dir_override,
             cached_engine: Mutex::new(None),
             index_sync_in_progress: AtomicBool::new(false),
             avoid_index_for_memory,
@@ -81,16 +92,38 @@ impl McpState {
         }
     }
 
-    pub fn repo_root(&self) -> PathBuf {
+    pub fn default_root(&self) -> Option<ResolvedRoot> {
         self.repo_root.clone()
     }
 
-    pub fn index_dir(&self) -> PathBuf {
-        self.index_dir.clone()
+    pub fn repo_root(&self) -> PathBuf {
+        self.repo_root
+            .as_ref()
+            .map(|resolved| resolved.root.clone())
+            .unwrap_or_else(|| self.fallback_root.clone())
+    }
+
+    pub fn index_dir_for(&self, repo_root: &Path) -> PathBuf {
+        self.index_dir_override
+            .clone()
+            .unwrap_or_else(|| default_index_dir(repo_root))
+    }
+
+    pub fn default_index_dir(&self) -> Option<PathBuf> {
+        self.repo_root
+            .as_ref()
+            .map(|resolved| self.index_dir_for(&resolved.root))
+    }
+
+    pub fn has_single_default_root(&self, repo_root: &Path, index_dir: &Path) -> bool {
+        self.repo_root.as_ref().is_some_and(|resolved| {
+            resolved.root == repo_root && self.index_dir_for(repo_root) == index_dir
+        })
     }
 
     pub fn with_cached_engine<T>(
         &self,
+        index_dir: &Path,
         f: impl FnOnce(Option<&SearchEngine>) -> Result<T>,
     ) -> Result<T> {
         let mut guard = self
@@ -100,25 +133,16 @@ impl McpState {
         if guard.is_none() && self.index_sync_in_progress.load(Ordering::Relaxed) {
             return f(None);
         }
-        if guard.is_none() && index_exists(&self.index_dir) {
-            let engine = SearchEngine::open(&self.index_dir)
-                .with_context(|| format!("failed to open index at {}", self.index_dir.display()))?;
+        if guard.is_none() && index_exists(index_dir) {
+            let engine = SearchEngine::open(index_dir)
+                .with_context(|| format!("failed to open index at {}", index_dir.display()))?;
             *guard = Some(engine);
         }
         f(guard.as_ref())
     }
 
     pub fn should_bypass_index_for_startup_sync(&self) -> bool {
-        if self.avoid_index_for_memory {
-            return true;
-        }
-        if !self.index_sync_in_progress.load(Ordering::Relaxed) {
-            return false;
-        }
-        self.cached_engine
-            .lock()
-            .expect("MCP cached engine mutex poisoned")
-            .is_none()
+        false
     }
 
     pub fn invalidate_cached_engine(&self) {
@@ -140,6 +164,10 @@ impl McpState {
 
     pub fn should_avoid_index_for_memory(&self) -> bool {
         self.avoid_index_for_memory
+    }
+
+    pub fn should_avoid_index_for_memory_at(&self, index_dir: &Path) -> bool {
+        should_avoid_index_for_memory(index_dir)
     }
 
     pub fn start_index_mutation(&self) -> IndexMutationGuard<'_> {
@@ -170,39 +198,21 @@ impl McpState {
 }
 
 /// Run the MCP server over stdin/stdout until EOF or shutdown.
-pub fn run(repo_root: &Path, index_dir: Option<&Path>) -> Result<()> {
-    let state = Arc::new(McpState::new(
-        repo_root.to_path_buf(),
-        index_dir.map(Path::to_path_buf),
-    ));
-    let index_was_present = index_exists(&state.index_dir());
-    if index_was_present {
-        register_root_with_daemon(state.as_ref());
-    }
-    if std::env::var_os(DISABLE_STARTUP_SYNC_ENV).is_some() {
-        eprintln!(
-            "triseek mcp: startup sync disabled by {DISABLE_STARTUP_SYNC_ENV}; repo_root={}",
-            state.repo_root().display()
-        );
-    } else if state.should_avoid_index_for_memory() {
-        eprintln!(
-            "triseek mcp: startup sync skipped for memory-risk legacy index; repo_root={} index_dir={}",
-            state.repo_root().display(),
-            state.index_dir().display()
-        );
-    } else {
-        spawn_startup_sync(Arc::clone(&state), index_was_present);
-    }
+pub fn run(repo_root: Option<ResolvedRoot>, index_dir: Option<&Path>) -> Result<()> {
+    let state = Arc::new(McpState::new(repo_root, index_dir.map(Path::to_path_buf)));
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut reader = BufReader::new(stdin.lock());
     let mut writer = stdout.lock();
 
-    eprintln!(
-        "triseek mcp: server up; repo_root={} index_dir={}",
-        state.repo_root().display(),
-        state.index_dir().display()
-    );
+    match state.default_root() {
+        Some(root) => eprintln!(
+            "triseek mcp: server up; repo_root={} index_dir={}; startup indexing disabled",
+            root.root.display(),
+            state.index_dir_for(&root.root).display()
+        ),
+        None => eprintln!("triseek mcp: server up without default root; tool calls must pass root"),
+    }
 
     let shutdown = AtomicBool::new(false);
     let mut line = String::new();
@@ -226,81 +236,6 @@ pub fn run(repo_root: &Path, index_dir: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-fn spawn_startup_sync(state: Arc<McpState>, index_was_present: bool) {
-    thread::spawn(move || {
-        let _mutation = state.start_index_mutation();
-        eprintln!(
-            "triseek mcp: scheduling background startup sync for {}",
-            state.repo_root().display()
-        );
-        let sync_succeeded = sync_index_on_startup(state.as_ref());
-        if sync_succeeded {
-            if index_was_present {
-                reload_root_with_daemon(state.as_ref());
-            } else {
-                register_root_with_daemon(state.as_ref());
-            }
-        }
-    });
-}
-
-fn sync_index_on_startup(state: &McpState) -> bool {
-    let repo_root = state.repo_root();
-    let index_dir = state.index_dir();
-    let config = BuildConfig::default();
-
-    if index_exists(&index_dir) {
-        eprintln!("triseek mcp: refreshing index for {}", repo_root.display());
-        match SearchEngine::update(&repo_root, Some(&index_dir), &config) {
-            Ok(outcome) => {
-                if startup_update_changed_index(&outcome) {
-                    state.invalidate_cached_engine();
-                }
-                eprintln!(
-                    "triseek mcp: index refresh complete (rebuilt_full={} indexed_files={})",
-                    outcome.rebuilt_full, outcome.metadata.build_stats.docs_indexed
-                );
-                true
-            }
-            Err(err) => {
-                eprintln!(
-                    "triseek mcp: index refresh failed for {}: {err}; continuing with fallback search",
-                    repo_root.display()
-                );
-                false
-            }
-        }
-    } else {
-        eprintln!(
-            "triseek mcp: no index found for {}; building initial index",
-            repo_root.display()
-        );
-        match SearchEngine::build(&repo_root, Some(&index_dir), &config) {
-            Ok(metadata) => {
-                state.invalidate_cached_engine();
-                eprintln!(
-                    "triseek mcp: initial index build complete (indexed_files={})",
-                    metadata.build_stats.docs_indexed
-                );
-                true
-            }
-            Err(err) => {
-                eprintln!(
-                    "triseek mcp: initial index build failed for {}: {err}; continuing with fallback search",
-                    repo_root.display()
-                );
-                false
-            }
-        }
-    }
-}
-
-fn startup_update_changed_index(outcome: &UpdateOutcome) -> bool {
-    outcome.rebuilt_full
-        || outcome.metadata.delta_docs > 0
-        || outcome.metadata.delta_removed_paths > 0
-}
-
 fn should_avoid_index_for_memory(index_dir: &Path) -> bool {
     if !index_exists(index_dir)
         || !index_dir.join("fast.idx").exists()
@@ -318,8 +253,7 @@ fn should_avoid_index_for_memory(index_dir: &Path) -> bool {
     }
 }
 
-fn register_root_with_daemon(state: &McpState) {
-    let repo_root = state.repo_root();
+pub fn register_root_with_daemon(repo_root: &Path) {
     let Some(mut stream) = connect_to_daemon() else {
         eprintln!(
             "triseek mcp: daemon not running; skipping background watcher preload for {}",
@@ -346,8 +280,8 @@ fn register_root_with_daemon(state: &McpState) {
     }
 }
 
-fn reload_root_with_daemon(state: &McpState) {
-    let repo_root = state.repo_root();
+#[allow(dead_code)]
+pub fn reload_root_with_daemon(repo_root: &Path) {
     let Some(mut stream) = connect_to_daemon() else {
         eprintln!(
             "triseek mcp: daemon not running; skipping daemon reload for {}",
@@ -516,7 +450,7 @@ fn initialize_result() -> Value {
             "name": SERVER_NAME,
             "version": SERVER_VERSION,
         },
-        "instructions": "TriSeek exposes fast local code search tools for this repository. Use `context_pack` when you need a tiny, intent-aware starting set for a bugfix or review task. Prefer `find_files`, `search_content`, and `search_path_and_content` over shell `rg`, `grep`, `sed`, `find`, `ls`, or file globbing for file discovery and exact code search. When a repeated search result says to reuse a prior result from context, rely on the earlier search output unless you need `force_refresh`. On Codex, before re-reading a file you already saw in this session, call `memo_check`. If it returns `skip_reread`, do not read the file again and rely on the content already in conversation context."
+        "instructions": "TriSeek exposes fast local code search tools. For app-launched MCP sessions, pass `root` with the smallest relevant project or workspace folder on repo-scoped tools. If a tool returns ROOT_REQUIRED, retry with an explicit `root`. Broad roots such as a Projects folder are searched directly and are not reindexed. Use `context_pack` when you need a tiny, intent-aware starting set for a bugfix or review task. Prefer `find_files`, `search_content`, and `search_path_and_content` over shell `rg`, `grep`, `sed`, `find`, `ls`, or file globbing for file discovery and exact code search. When a repeated search result says to reuse a prior result from context, rely on the earlier search output unless you need `force_refresh`. On Codex, before re-reading a file you already saw in this session, call `memo_check`. If it returns `skip_reread`, do not read the file again and rely on the content already in conversation context."
     })
 }
 

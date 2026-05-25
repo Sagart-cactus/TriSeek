@@ -119,7 +119,9 @@ pub fn run() -> Result<()> {
             }
             match shared::codex_hooks_enabled(&text) {
                 Ok(true) => println!("[ok] Codex hooks enabled"),
-                Ok(false) => println!("[warn] Codex hooks disabled: codex_hooks = false"),
+                Ok(false) => println!(
+                    "[warn] Codex hooks disabled or using legacy codex_hooks flag; rerun `triseek install codex`"
+                ),
                 Err(err) => println!("[warn] Codex hooks enabled: parse failed: {err}"),
             }
         } else {

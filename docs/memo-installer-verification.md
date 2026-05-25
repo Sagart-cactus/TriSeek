@@ -1,4 +1,4 @@
-# Memo Installer — Manual Verification Checklist
+# Memo Installer - Manual Verification Checklist
 
 Run these steps before shipping any release that modifies the OpenCode, Pi, or Codex installer.
 All checks use the locally-built release binary and a running daemon.
@@ -30,7 +30,7 @@ Expected output includes:
 - `registered with Codex via codex mcp add` (if Codex CLI found), or
 - `wrote [mcp_servers.triseek] to ~/.codex/config.toml` (fallback)
 - `memo hooks installed into ~/.codex/hooks.json`
-- `Codex hooks feature flag is enabled by default`, or `enabled Codex feature flag codex_hooks = true` when an existing config disabled it
+- `Codex hooks feature flag is enabled by default`, or `enabled Codex feature flag hooks = true` when an existing config disabled it or used the legacy `codex_hooks` flag
 - Note about Bash/MCP file-read Codex hook coverage and `memo_check` usage for non-hooked reads
 
 Inspect the generated hook file:
@@ -45,7 +45,7 @@ Verify:
 - The tool matcher includes MCP file-read names such as `mcp__...__read_file`
 - Hook commands call `memo-observe --event pre-tool-use`, `memo-observe --event post-tool-use`, and `memo-observe --event session-start`
 
-### B. `memo_check` — unknown file (never read)
+### B. `memo_check` - unknown file (never read)
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"memo_check","params":{"session_id":"test","repo_root":"'"$TESTDIR"'","path":"'"$TESTDIR/lib.rs"'"}}' \
@@ -101,7 +101,7 @@ Expected: `"recommendation":"reread_with_diff","status":"stale"`
 
 ---
 
-## OpenCode — passive mode
+## OpenCode - passive mode
 
 ### A. Install
 
@@ -162,7 +162,7 @@ OpenCode uses `process.pid` as the session ID. This is stable within one process
 
 ---
 
-## Pi — passive mode
+## Pi - passive mode
 
 ### A. Install
 
@@ -229,7 +229,7 @@ rm -rf "$TESTDIR"
 
 | Check | Harness | Result |
 |---|---|---|
-| Daemon starts clean with new binary | — | PASS |
+| Daemon starts clean with new binary | N/A | PASS |
 | Codex hooks contain PreToolUse, PostToolUse, SessionStart, Bash, and MCP file-read matchers | Codex | PASS |
 | Read → redundant Read → `redundant_reads_prevented=1` | OpenCode (simulated) | PASS |
 | Read → redundant Read → `redundant_reads_prevented=1` | Pi (simulated) | PASS |

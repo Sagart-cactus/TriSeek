@@ -17,37 +17,37 @@ pub const TOOLS: &[ToolDescriptor] = &[
     ToolDescriptor {
         name: "find_files",
         title: "Find files",
-        description: "Locate files by path or filename using the TriSeek index. Use this instead of `ls`, `find`, `fd`, globbing, or `rg --files` for file discovery in this repository.",
+        description: "Locate files by path or filename. Use this instead of `ls`, `find`, `fd`, globbing, or `rg --files`. Pass `root` as the smallest folder to search, especially when MCP was started by an app.",
         input_schema: find_files_schema,
     },
     ToolDescriptor {
         name: "search_content",
         title: "Search file content",
-        description: "Search repository content (literal or regex) using the TriSeek backend. Use this instead of `rg`, `grep`, or ad-hoc `sed` scans for exact code search before falling back to shell tools.",
+        description: "Search file content with literal or regex mode. Pass `root` as the smallest folder to search, especially when MCP was started by an app.",
         input_schema: search_content_schema,
     },
     ToolDescriptor {
         name: "search_path_and_content",
         title: "Search with path narrowing",
-        description: "First narrow by path glob, then search content. Prefer this over shell pipelines that combine `find`, globs, and `rg` when you already know the subtree or filename pattern.",
+        description: "First narrow by path glob, then search content. Pass `root` as the smallest folder to search.",
         input_schema: search_path_and_content_schema,
     },
     ToolDescriptor {
         name: "context_pack",
         title: "Build an intent-aware context pack",
-        description: "Return a tiny, bounded starting set of ranked files/snippets for a bugfix or review goal. Use this before chaining several broad searches.",
+        description: "Return a tiny, bounded starting set of ranked files/snippets for a bugfix or review goal. Pass `root` as the smallest relevant folder.",
         input_schema: context_pack_schema,
     },
     ToolDescriptor {
         name: "index_status",
         title: "Report TriSeek index status",
-        description: "Report whether the TriSeek index exists and is healthy for this repository.",
-        input_schema: empty_object_schema,
+        description: "Report whether the TriSeek index exists and is healthy for a root.",
+        input_schema: root_only_schema,
     },
     ToolDescriptor {
         name: "reindex",
         title: "Rebuild or update the TriSeek index",
-        description: "Rebuild or update the TriSeek index. Use `incremental` for fast updates and `full` for a complete rebuild.",
+        description: "Rebuild or update the TriSeek index for a narrow project root. Broad roots are rejected by default.",
         input_schema: reindex_schema,
     },
     ToolDescriptor {
@@ -90,7 +90,7 @@ pub const TOOLS: &[ToolDescriptor] = &[
         name: "session_list",
         title: "List portable sessions",
         description: "List portable sessions for the current repository.",
-        input_schema: empty_object_schema,
+        input_schema: root_only_schema,
     },
     ToolDescriptor {
         name: "session_close",
@@ -144,6 +144,7 @@ pub fn find_files_schema() -> Value {
                 "type": "string",
                 "description": "Path or filename substring to search for."
             },
+            "root": root_property(),
             "limit": {
                 "type": "integer",
                 "minimum": 1,
@@ -170,6 +171,7 @@ pub fn search_content_schema() -> Value {
                 "type": "string",
                 "description": "Literal string or regex pattern to search for."
             },
+            "root": root_property(),
             "mode": {
                 "type": "string",
                 "enum": ["literal", "regex"],
@@ -205,6 +207,7 @@ pub fn search_path_and_content_schema() -> Value {
                 "type": "string",
                 "description": "Literal string or regex pattern to search for."
             },
+            "root": root_property(),
             "mode": {
                 "type": "string",
                 "enum": ["literal", "regex"],
@@ -235,6 +238,7 @@ pub fn context_pack_schema() -> Value {
                 "type": "string",
                 "description": "Natural-language session goal, such as `fix auth panic`."
             },
+            "root": root_property(),
             "intent": {
                 "type": "string",
                 "enum": ["bugfix", "review"],
@@ -274,10 +278,28 @@ pub fn empty_object_schema() -> Value {
     })
 }
 
+pub fn root_only_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "root": root_property()
+        },
+        "additionalProperties": false
+    })
+}
+
+fn root_property() -> Value {
+    json!({
+        "type": "string",
+        "description": "Absolute or relative folder to search. Use the smallest relevant project or workspace folder. Broad roots use direct search only and cannot be reindexed."
+    })
+}
+
 pub fn reindex_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "root": root_property(),
             "mode": {
                 "type": "string",
                 "enum": ["incremental", "full"],
@@ -298,6 +320,7 @@ pub fn memo_status_schema() -> Value {
                 "minItems": 1,
                 "description": "Repository-relative file paths to check."
             },
+            "root": root_property(),
             "session_id": {
                 "type": "string",
                 "description": "Optional session identifier. If omitted, MCP metadata/session defaults are used."
@@ -329,6 +352,7 @@ pub fn memo_check_schema() -> Value {
                 "type": "string",
                 "description": "Repository-relative path of the file to check."
             },
+            "root": root_property(),
             "session_id": {
                 "type": "string",
                 "description": "Optional session identifier. If omitted, MCP metadata/session defaults are used."
@@ -343,6 +367,7 @@ pub fn session_open_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "root": root_property(),
             "session_id": {"type": "string"},
             "goal": {"type": "string", "default": ""}
         },
@@ -353,7 +378,10 @@ pub fn session_open_schema() -> Value {
 pub fn session_id_schema() -> Value {
     json!({
         "type": "object",
-        "properties": {"session_id": {"type": "string"}},
+        "properties": {
+            "root": root_property(),
+            "session_id": {"type": "string"}
+        },
         "additionalProperties": false
     })
 }
@@ -362,6 +390,7 @@ pub fn session_close_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "root": root_property(),
             "session_id": {"type": "string"},
             "status": {"type": "string", "enum": ["resolved", "abandoned"], "default": "resolved"}
         },
@@ -373,6 +402,7 @@ pub fn session_snapshot_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "root": root_property(),
             "session_id": {"type": "string"},
             "source_harness": {"type": "string"},
             "source_model": {"type": "string"},
@@ -398,6 +428,7 @@ pub fn session_handoff_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "root": root_property(),
             "session_id": {"type": "string"},
             "source_harness": {"type": "string"},
             "source_model": {"type": "string"},
@@ -429,7 +460,10 @@ pub fn session_handoff_schema() -> Value {
 pub fn snapshot_list_schema() -> Value {
     json!({
         "type": "object",
-        "properties": {"session_id": {"type": "string"}},
+        "properties": {
+            "root": root_property(),
+            "session_id": {"type": "string"}
+        },
         "additionalProperties": false
     })
 }
@@ -437,7 +471,10 @@ pub fn snapshot_list_schema() -> Value {
 pub fn snapshot_get_schema() -> Value {
     json!({
         "type": "object",
-        "properties": {"snapshot_id": {"type": "string"}},
+        "properties": {
+            "root": root_property(),
+            "snapshot_id": {"type": "string"}
+        },
         "required": ["snapshot_id"],
         "additionalProperties": false
     })
@@ -447,6 +484,7 @@ pub fn snapshot_diff_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "root": root_property(),
             "snapshot_a": {"type": "string"},
             "snapshot_b": {"type": "string"}
         },
@@ -459,6 +497,7 @@ pub fn session_resume_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "root": root_property(),
             "snapshot_id": {"type": "string", "description": "Snapshot id, or for compatibility a .tcp pack path."},
             "pack_path": {"type": "string", "description": "Optional .tcp pack path. Relative paths resolve against the MCP repo root."},
             "budget_tokens": {"type": "integer", "minimum": 1, "maximum": 12000}
