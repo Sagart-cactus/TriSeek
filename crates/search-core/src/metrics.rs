@@ -421,11 +421,10 @@ pub fn append_usage_metrics_event(metrics_dir: &Path, event: &UsageMetricsEvent)
     fs::create_dir_all(metrics_dir)?;
     let path = usage_metrics_events_path(metrics_dir);
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
-    writeln!(
-        file,
-        "{}",
-        serde_json::to_string(event).map_err(|err| io::Error::new(ErrorKind::InvalidData, err))?
-    )?;
+    let mut line =
+        serde_json::to_string(event).map_err(|err| io::Error::new(ErrorKind::InvalidData, err))?;
+    line.push('\n');
+    file.write_all(line.as_bytes())?;
     Ok(())
 }
 
@@ -440,13 +439,15 @@ pub fn read_usage_metrics_events(metrics_dir: &Path) -> io::Result<Vec<UsageMetr
         if line.trim().is_empty() {
             continue;
         }
-        let event = serde_json::from_str(line).map_err(|err| {
-            io::Error::new(
-                ErrorKind::InvalidData,
-                format!("invalid metrics event line {}: {err}", idx + 1),
-            )
-        })?;
-        events.push(event);
+        let stream = serde_json::Deserializer::from_str(line).into_iter::<UsageMetricsEvent>();
+        for event in stream {
+            events.push(event.map_err(|err| {
+                io::Error::new(
+                    ErrorKind::InvalidData,
+                    format!("invalid metrics event line {}: {err}", idx + 1),
+                )
+            })?);
+        }
     }
     Ok(events)
 }
@@ -495,6 +496,53 @@ fn now_secs() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn usage_metrics_reader_accepts_concatenated_jsonl_events() {
+        let metrics_dir = std::env::temp_dir().join(format!(
+            "triseek-metrics-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&metrics_dir).expect("create metrics dir");
+        let events_path = usage_metrics_events_path(&metrics_dir);
+        let first = UsageMetricsEvent {
+            schema_version: USAGE_METRICS_SCHEMA_VERSION,
+            ts: 1,
+            source: UsageMetricSource::Mcp,
+            tool: "index_status".to_string(),
+            ..UsageMetricsEvent::default()
+        };
+        let second = UsageMetricsEvent {
+            schema_version: USAGE_METRICS_SCHEMA_VERSION,
+            ts: 2,
+            source: UsageMetricSource::Cli,
+            tool: "context_pack".to_string(),
+            ..UsageMetricsEvent::default()
+        };
+        let third = UsageMetricsEvent {
+            schema_version: USAGE_METRICS_SCHEMA_VERSION,
+            ts: 3,
+            source: UsageMetricSource::Daemon,
+            tool: "memo_check".to_string(),
+            ..UsageMetricsEvent::default()
+        };
+        let text = format!(
+            "{}{}\n\n{}\n",
+            serde_json::to_string(&first).expect("serialize first"),
+            serde_json::to_string(&second).expect("serialize second"),
+            serde_json::to_string(&third).expect("serialize third")
+        );
+        fs::write(&events_path, text).expect("write metrics events");
+
+        let events = read_usage_metrics_events(&metrics_dir).expect("read metrics events");
+
+        assert_eq!(events, vec![first, second, third]);
+        fs::remove_dir_all(metrics_dir).expect("remove metrics dir");
+    }
 
     #[test]
     fn usage_metrics_aggregate_private_rollups() {
