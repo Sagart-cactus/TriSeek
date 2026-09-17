@@ -11,7 +11,7 @@ pub use metrics::{
     ProcessMetrics, ReliabilityUsageMetric, SearchMetrics, SearchUsageMetric, SessionMetrics,
     USAGE_METRICS_SCHEMA_VERSION, UsageMetricSource, UsageMetrics, UsageMetricsEvent,
     UsageMetricsReport, append_usage_metrics_event, default_usage_metrics_dir, private_repo_hash,
-    read_usage_metrics_events,
+    read_usage_metrics_events, sha256_hex,
 };
 pub use planner::{
     AdaptiveRoute, AdaptiveRoutingDecision, QueryPlan, QuerySelectivity, QueryShape,

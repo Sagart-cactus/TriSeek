@@ -409,6 +409,18 @@ pub fn private_repo_hash(repo_root: impl AsRef<str>) -> String {
     format!("repo_{:02x?}", &digest[..8]).replace(['[', ']', ',', ' '], "")
 }
 
+/// Lowercase hex encoding of the SHA-256 digest of `bytes`.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let digest = hasher.finalize();
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        out.push_str(&format!("{byte:02x}"));
+    }
+    out
+}
+
 pub fn default_usage_metrics_dir() -> PathBuf {
     triseek_home_dir().join("metrics")
 }
@@ -496,6 +508,18 @@ fn now_secs() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sha256_hex_matches_known_vectors() {
+        assert_eq!(
+            sha256_hex(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
 
     #[test]
     fn usage_metrics_reader_accepts_concatenated_jsonl_events() {

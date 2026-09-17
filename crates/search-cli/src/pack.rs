@@ -4,7 +4,6 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use search_core::PORTABILITY_SCHEMA_VERSION;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -110,9 +109,7 @@ fn checksums_for(root: &Path) -> Result<BTreeMap<String, String>> {
             continue;
         }
         let bytes = fs::read(&path)?;
-        let mut hasher = Sha256::new();
-        hasher.update(bytes);
-        checksums.insert(rel, format!("{:x}", hasher.finalize()));
+        checksums.insert(rel, search_core::sha256_hex(&bytes));
     }
     Ok(checksums)
 }

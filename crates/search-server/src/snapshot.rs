@@ -8,7 +8,6 @@ use search_core::{
 };
 use search_frecency::FrecencyStore;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -348,7 +347,5 @@ fn read_line_range(path: &Path, start: usize, end: usize) -> Result<String> {
 }
 
 fn hex_sha256(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    search_core::sha256_hex(bytes)
 }
