@@ -20,7 +20,6 @@ toml_edit.workspace = true
 which.workspace = true
 xxhash-rust.workspace = true
 flate2.workspace = true
-sha2.workspace = true
 tar.workspace = true
 
 [dev-dependencies]

@@ -1624,8 +1624,10 @@ fn timestamp_now() -> String {
 fn timestamp_slug() -> String {
     OffsetDateTime::now_utc()
         .format(
-            &time::format_description::parse("[year][month][day]-[hour][minute][second]")
-                .expect("valid time format"),
+            &time::format_description::parse_borrowed::<2>(
+                "[year][month][day]-[hour][minute][second]",
+            )
+            .expect("valid time format"),
         )
         .unwrap_or_else(|_| "unknown".to_string())
 }

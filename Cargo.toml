@@ -11,37 +11,37 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "0.5.7"
+version = "0.5.8"
 license = "MIT"
 authors = ["Codex"]
 
 [workspace.dependencies]
-anyhow = "1.0.100"
+anyhow = "1.0.104"
 bincode = { version = "2.0.1", features = ["serde"] }
-clap = { version = "4.5.48", features = ["derive"] }
+clap = { version = "4.6.7", features = ["derive"] }
 csv = "1.4.0"
-globset = "0.4.18"
-ignore = "0.4.24"
-libc = "0.2.176"
-memmap2 = "0.9.8"
+globset = "0.4.20"
+ignore = "0.4.33"
+libc = "0.2.189"
+memmap2 = "0.9.11"
 num_cpus = "1.17.0"
-regex = "1.11.3"
-regex-syntax = "0.8.8"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
+regex = "1.13.1"
+regex-syntax = "0.8.11"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 serde_yaml = "0.9.34"
-tempfile = "3.23.0"
-thiserror = "2.0.17"
-time = { version = "0.3.44", features = ["formatting", "macros", "parsing", "serde"] }
-toml = "0.9.7"
-toml_edit = "0.22"
-which = "7"
-rayon = "1.10.0"
-xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
-notify = "7"
-flate2 = "1.0"
-sha2 = "0.10"
-tar = "0.4"
+tempfile = "3.27.0"
+thiserror = "2.0.20"
+time = { version = "0.3.55", features = ["formatting", "macros", "parsing", "serde"] }
+toml = "1.1.6"
+toml_edit = "0.25.15"
+which = "8"
+rayon = "1.12.0"
+xxhash-rust = { version = "0.8.18", features = ["xxh3"] }
+notify = "8"
+flate2 = "1.1.10"
+sha2 = "0.11"
+tar = "0.4.46"
 
 [profile.release]
 codegen-units = 1
